@@ -834,10 +834,11 @@ public class ActivityPubRoutes{
 	}
 
 	private static Object inbox(Request req, Response resp, Actor owner){
-		if(req.headers("digest")!=null){
-			if(!verifyHttpDigest(req.headers("digest"), req.bodyAsBytes())){
-				throw new BadRequestException("Digest verification failed");
-			}
+		// The digest must be present (and signed, see ActivityPub.verifyHttpSignature) so the signature covers the body
+		if(req.headers("digest")==null)
+			throw new BadRequestException("Request is missing Digest header");
+		if(!verifyHttpDigest(req.headers("digest"), req.bodyAsBytes())){
+			throw new BadRequestException("Digest verification failed");
 		}
 		String body=req.body();
 		return dispatchActivity(body, req, resp, true);
@@ -1348,19 +1349,20 @@ public class ActivityPubRoutes{
 		String[] parts=digestHeader.split(",");
 		for(String part:parts){
 			String[] kv=part.split("=", 2);
-			if(kv[0].equalsIgnoreCase("sha-256")){
-				byte[] hash=Base64.getDecoder().decode(kv[1]);
+			if(kv.length==2 && kv[0].trim().equalsIgnoreCase("sha-256")){
 				try{
+					byte[] hash=Base64.getDecoder().decode(kv[1].trim());
 					MessageDigest md=MessageDigest.getInstance("SHA-256");
 					md.update(bodyData);
 					byte[] myHash=md.digest();
-					return Arrays.equals(hash, myHash);
+					return MessageDigest.isEqual(hash, myHash);
 				}catch(Exception x){
 					return false;
 				}
 			}
 		}
-		return true;
+		// No supported digest algorithm, so the body can't be verified
+		return false;
 	}
 	
 	public static Object postQuoteAuthorization(Request req, Response resp){

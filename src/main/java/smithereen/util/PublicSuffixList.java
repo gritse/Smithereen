@@ -14,7 +14,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.stream.Stream;
 
 import smithereen.Config;
@@ -68,6 +67,10 @@ public class PublicSuffixList{
 		for(int i=0;i<labels.length;i++){
 			labels[i]=IDN.toASCII(labels[i]).toLowerCase();
 		}
+		// If the list hasn't been loaded yet, don't guess: treat the whole host as the registered domain so that
+		// e.g. evil.co.uk isn't considered the same site as victim.co.uk
+		if(rules.isEmpty())
+			return String.join(".", labels);
 		List<Rule> matchingRules=rules.stream()
 				.filter(r->r.matches(labels))
 				.sorted(Comparator.comparingInt(Rule::priority).reversed())
@@ -95,7 +98,9 @@ public class PublicSuffixList{
 	}
 
 	public static boolean isSameRegisteredDomain(String domain1, String domain2){
-		return Objects.equals(getRegisteredDomain(domain1), getRegisteredDomain(domain2));
+		String d1=getRegisteredDomain(domain1);
+		// Two different hosts that are both public suffixes themselves (null) are not the same site
+		return d1!=null ? d1.equals(getRegisteredDomain(domain2)) : domain1.equalsIgnoreCase(domain2);
 	}
 
 	private record Rule(String[] labels, boolean except){

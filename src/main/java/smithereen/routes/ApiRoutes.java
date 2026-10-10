@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -151,6 +152,9 @@ public class ApiRoutes{
 		}
 		if(StringUtils.isEmpty(redirect.getScheme()) || StringUtils.isEmpty(redirect.getAuthority()))
 			return oauthAuthorizeError(req, "redirect_uri must have at least scheme and authority parts");
+		// Native apps may use custom schemes, but these would run code in the context of this server when used as a link
+		if(Set.of("javascript", "vbscript", "data", "file", "blob", "about").contains(redirect.getScheme().toLowerCase(Locale.ROOT)))
+			return oauthAuthorizeError(req, "redirect_uri uses a disallowed scheme");
 
 		ClientApp app;
 		try{

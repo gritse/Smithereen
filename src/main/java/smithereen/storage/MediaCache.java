@@ -214,7 +214,9 @@ public class MediaCache{
 						}
 
 						@Override
-						public void onSubscribe(Flow.Subscription subscription){}
+						public void onSubscribe(Flow.Subscription subscription){
+							subscription.cancel();
+						}
 
 						@Override
 						public void onNext(List<ByteBuffer> item){}
@@ -419,10 +421,14 @@ public class MediaCache{
 
 	private static class SizeLimitingBodySubscriber implements HttpResponse.BodySubscriber<Path>{
 		private final HttpResponse.BodySubscriber<Path> parent;
+		private final long limit;
 		private long size=0;
+		private boolean failed;
+		private Flow.Subscription subscription;
 
 		private SizeLimitingBodySubscriber(HttpResponse.BodySubscriber<Path> parent){
 			this.parent=parent;
+			limit=Config.mediaCacheFileSizeLimit>0 ? Math.min(Config.mediaCacheFileSizeLimit, Config.mediaCacheMaxSize) : Config.mediaCacheMaxSize;
 		}
 
 		@Override
@@ -432,14 +438,20 @@ public class MediaCache{
 
 		@Override
 		public void onSubscribe(Flow.Subscription subscription){
+			this.subscription=subscription;
 			parent.onSubscribe(subscription);
 		}
 
 		@Override
 		public void onNext(List<ByteBuffer> item){
+			if(failed)
+				return;
 			for(ByteBuffer buf:item){
 				size+=buf.remaining();
-				if(size>Config.mediaCacheMaxSize){
+				if(size>limit){
+					// Stop the download instead of continuing to receive data that will be thrown away
+					failed=true;
+					subscription.cancel();
 					parent.onError(new IOException("File too large"));
 					return;
 				}
@@ -449,12 +461,14 @@ public class MediaCache{
 
 		@Override
 		public void onError(Throwable throwable){
-			parent.onError(throwable);
+			if(!failed)
+				parent.onError(throwable);
 		}
 
 		@Override
 		public void onComplete(){
-			parent.onComplete();
+			if(!failed)
+				parent.onComplete();
 		}
 	}
 

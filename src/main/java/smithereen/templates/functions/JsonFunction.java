@@ -14,7 +14,14 @@ public class JsonFunction implements Function{
 
 	@Override
 	public Object execute(Map<String, Object> args, PebbleTemplate self, EvaluationContext context, int lineNumber){
-		return Utils.gson.toJson(args.get("obj"));
+		// The output is often used with |raw inside <script> blocks, so make sure strings can't close the script tag
+		// or start an HTML comment. These escapes are still valid JSON and decode to the same values.
+		return Utils.gson.toJson(args.get("obj"))
+				.replace("<", "\\u003c")
+				.replace(">", "\\u003e")
+				.replace("&", "\\u0026")
+				.replace("\u2028", "\\u2028")
+				.replace("\u2029", "\\u2029");
 	}
 
 	@Override

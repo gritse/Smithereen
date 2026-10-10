@@ -225,7 +225,7 @@ public class SmithereenApplication{
 					if(!SessionStorage.fillSession(psid, request.session(true), request)){
 						response.removeCookie("/", "psid");
 					}else{
-						response.cookie("/", "psid", psid, 10*365*24*60*60, false);
+						setSessionCookie(response, psid);
 						SessionInfo info=sessionInfo(request);
 						if(info.account!=null){
 							synchronized(SmithereenApplication.class){
@@ -1108,6 +1108,13 @@ public class SmithereenApplication{
 		});
 
 		after((req, resp)->{
+			resp.header("X-Content-Type-Options", "nosniff");
+			resp.header("Referrer-Policy", "strict-origin-when-cross-origin");
+			// Post embeds are meant to be shown in iframes on other websites, everything else must not be framed (clickjacking)
+			if(req.attribute("allowFraming")==null){
+				resp.header("X-Frame-Options", "SAMEORIGIN");
+				resp.header("Content-Security-Policy", "frame-ancestors 'self'");
+			}
 			if(req.attribute("isTemplate")!=null && req.attribute("noPreload")==null && !isAjax(req) && !isAjaxLayout(req)){
 				String cssName=req.attribute("mobile")!=null ? "mobile.css" : "desktop.css";
 				resp.header("Link", "</res/"+cssName+"?"+Templates.getStaticFileVersion(cssName)+">; rel=preload; as=style, </res/common.js?"+Templates.getStaticFileVersion("common.js")+">; rel=preload; as=script");

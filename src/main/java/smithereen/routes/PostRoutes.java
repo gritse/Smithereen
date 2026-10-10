@@ -1197,6 +1197,7 @@ public class PostRoutes{
 		Map<Integer, UserInteractions> interactions=ctx.getWallController().getUserInteractions(List.of(pvm), null);
 		HashSet<Integer> needUsers=new HashSet<>(), needGroups=new HashSet<>();
 		PostViewModel.collectActorIDs(Set.of(pvm), needUsers, needGroups);
+		req.attribute("allowFraming", true);
 		RenderedTemplateResponse model=new RenderedTemplateResponse("post_embed", req)
 				.with("post", pvm)
 				.with("users", ctx.getUsersController().getUsers(needUsers))

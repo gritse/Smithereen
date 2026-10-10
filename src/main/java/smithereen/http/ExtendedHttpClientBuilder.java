@@ -13,6 +13,7 @@ import javax.net.ssl.SSLParameters;
 public class ExtendedHttpClientBuilder implements HttpClient.Builder{
 	private final HttpClient.Builder realBuilder;
 	private boolean allowLocalNetworks=false;
+	private HttpClient.Redirect redirectPolicy=HttpClient.Redirect.NEVER;
 
 	public ExtendedHttpClientBuilder(HttpClient.Builder realBuilder){
 		this.realBuilder=realBuilder;
@@ -50,7 +51,7 @@ public class ExtendedHttpClientBuilder implements HttpClient.Builder{
 
 	@Override
 	public ExtendedHttpClientBuilder followRedirects(HttpClient.Redirect policy){
-		realBuilder.followRedirects(policy);
+		redirectPolicy=policy;
 		return this;
 	}
 
@@ -85,6 +86,9 @@ public class ExtendedHttpClientBuilder implements HttpClient.Builder{
 
 	@Override
 	public HttpClient build(){
-		return new ExtendedHttpClient(realBuilder.build(), allowLocalNetworks);
+		// When local networks aren't allowed, redirects are followed by ExtendedHttpClient itself
+		// so that every hop goes through the local address check
+		realBuilder.followRedirects(allowLocalNetworks ? redirectPolicy : HttpClient.Redirect.NEVER);
+		return new ExtendedHttpClient(realBuilder.build(), allowLocalNetworks, redirectPolicy);
 	}
 }

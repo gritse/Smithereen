@@ -26,6 +26,7 @@ import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -99,7 +100,8 @@ public class Utils{
 
 	private static final Set<String> RESERVED_USERNAMES=Set.of("account", "settings", "feed", "activitypub", "api", "system", "users", "groups", "posts", "session", "robots.txt", "my", "activitypub_service_actor", "healthz",
 			"albums", "photos", "videos", "audios", "topics", "apps", "docs", "res", "files", "comments", "oauth", "share");
-	private static final Random rand=new Random();
+	// Used for invite codes, email confirmation keys, media file IDs etc., so it must not be predictable
+	private static final Random rand=new SecureRandom();
 
 	private static final Pattern SIGNATURE_HEADER_PATTERN=Pattern.compile("([!#$%^'*+\\-.^_`|~0-9A-Za-z]+)=(?:(?:\\\"((?:[^\\\"\\\\]|\\\\.)*)\\\")|([!#$%^'*+\\-.^_`|~0-9A-Za-z]+))\\s*([,;])?\\s*");
 	private static final Pattern NON_ASCII_PATTERN=Pattern.compile("\\P{ASCII}");
@@ -117,6 +119,18 @@ public class Utils{
 			.registerTypeHierarchyAdapter(ZoneId.class, new TimeZoneJsonAdapter())
 			.create();
 
+
+	private static final int SESSION_COOKIE_MAX_AGE=10*365*24*60*60;
+
+	/**
+	 * Sets the persistent session cookie. Written by hand because the servlet API doesn't support SameSite.
+	 */
+	public static void setSessionCookie(Response resp, String psid){
+		String cookie="psid="+psid+"; Path=/; Max-Age="+SESSION_COOKIE_MAX_AGE+"; HttpOnly; SameSite=Lax";
+		if(!Config.useHTTP)
+			cookie+="; Secure";
+		resp.raw().addHeader("Set-Cookie", cookie);
+	}
 
 	public static String csrfTokenFromSessionID(byte[] sid){
 		CRC32 crc=new CRC32();

@@ -58,7 +58,7 @@ public class SessionRoutes{
 				SessionStorage.updatePreferences(acc.id, acc.prefs);
 			}
 		}
-		resp.cookie("/", "psid", psid, 10*365*24*60*60, false);
+		setSessionCookie(resp, psid);
 		SmithereenApplication.addAccountSession(acc.id, req);
 	}
 
@@ -81,7 +81,7 @@ public class SessionRoutes{
 			Account acc=SessionStorage.getAccountForUsernameAndPassword(req.queryParams("username"), req.queryParams("password"));
 			if(acc!=null){
 				setupSessionWithAccount(req, resp, acc);
-				if(StringUtils.isNotEmpty(to)){
+				if(StringUtils.isNotEmpty(to) && isSafeLocalRedirect(to)){
 					if(to.startsWith("/"))
 						to=Config.localURI(to).toString();
 					resp.redirect(to);
@@ -573,5 +573,19 @@ public class SessionRoutes{
 		}
 		ctx.getUsersController().selfReinstateAccount(self);
 		return ajaxAwareRedirect(req, resp, "/feed");
+	}
+
+	/**
+	 * Only allow redirecting to paths on this server or to absolute URLs on this server's domain, to prevent open redirects.
+	 */
+	private static boolean isSafeLocalRedirect(String to){
+		if(to.startsWith("/"))
+			return !to.startsWith("//") && !to.startsWith("/\\") && to.chars().noneMatch(c->c<0x20);
+		try{
+			URI uri=new URI(to);
+			return uri.isAbsolute() && ("https".equalsIgnoreCase(uri.getScheme()) || "http".equalsIgnoreCase(uri.getScheme())) && uri.getHost()!=null && Config.isLocal(uri);
+		}catch(URISyntaxException x){
+			return false;
+		}
 	}
 }

@@ -268,8 +268,9 @@ public class ActivityPub{
 				ActivityPubObject obj=ActivityPubObject.parse(converted);
 				if(obj==null)
 					throw new UnsupportedRemoteObjectTypeException("Unsupported object type "+converted.get("type"));
-				if(obj.activityPubID!=null && !Utils.uriHostMatches(obj.activityPubID, uri))
-					throw new BadRequestException("Domain in object ID ("+obj.activityPubID+") doesn't match domain in its URI ("+uri+")");
+				// Check against both the requested URI and the one we ended up at after redirects
+				if(obj.activityPubID!=null && (!Utils.uriHostMatches(obj.activityPubID, uri) || !Utils.uriHostMatches(obj.activityPubID, resp.uri())))
+					throw new BadRequestException("Domain in object ID ("+obj.activityPubID+") doesn't match domain in its URI ("+uri+", final URI "+resp.uri()+")");
 				return obj;
 			}catch(JLDException|JsonParseException x){
 				LOG.error("Exception while parsing or converting remote object", x);
@@ -599,6 +600,8 @@ public class ActivityPub{
 			throw new BadRequestException("date is not in signed headers");
 		if(!headers.contains("host"))
 			throw new BadRequestException("host is not in signed headers");
+		if("POST".equalsIgnoreCase(req.requestMethod()) && !headers.contains("digest"))
+			throw new BadRequestException("digest is not in signed headers");
 
 		Instant date=Instant.from(DateTimeFormatter.RFC_1123_DATE_TIME.parse(req.headers("date")));
 		Instant now=Instant.now();
