@@ -200,7 +200,7 @@ public class ForeignGroup extends Group implements ForeignActor{
 					String normalizedName=pv.name.toLowerCase().replaceAll(":[a-z0-9_]{2,}:", "").replaceAll("[^a-z0-9 -]", "").trim();
 					// Match against popular strings people use for these things
 					if(WEBSITE_FIELD_KEYS.contains(normalizedName)){
-						website=TextProcessor.stripHTML(pv.value, false);
+						website=Utils.sanitizeWebsiteURL(TextProcessor.stripHTML(pv.value, false));
 						break;
 					}
 				}

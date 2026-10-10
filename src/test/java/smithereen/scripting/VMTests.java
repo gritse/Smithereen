@@ -799,4 +799,48 @@ public class VMTests{
 	public void testTrailingCommaInEmptyObjectLiteral(){
 		assertThrows(ScriptCompilationException.class, ()->Script.compile("return {,};"));
 	}
+	@Test
+	public void testStringGrowthIsBounded(){
+		Script s=Script.compile("""
+				var s="aaaaaaaaaaaaaaaa";
+				for(var i=0;i<40;i=i+1){
+					s=s+s;
+				}
+				return s.length;""");
+		assertThrows(ScriptRuntimeException.class, ()->ScriptVM.execute(s));
+	}
+
+	@Test
+	public void testArrayGrowthIsBounded(){
+		Script s=Script.compile("""
+				var a=[];
+				for(var i=0;i<200;i=i+1){
+					a.push(1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+						1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1);
+				}
+				return a.length;""");
+		assertThrows(ScriptRuntimeException.class, ()->ScriptVM.execute(s));
+	}
+
+	@Test
+	public void testCyclicArrayDoesNotOverflowStack(){
+		Script s=Script.compile("""
+				var a=[1];
+				a.push(a);
+				var o={};
+				o.self=o;
+				return [a.indexOf(a), a.indexOf(o), a.indexOf(1)];""");
+		assertEquals(ScriptValue.of(List.of(ScriptValue.of(1), ScriptValue.of(-1), ScriptValue.of(0))), ScriptVM.execute(s));
+	}
+
+	@Test
+	public void testCyclicValueSerializationIsBounded(){
+		Script s=Script.compile("""
+				var a=[1];
+				a.push(a);
+				return a;""");
+		ScriptValue result=ScriptVM.execute(s);
+		com.google.gson.Gson gson=new com.google.gson.GsonBuilder().registerTypeAdapterFactory(new ScriptValueGsonTypeAdapterFactory()).create();
+		assertThrows(ScriptRuntimeException.class, ()->gson.toJson(result));
+	}
 }

@@ -94,7 +94,18 @@ public class ExecuteMethods{
 		}
 	}
 
-	private record ScriptCacheKey(long appID, byte[] hash){}
+	private record ScriptCacheKey(long appID, byte[] hash){
+		// Record equality on arrays is reference-based, which would make the cache never hit
+		@Override
+		public boolean equals(Object o){
+			return o instanceof ScriptCacheKey k && k.appID==appID && java.util.Arrays.equals(k.hash, hash);
+		}
+
+		@Override
+		public int hashCode(){
+			return Long.hashCode(appID)*31+java.util.Arrays.hashCode(hash);
+		}
+	}
 
 	private static Object convertScriptValueToParam(ScriptValue v){
 		return switch(v){

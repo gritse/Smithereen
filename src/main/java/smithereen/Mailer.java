@@ -538,7 +538,8 @@ public class Mailer{
 			MimeMessage msg=new MimeMessage(session);
 			msg.setFrom(new InternetAddress(Config.mailFrom, Config.getServerDisplayName()));
 			msg.setRecipients(Message.RecipientType.TO, to);
-			msg.setSubject(subject);
+			// Subjects may contain remote user names; never let CR/LF through into the headers
+			msg.setSubject(subject.replaceAll("[\\r\\n\\u0000-\\u001f]", " "));
 			msg.setSentDate(new Date());
 			if(unsubscribeURL!=null){
 				msg.addHeader("List-Unsubscribe", "<"+unsubscribeURL+">");

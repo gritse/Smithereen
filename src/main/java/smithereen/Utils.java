@@ -52,7 +52,6 @@ import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.regex.Matcher;
@@ -81,6 +80,7 @@ import smithereen.storage.GroupStorage;
 import smithereen.storage.UserStorage;
 import smithereen.templates.RenderedTemplateResponse;
 import smithereen.text.TextProcessor;
+import smithereen.util.CryptoUtils;
 import smithereen.util.EmailCodeActionType;
 import smithereen.util.FloodControl;
 import smithereen.util.InstantMillisJsonAdapter;
@@ -158,7 +158,7 @@ public class Utils{
 	public static boolean verifyCSRF(Request req, Response resp){
 		SessionInfo info=req.session().attribute("info");
 		String reqCsrf=req.queryParams("csrf");
-		if(reqCsrf!=null && reqCsrf.equals(info.csrfToken)){
+		if(reqCsrf!=null && info!=null && info.csrfToken!=null && MessageDigest.isEqual(reqCsrf.getBytes(StandardCharsets.UTF_8), info.csrfToken.getBytes(StandardCharsets.UTF_8))){
 			return true;
 		}
 		resp.status(403);
@@ -508,13 +508,53 @@ public class Utils{
 
 	public static String back(Request req){
 		String redir=req.queryParams("_redir");
-		if(redir!=null)
+		if(redir!=null && isSafeLocalRedirect(redir))
 			return redir;
 		String ref=req.headers("referer");
-		if(ref!=null)
+		if(ref!=null && isSafeLocalRedirect(ref))
 			return ref;
 		SessionInfo sessionInfo=sessionInfo(req);
 		return sessionInfo!=null ? sessionInfo.history.last() : "/";
+	}
+
+	/**
+	 * Checks that a redirect target is a path on this server (or an absolute URL pointing to this server), to prevent open redirects.
+	 */
+	public static boolean isSafeLocalRedirect(String to){
+		if(to==null || to.isEmpty())
+			return false;
+		if(to.startsWith("/"))
+			return !to.startsWith("//") && !to.startsWith("/\\") && to.chars().noneMatch(c->c<0x20);
+		try{
+			URI uri=new URI(to);
+			return uri.isAbsolute() && ("https".equalsIgnoreCase(uri.getScheme()) || "http".equalsIgnoreCase(uri.getScheme())) && uri.getHost()!=null && Config.isLocal(uri);
+		}catch(URISyntaxException x){
+			return false;
+		}
+	}
+
+	/**
+	 * Only http(s) URLs may be used as profile website links: anything else (javascript:, data:, ...) would be an XSS vector when rendered as a link.
+	 * @return the normalized URL, or null if it's not acceptable
+	 */
+	public static String sanitizeWebsiteURL(String url){
+		if(StringUtils.isEmpty(url))
+			return null;
+		url=url.trim();
+		if(url.length()>2048 || url.chars().anyMatch(c->c<0x20))
+			return null;
+		try{
+			URI uri=new URI(url);
+			if(uri.getScheme()==null)
+				return "http://"+url;
+			if(!"http".equalsIgnoreCase(uri.getScheme()) && !"https".equalsIgnoreCase(uri.getScheme()))
+				return null;
+			if(uri.getHost()==null)
+				return null;
+			return url;
+		}catch(URISyntaxException x){
+			return null;
+		}
 	}
 
 	public static boolean isAjax(Request req){
@@ -929,7 +969,7 @@ public class Utils{
 	public static Object sendEmailConfirmationCode(Request req, Response resp, EmailCodeActionType type, String formAction){
 		SessionInfo info=Objects.requireNonNull(sessionInfo(req));
 		FloodControl.ACTION_CONFIRMATION.incrementOrThrow(info.account);
-		Random rand=ThreadLocalRandom.current();
+		Random rand=CryptoUtils.RANDOM;
 		char[] _code=new char[5];
 		for(int i=0;i<_code.length;i++){
 			_code[i]=(char)('0'+rand.nextInt(10));
@@ -1004,6 +1044,8 @@ public class Utils{
 	}
 
 	public static boolean uriHostMatches(URI a, URI b){
+		if(a.getHost()==null || b.getHost()==null)
+			return false;
 		return a.getHost().equalsIgnoreCase(b.getHost()) || PublicSuffixList.isSameRegisteredDomain(a.getHost(), b.getHost());
 	}
 

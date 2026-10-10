@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 
@@ -24,6 +25,7 @@ public abstract class ForwardPaginatingCollectionTask extends NoResultCallable{
 	protected ActivityPubCollection collection;
 	protected long totalItems, processedItems;
 	protected int maxItems=Integer.MAX_VALUE;
+	private static final int MAX_PAGES=1000;
 
 	public ForwardPaginatingCollectionTask(ApplicationContext context, URI collectionID){
 		this.collectionID=Objects.requireNonNull(collectionID);
@@ -68,20 +70,30 @@ public abstract class ForwardPaginatingCollectionTask extends NoResultCallable{
 	}
 
 	private void processCollectionPage(CollectionPage page){
-		if(page.items==null || page.items.isEmpty()){
-			LOG.trace("Finished processing collection {} because items array was null or empty", collectionID);
-			return;
-		}
-		doOneCollectionPage(page);
-		processedItems+=page.items.size();
-		if(totalItems>=0 && processedItems>=totalItems){
-			LOG.trace("Finished processing collection {} because item count limit {} was reached", collectionID, totalItems);
-			return;
-		}
-		if(page.next!=null){
-			loadNextCollectionPage(page.next);
-		}else{
-			LOG.trace("Finished processing collection {} because there are no next pages", collectionID);
+		// Iterative rather than recursive, with hard limits, so a remote server can't make us walk an endless chain of pages
+		HashSet<URI> seenPages=new HashSet<>();
+		int pageCount=0;
+		while(true){
+			if(page.items==null || page.items.isEmpty()){
+				LOG.trace("Finished processing collection {} because items array was null or empty", collectionID);
+				return;
+			}
+			doOneCollectionPage(page);
+			processedItems+=page.items.size();
+			if(processedItems>=maxItems || (totalItems>=0 && processedItems>=totalItems)){
+				LOG.trace("Finished processing collection {} because item count limit {} was reached", collectionID, totalItems);
+				return;
+			}
+			if(page.next==null){
+				LOG.trace("Finished processing collection {} because there are no next pages", collectionID);
+				return;
+			}
+			if(++pageCount>MAX_PAGES || !seenPages.add(page.next)){
+				LOG.warn("Stopped processing collection {}: too many pages or a page loop", collectionID);
+				return;
+			}
+			LOG.trace("Fetching page {} for collection {}", page.next, collectionID);
+			page=context.getObjectLinkResolver().resolve(page.next, CollectionPage.class, true, false, false);
 		}
 	}
 

@@ -694,9 +694,11 @@ public class ModerationController{
 				throw new UserActionNotAllowedException();
 			// Can't change permissions on user's own role but can change settings and name
 			if(ownPermissions.role.id()==role.id()){
-				EnumSet<UserRole.Permission> actualPermissions=EnumSet.copyOf(permissions);
-				actualPermissions.removeIf(UserRole.Permission::isActuallySetting);
-				if(!permissions.containsAll(actualPermissions))
+				EnumSet<UserRole.Permission> newActualPermissions=EnumSet.copyOf(permissions);
+				newActualPermissions.removeIf(UserRole.Permission::isActuallySetting);
+				EnumSet<UserRole.Permission> oldActualPermissions=EnumSet.copyOf(role.permissions());
+				oldActualPermissions.removeIf(UserRole.Permission::isActuallySetting);
+				if(!newActualPermissions.equals(oldActualPermissions))
 					throw new UserActionNotAllowedException();
 			}
 			if(permissions.isEmpty())
@@ -816,7 +818,33 @@ public class ModerationController{
 		}
 	}
 
+	/**
+	 * Staff members must not be able to act against accounts whose role is higher than (or not a subset of) their own.
+	 * Otherwise e.g. a moderator could change the owner's email and reset their password, or suspend them.
+	 */
+	public void ensureCanModerateAccount(User self, Account target){
+		if(target==null || target.roleID==0 || target.user.id==self.id)
+			return;
+		UserRole targetRole=Config.userRoles.get(target.roleID);
+		if(targetRole==null)
+			return;
+		Account selfAccount;
+		try{
+			selfAccount=SessionStorage.getAccountByUserID(self.id);
+		}catch(SQLException x){
+			throw new InternalServerErrorException(x);
+		}
+		UserRole ownRole=selfAccount==null || selfAccount.roleID==0 ? null : Config.userRoles.get(selfAccount.roleID);
+		if(ownRole==null)
+			throw new UserActionNotAllowedException();
+		if(ownRole.permissions().contains(UserRole.Permission.SUPERUSER))
+			return;
+		if(targetRole.permissions().contains(UserRole.Permission.SUPERUSER) || !ownRole.permissions().containsAll(targetRole.permissions()))
+			throw new UserActionNotAllowedException();
+	}
+
 	public void setUserEmail(User self, Account account, String newEmail){
+		ensureCanModerateAccount(self, account);
 		try{
 			String oldEmail=account.email;
 			SessionStorage.updateActivationInfo(account.id, null);
@@ -830,6 +858,7 @@ public class ModerationController{
 	}
 
 	public void terminateUserSession(User self, Account account, OtherSession session){
+		ensureCanModerateAccount(self, account);
 		try{
 			if(session.appID()!=0)
 				context.getAppsController().revokeAccessToken(session.fullID());
@@ -846,6 +875,7 @@ public class ModerationController{
 		try{
 			if(self.id==target.id && status!=UserBanStatus.NONE)
 				throw new UserErrorException("You can't ban yourself");
+			ensureCanModerateAccount(self, targetAccount);
 			UserBanStatus prevStatus=target.banStatus;
 			UserStorage.setUserBanStatus(target, targetAccount, status, status!=UserBanStatus.NONE ? Utils.gson.toJson(info) : null);
 			target.banStatus=status;

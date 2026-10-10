@@ -25,7 +25,9 @@ public class MicroFormatAwareHTMLWhitelist extends Whitelist{
 
 	public MicroFormatAwareHTMLWhitelist(){
 		addTags("a", "b", "i", "u", "s", "code", "p", "blockquote", "span", "sub", "sup", "br", "pre");
-		addAttributes("a", "href", "data-user-id");
+		// data-user-id is added by our own mention processing after sanitization; it must never come from the input,
+		// otherwise remote content could make any link look like a mention of an arbitrary local user
+		addAttributes("a", "href");
 		addProtocols("a", "href", "http", "https");
 	}
 

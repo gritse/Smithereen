@@ -279,8 +279,8 @@ public class User extends Actor{
 
 		if(attachment==null)
 			attachment=new ArrayList<>();
-		if(StringUtils.isNotEmpty(website)){
-			String url=TextProcessor.escapeHTML(website);
+		if(Utils.sanitizeWebsiteURL(website)!=null){
+			String url=TextProcessor.escapeHTML(Utils.sanitizeWebsiteURL(website));
 			PropertyValue pv=new PropertyValue();
 			pv.name="Website";
 			pv.value="<a href=\""+url+"\" rel=\"me\">"+url+"</a>";

@@ -3,6 +3,7 @@ package smithereen.util;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -44,10 +45,13 @@ public class RangeRequestReader implements RandomAccessByteInput{
 				.timeout(Duration.ofSeconds(30))
 				.header("Range", "bytes=%d-%d".formatted(position, position+length-1))
 				.build();
-		HttpResponse<byte[]> resp=ActivityPub.httpClient.send(req, HttpResponse.BodyHandlers.ofByteArray());
-		if(resp.statusCode()!=206){
-			throw new IOException("Expected status code '206 Partial Content', got "+resp.statusCode());
+		HttpResponse<InputStream> resp=ActivityPub.httpClient.send(req, HttpResponse.BodyHandlers.ofInputStream());
+		try(InputStream in=resp.body()){
+			if(resp.statusCode()!=206){
+				throw new IOException("Expected status code '206 Partial Content', got "+resp.statusCode());
+			}
+			// Never read more than we asked for, whatever the server decides to send
+			return in.readNBytes(length);
 		}
-		return resp.body();
 	}
 }

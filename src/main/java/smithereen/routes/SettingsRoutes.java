@@ -133,8 +133,7 @@ public class SettingsRoutes{
 		}
 		if(Config.signupMode==Config.SignupMode.CLOSED && !sessionInfo(req).permissions.hasPermission(UserRole.Permission.MANAGE_INVITES))
 			return wrapError(req, resp, "err_access");
-		byte[] code=new byte[16];
-		new Random().nextBytes(code);
+		byte[] code=Utils.randomBytes(16);
 		UserStorage.putInvite(self.id, code, 1, null, null);
 		req.session().attribute("settings.inviteMessage", Utils.lang(req).get("invitation_created"));
 		resp.redirect("/settings");
@@ -151,7 +150,7 @@ public class SettingsRoutes{
 			message=Utils.lang(req).get("err_passwords_dont_match");
 		}else{
 			try{
-				ctx.getUsersController().changePassword(self, current, new1);
+				ctx.getUsersController().changePassword(self, current, new1, req.cookie("psid"));
 				message=Utils.lang(req).get("password_changed");
 			}catch(UserErrorException x){
 				message=lang(req).get(x.getMessage());

@@ -11,6 +11,11 @@ import java.util.stream.Collectors;
 import spark.utils.StringUtils;
 
 public class ScriptVM{
+	// Limits protecting the server from scripts that try to exhaust memory
+	public static final int MAX_STRING_LENGTH=1<<20;
+	public static final int MAX_COLLECTION_SIZE=10_000;
+	public static final int MAX_NESTING_DEPTH=32;
+
 	// For tests only
 	static ScriptValue execute(Script script){
 		return execute(script, new ScriptEnvironment(name->null, null));
@@ -73,6 +78,8 @@ public class ScriptVM{
 							case ScriptValue.Str(String s) -> s;
 							case null, default -> throw new ScriptRuntimeException("Invalid operand type for '+'", script.getLineNumber(ip-1));
 						};
+						if((long)sa.length()+sb.length()>MAX_STRING_LENGTH)
+							throw new ScriptRuntimeException("String is too long", script.getLineNumber(ip-1));
 						stack.push(ScriptValue.of(sa+sb));
 					}
 				}
@@ -165,6 +172,7 @@ public class ScriptVM{
 						throw new ScriptRuntimeException("Invalid operand types for object property assignment", script.getLineNumber(ip-1));
 					if(!(keyV instanceof ScriptValue.Str(String key)))
 						throw new IllegalStateException("Invalid operand types");
+					checkCollectionSize(obj.size()+1, script.getLineNumber(ip-1));
 					obj.put(key, value);
 					if(script.operands[ip-1]==1)
 						stack.push(value);
@@ -222,6 +230,7 @@ public class ScriptVM{
 							case ScriptValue.Str(String s) -> s;
 							case null, default -> throw new ScriptRuntimeException("Invalid operand type for '[]='", script.getLineNumber(ip-1));
 						};
+						checkCollectionSize(obj.size()+1, script.getLineNumber(ip-1));
 						obj.put(key, value);
 					}else if(arrayV instanceof ScriptValue.Arr(List<ScriptValue> arr)){
 						int index=switch(indexV){
@@ -249,6 +258,7 @@ public class ScriptVM{
 					ScriptValue arrayV=stack.pop();
 					if(!(arrayV instanceof ScriptValue.Arr(List<ScriptValue> array)))
 						throw new IllegalStateException("Invalid operand types");
+					checkCollectionSize(array.size()+1, script.getLineNumber(ip-1));
 					array.add(value);
 				}
 				case Op.SELECT_OBJECT_FIELD -> {
@@ -325,6 +335,41 @@ public class ScriptVM{
 				default -> throw new ScriptRuntimeException("Unknown opcode "+opcode, script.getLineNumber(ip-1));
 			}
 		}
+	}
+
+	static void checkCollectionSize(long newSize, int lineNumber){
+		if(newSize>MAX_COLLECTION_SIZE)
+			throw new ScriptRuntimeException("Array or object is too large", lineNumber);
+	}
+
+	static boolean deepEquals(ScriptValue a, ScriptValue b, int depth, int lineNumber){
+		if(a==b)
+			return true;
+		if(a==null || b==null)
+			return false;
+		if(depth>=MAX_NESTING_DEPTH)
+			throw new ScriptRuntimeException("Value is nested too deeply or contains a cycle", lineNumber);
+		if(a instanceof ScriptValue.Arr(List<ScriptValue> la) && b instanceof ScriptValue.Arr(List<ScriptValue> lb)){
+			if(la.size()!=lb.size())
+				return false;
+			for(int i=0;i<la.size();i++){
+				if(!deepEquals(la.get(i), lb.get(i), depth+1, lineNumber))
+					return false;
+			}
+			return true;
+		}
+		if(a instanceof ScriptValue.Obj(Map<String, ScriptValue> ma) && b instanceof ScriptValue.Obj(Map<String, ScriptValue> mb)){
+			if(ma.size()!=mb.size())
+				return false;
+			for(Map.Entry<String, ScriptValue> e:ma.entrySet()){
+				if(!mb.containsKey(e.getKey()) || !deepEquals(e.getValue(), mb.get(e.getKey()), depth+1, lineNumber))
+					return false;
+			}
+			return true;
+		}
+		if(a instanceof ScriptValue.Arr || a instanceof ScriptValue.Obj || b instanceof ScriptValue.Arr || b instanceof ScriptValue.Obj)
+			return false;
+		return a.equals(b);
 	}
 
 	private static boolean castValueToBool(ScriptValue v){

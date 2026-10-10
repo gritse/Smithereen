@@ -109,6 +109,8 @@ public class PhotosRoutes{
 	private static Object photoAlbums(Request req, Response resp, Actor owner, Account self, ApplicationContext ctx){
 		if(Config.demoMode && !requireAccount(req, resp))
 			return "";
+		if(owner instanceof User user)
+			ctx.getPrivacyController().enforceUserProfileAccess(self==null ? null : self.user, user);
 		List<PhotoAlbum> albums=ctx.getPhotosController().getAllAlbums(owner, self==null ? null : self.user, true, true);
 		Templates.addJsLangForPrivacySettings(req);
 		Set<Long> needPhotos=albums.stream().map(a->a.coverID).filter(id->id!=0).collect(Collectors.toSet());

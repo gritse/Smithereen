@@ -20,6 +20,7 @@ import java.util.stream.Collectors;
 
 import smithereen.ApplicationContext;
 import smithereen.Config;
+import smithereen.Utils;
 import smithereen.activitypub.objects.Actor;
 import smithereen.activitypub.objects.Image;
 import smithereen.activitypub.objects.LocalImage;
@@ -222,8 +223,8 @@ public class ProfileRoutes{
 		ArrayList<Map<String, String>> contactsFields=new ArrayList<>();
 		if(StringUtils.isNotEmpty(user.location))
 			contactsFields.add(Map.of("name", l.get("profile_city"), "value", user.location));
-		if(StringUtils.isNotEmpty(user.website)){
-			String url=TextProcessor.escapeHTML(user.website);
+		if(Utils.sanitizeWebsiteURL(user.website)!=null){
+			String url=TextProcessor.escapeHTML(Utils.sanitizeWebsiteURL(user.website));
 			contactsFields.add(Map.of("name", l.get("profile_website"), "value", "<a href=\""+url+"\" rel=\"me noopener ugc\" target=\"_blank\">"+url+"</a>", "html", "true"));
 		}
 		for(User.ContactInfoKey key:User.ContactInfoKey.values()){

@@ -128,13 +128,14 @@ public abstract sealed class NoteOrQuestion extends ActivityPubObject permits No
 			int mentionCount=0;
 			for(ActivityPubObject obj:tag){
 				if(obj instanceof Mention mention){
+					// Count every mention, resolved or not, so that a post can't make us fetch an unbounded number of remote users
+					mentionCount++;
+					if(mentionCount>MAX_MENTIONS)
+						break;
 					mentionedUserIDs.add(mention.href);
 					try{
 						User mentionedUser=context.getObjectLinkResolver().resolve(mention.href, User.class, true, true, false);
 						post.mentionedUserIDs.add(mentionedUser.id);
-						mentionCount++;
-						if(mentionCount==MAX_MENTIONS)
-							break;
 					}catch(Exception x){
 						LOG.debug("Failed to resolve mention for href={}", mention.href, x);
 					}
@@ -589,12 +590,12 @@ public abstract sealed class NoteOrQuestion extends ActivityPubObject permits No
 			int mentionCount=0;
 			for(ActivityPubObject obj:tag){
 				if(obj instanceof Mention mention){
+					mentionCount++;
+					if(mentionCount>MAX_MENTIONS)
+						break;
 					try{
 						User mentionedUser=context.getObjectLinkResolver().resolve(mention.href, User.class, true, true, false);
 						comment.mentionedUserIDs.add(mentionedUser.id);
-						mentionCount++;
-						if(mentionCount==MAX_MENTIONS)
-							break;
 					}catch(Exception x){
 						LOG.debug("Failed to resolve mention for href={}", mention.href, x);
 					}

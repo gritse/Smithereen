@@ -213,6 +213,8 @@ public class MailController{
 			return;
 		if(message.senderID==self.id)
 			throw new BadRequestException("Can't mark outgoing messages as read");
+		if(!message.to.contains(self.id) && !message.cc.contains(self.id))
+			throw new UserActionNotAllowedException("Not a recipient of this message");
 		try{
 			HashSet<Long> ids=new HashSet<>(message.relatedMessageIDs);
 			// User's own copy

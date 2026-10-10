@@ -19,6 +19,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -275,7 +276,7 @@ public class ApiRoutes{
 				if(StringUtils.isEmpty(codeVerifier))
 					return oauthTokenError(resp, "invalid_grant", "PKCE mismatch");
 				String hash=Base64.getUrlEncoder().encodeToString(CryptoUtils.sha256(codeVerifier.getBytes(StandardCharsets.US_ASCII)));
-				if(!hash.equals(ac.s256CodeChallenge()))
+				if(!MessageDigest.isEqual(hash.getBytes(StandardCharsets.US_ASCII), ac.s256CodeChallenge().getBytes(StandardCharsets.US_ASCII)))
 					return oauthTokenError(resp, "invalid_grant", "PKCE mismatch");
 			}
 
@@ -503,6 +504,9 @@ public class ApiRoutes{
 					if(accessToken.expiresAt()!=null && accessToken.expiresAt().isBefore(Instant.now()))
 						throw new ApiErrorException(new ApiError(ApiErrorType.USER_AUTH_FAILED, "access token has expired", params));
 					self=ctx.getUsersController().getAccountOrThrow(accessToken.accountID());
+					// Suspended, frozen, deactivated, moved and unconfirmed accounts must not keep working through previously issued tokens
+					if(!self.isActive())
+						throw new ApiErrorException(new ApiError(ApiErrorType.USER_AUTH_FAILED, "account is not active", params));
 					ctx.getAppsController().updateAccessTokenLastAccess(accessToken, getRequestIP(req), Objects.requireNonNullElse(req.userAgent(), ""));
 				}catch(IllegalArgumentException x){
 					throw new ApiErrorException(new ApiError(ApiErrorType.USER_AUTH_FAILED, "invalid access token", params));

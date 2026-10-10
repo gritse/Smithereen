@@ -341,6 +341,8 @@ public class Config{
 	}
 
 	public static boolean isLocal(URI uri){
+		if(uri.getHost()==null)
+			return false;
 		if(domain.contains(":")){
 			return (uri.getHost()+":"+uri.getPort()).equalsIgnoreCase(domain);
 		}

@@ -16,6 +16,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -444,7 +445,7 @@ public class SystemRoutes{
 							String apiHash=req.queryParams("api");
 							if(StringUtils.isNotEmpty(apiHash)){
 								Map<String, String> params=req.queryParams().stream().collect(Collectors.toMap(Function.identity(), req::queryParams));
-								canProceed=apiHash.equals(ApiUtils.getExternalMediaHash(params));
+								canProceed=MessageDigest.isEqual(apiHash.getBytes(StandardCharsets.UTF_8), ApiUtils.getExternalMediaHash(params).getBytes(StandardCharsets.UTF_8));
 								hadCorrectApiHash=canProceed;
 							}
 						}

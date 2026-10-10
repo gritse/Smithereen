@@ -834,14 +834,51 @@ public class ActivityPubRoutes{
 	}
 
 	private static Object inbox(Request req, Response resp, Actor owner){
+		// Don't even read bodies that are obviously too large
+		if(req.contentLength()>MAX_INBOX_BODY_SIZE){
+			resp.status(413);
+			return "Request body is too large";
+		}
 		// The digest must be present (and signed, see ActivityPub.verifyHttpSignature) so the signature covers the body
 		if(req.headers("digest")==null)
 			throw new BadRequestException("Request is missing Digest header");
-		if(!verifyHttpDigest(req.headers("digest"), req.bodyAsBytes())){
+		byte[] bodyBytes=req.bodyAsBytes();
+		if(bodyBytes.length>MAX_INBOX_BODY_SIZE){
+			resp.status(413);
+			return "Request body is too large";
+		}
+		if(!verifyHttpDigest(req.headers("digest"), bodyBytes)){
 			throw new BadRequestException("Digest verification failed");
 		}
 		String body=req.body();
 		return dispatchActivity(body, req, resp, true);
+	}
+
+	/**
+	 * Decides whether an inline object embedded in an activity can be trusted as-is.
+	 * @return the same LinkOrObject if the inline object is trusted, or a link-only LinkOrObject if it must be resolved by ID instead
+	 */
+	public static LinkOrObject untrustedInlineObjectToLink(LinkOrObject lo, Actor actor){
+		ActivityPubObject inline=lo.object;
+		if(inline==null || inline instanceof Activity || inline instanceof Tombstone)
+			return lo;
+		if(inline.activityPubID==null){
+			if(inline instanceof Actor)
+				throw new BadRequestException("Embedded actor objects must have an ID");
+			// Transient objects (e.g. a Note without an ID) have nothing to resolve. They're attributed to the actor's domain
+			// by the parsing code if they have attributedTo, so leave them alone.
+			return lo;
+		}
+		if(inline.activityPubID.getHost()==null)
+			throw new BadRequestException("Embedded object ID must be an HTTP(S) URI");
+		if(inline instanceof Actor){
+			if(inline.activityPubID.equals(actor.activityPubID))
+				return lo;
+			return new LinkOrObject(inline.activityPubID);
+		}
+		if(Config.isLocal(inline.activityPubID) || !Utils.uriHostMatches(inline.activityPubID, actor.activityPubID))
+			return new LinkOrObject(inline.activityPubID);
+		return lo;
 	}
 
 	private static void traverseAndRejectAtReverse(JsonElement el){
@@ -857,6 +894,8 @@ public class ActivityPubRoutes{
 			}
 		}
 	}
+
+	private static final int MAX_INBOX_BODY_SIZE=2*1024*1024;
 
 	public static Object dispatchActivity(String body, Request req, Response resp, boolean verifySignatures){
 		ApplicationContext ctx=context(req);
@@ -887,8 +926,37 @@ public class ActivityPubRoutes{
 		else
 			throw new BadRequestException("Unsupported object type");
 
+		if(activity.actor.link.getHost()==null)
+			throw new BadRequestException("Activity actor must be an HTTP(S) URI");
 		if(Config.isLocal(activity.actor.link))
 			throw new BadRequestException("User domain must be different from this server");
+
+		// Before doing anything expensive (fetching the actor, creating a server record), make sure the request at least
+		// carries a signature that could plausibly belong to this actor: the HTTP signature keyId (or the LD-signature creator)
+		// must be on the actor's domain. Unauthenticated junk must not be able to trigger outbound requests.
+		if(verifySignatures){
+			URI signerID=null;
+			if(rawActivity.has("signature") && rawActivity.get("signature") instanceof JsonObject ldSig && ldSig.has("creator")){
+				try{
+					signerID=Utils.userIdFromKeyId(URI.create(ldSig.get("creator").getAsString()));
+				}catch(Exception ignore){}
+			}
+			if(signerID==null || !Utils.uriHostMatches(signerID, activity.actor.link)){
+				String sigHeader=req.headers("Signature");
+				if(sigHeader==null)
+					throw new BadRequestException("Request is missing Signature header");
+				List<Map<String, String>> sigs=Utils.parseSignatureHeader(sigHeader);
+				if(sigs.isEmpty() || !sigs.getFirst().containsKey("keyId"))
+					throw new BadRequestException("Signature header has invalid format");
+				try{
+					signerID=Utils.userIdFromKeyId(URI.create(sigs.getFirst().get("keyId")));
+				}catch(Exception x){
+					throw new BadRequestException("Invalid keyId in Signature header");
+				}
+				if(signerID.getHost()==null || !Utils.uriHostMatches(signerID, activity.actor.link))
+					throw new BadRequestException("Signature keyId must be on the same domain as the activity actor");
+			}
+		}
 
 		// Enforce federation blocks before doing something potentially expensive like fetching linked objects.
 		// This may help if the server in question was blocked because of DoS concerns.
@@ -990,6 +1058,15 @@ public class ActivityPubRoutes{
 				activity=act1;
 		}catch(Exception ignore){}
 
+		// Inline (embedded) objects are only trusted when they're on the same domain as the actor that signed the activity.
+		// Anything else must be resolved by its ID: from the local database, or by fetching it from its origin server
+		// for activity types that allow this. Without this, a server could inject arbitrary content attributed to
+		// users on other servers, or overwrite stored actors (including their public keys) by embedding them.
+		// Embedded actor objects are never trusted, except for the actor's own object (Update{Person} etc).
+		if(activity.object!=null && activity.object.object!=null){
+			activity.object=untrustedInlineObjectToLink(activity.object, actor);
+		}
+
 		ActivityHandlerContext context=new ActivityHandlerContext(ctx, body, hasValidLDSignature ? actor : null, httpSigOwner);
 
 		ctx.getStatsController().incrementDaily(StatsType.SERVER_ACTIVITIES_RECEIVED, server.id());
@@ -1055,6 +1132,9 @@ public class ActivityPubRoutes{
 					if(r.activityClass.isInstance(activity)){
 						if(r.nestedActivityClass!=null && aobj instanceof Activity nestedActivity && r.nestedActivityClass.isInstance(aobj)){
 							ActivityPubObject nestedObject;
+							if(nestedActivity.object==null)
+								throw new BadRequestException("Nested activity must have an object");
+							nestedActivity.object=untrustedInlineObjectToLink(nestedActivity.object, actor);
 							if(nestedActivity.object.object!=null)
 								nestedObject=nestedActivity.object.object;
 							else
@@ -1062,10 +1142,13 @@ public class ActivityPubRoutes{
 
 							if(r.doublyNestedActivityClass!=null && nestedObject instanceof Activity doublyNestedActivity && r.doublyNestedActivityClass.isInstance(nestedObject)){
 								ActivityPubObject doublyNestedObject;
+								if(doublyNestedActivity.object==null)
+									throw new BadRequestException("Nested activity must have an object");
+								doublyNestedActivity.object=untrustedInlineObjectToLink(doublyNestedActivity.object, actor);
 								if(doublyNestedActivity.object.object!=null)
-									doublyNestedObject=nestedActivity.object.object;
+									doublyNestedObject=doublyNestedActivity.object.object;
 								else
-									doublyNestedObject=ctx.getObjectLinkResolver().resolve(nestedActivity.object.link);
+									doublyNestedObject=ctx.getObjectLinkResolver().resolve(doublyNestedActivity.object.link);
 
 								if(r.objectClass.isInstance(doublyNestedObject)){
 									LOG.debug("Found match: {}", r.handler.getClass().getName());

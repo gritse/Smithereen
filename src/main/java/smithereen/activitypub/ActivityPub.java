@@ -80,6 +80,7 @@ import smithereen.exceptions.UserActionNotAllowedException;
 import smithereen.http.ExtendedHttpClient;
 import smithereen.http.FormBodyPublisherBuilder;
 import smithereen.http.HttpContentType;
+import smithereen.http.LimitedInputStream;
 import smithereen.http.ReaderBodyHandler;
 import smithereen.jsonld.JLD;
 import smithereen.jsonld.JLDException;
@@ -236,7 +237,7 @@ public class ActivityPub{
 			throw new ObjectNotFoundException("Response is not successful: remote server returned "+resp.statusCode()+" for GET "+uri);
 		}
 		HttpContentType contentType=HttpContentType.from(resp.headers());
-		try(InputStream in=resp.body()){
+		try(InputStream in=new LimitedInputStream(resp.body(), MAX_REMOTE_OBJECT_SIZE)){
 			if(tryHTML && contentType.matches("text/html")){
 				LOG.trace("Received HTML, trying to extract <link>");
 				org.jsoup.nodes.Document htmlDocument=Jsoup.parse(in, contentType.getCharset().name(), uri.toString());
@@ -457,7 +458,7 @@ public class ActivityPub{
 		HttpRequest req=HttpRequest.newBuilder(url).timeout(Duration.ofSeconds(10)).build();
 		HttpResponse<Reader> resp;
 		try{
-			resp=httpClient.send(req, new ReaderBodyHandler());
+			resp=httpClient.send(req, new ReaderBodyHandler(MAX_WEBFINGER_RESPONSE_SIZE));
 		}catch(InterruptedException e){
 			throw new RuntimeException(e);
 		}
@@ -566,6 +567,10 @@ public class ActivityPub{
 		}
 	}
 
+	// Maximum size of a remote ActivityPub object (or collection page) we're willing to read into memory
+	public static final long MAX_REMOTE_OBJECT_SIZE=4*1024*1024;
+	private static final long MAX_WEBFINGER_RESPONSE_SIZE=64*1024;
+
 	public static Actor verifyHttpSignature(spark.Request req, Actor userHint) throws NoSuchAlgorithmException, InvalidKeyException, SignatureException{
 		String sigHeader=req.headers("Signature");
 		if(sigHeader==null)
@@ -602,6 +607,10 @@ public class ActivityPub{
 			throw new BadRequestException("host is not in signed headers");
 		if("POST".equalsIgnoreCase(req.requestMethod()) && !headers.contains("digest"))
 			throw new BadRequestException("digest is not in signed headers");
+		// The signed Host header must name this server, otherwise a request signed for another server could be replayed here
+		String hostHeader=req.headers("host");
+		if(hostHeader==null || !hostHeader.equalsIgnoreCase(Config.domain))
+			throw new BadRequestException("Host header does not match this server's domain");
 
 		Instant date=Instant.from(DateTimeFormatter.RFC_1123_DATE_TIME.parse(req.headers("date")));
 		Instant now=Instant.now();
@@ -626,7 +635,7 @@ public class ActivityPub{
 				value=req.requestMethod().toLowerCase()+" "+req.pathInfo();
 				String query=req.queryString();
 				if(StringUtils.isNotEmpty(query))
-					value+=query;
+					value+="?"+query;
 			}else{
 				value=req.headers(header);
 			}

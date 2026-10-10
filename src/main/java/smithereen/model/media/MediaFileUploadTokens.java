@@ -4,6 +4,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.security.MessageDigest;
+import java.nio.charset.StandardCharsets;
 
 import smithereen.Config;
 import smithereen.util.CryptoUtils;
@@ -33,6 +35,6 @@ public class MediaFileUploadTokens{
 	}
 
 	public static boolean verifyToken(String token, MediaFileID id, MediaFileUploadPurpose expectedPurpose, int expectedOwnerID){
-		return token.equals(getToken(id, expectedPurpose, expectedOwnerID));
+		return MessageDigest.isEqual(token.getBytes(StandardCharsets.UTF_8), getToken(id, expectedPurpose, expectedOwnerID).getBytes(StandardCharsets.UTF_8));
 	}
 }

@@ -778,6 +778,8 @@ public class PostRoutes{
 		ApplicationContext ctx=context(req);
 		if(owner instanceof Group group)
 			ctx.getPrivacyController().enforceUserAccessToGroupContent(self!=null ? self.user : null, group);
+		else if(owner instanceof User user)
+			ctx.getPrivacyController().enforceUserProfileAccess(self!=null ? self.user : null, user);
 
 		int offset=offset(req);
 		PaginatedList<PostViewModel> wall=PostViewModel.wrap(ctx.getWallController().getWallPosts(self!=null ? self.user : null, owner, ownOnly ? WallController.WallMode.OWNER : WallController.WallMode.ALL, offset, 20));

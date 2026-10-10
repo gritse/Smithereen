@@ -11,6 +11,7 @@ class BuiltInMethods{
 
 	public static ScriptValue arrayPush(ScriptValue this_, List<ScriptValue> args, int lineNumber){
 		List<ScriptValue> arr=((ScriptValue.Arr) this_).arr();
+		ScriptVM.checkCollectionSize((long)arr.size()+args.size(), lineNumber);
 		arr.addAll(args);
 		return ScriptValue.of(arr.size());
 	}
@@ -61,6 +62,7 @@ class BuiltInMethods{
 
 	public static ScriptValue arrayUnshift(ScriptValue this_, List<ScriptValue> args, int lineNumber){
 		List<ScriptValue> arr=((ScriptValue.Arr) this_).arr();
+		ScriptVM.checkCollectionSize((long)arr.size()+args.size(), lineNumber);
 		arr.addAll(0, args);
 		return ScriptValue.of(arr.size());
 	}
@@ -91,6 +93,7 @@ class BuiltInMethods{
 
 		subList.clear();
 		if(args.size()>2){
+			ScriptVM.checkCollectionSize((long)arr.size()+args.size()-2, lineNumber);
 			subList.addAll(args.subList(2, args.size()));
 		}
 
@@ -99,7 +102,14 @@ class BuiltInMethods{
 
 	public static ScriptValue arrayIndexOf(ScriptValue this_, List<ScriptValue> args, int lineNumber){
 		List<ScriptValue> arr=((ScriptValue.Arr) this_).arr();
-		return ScriptValue.of(arr.indexOf(args.getFirst()));
+		ScriptValue needle=args.getFirst();
+		// Deliberately not using List.indexOf: record equals() on arrays/objects recurses
+		// without bound and would overflow the stack on cyclic structures (e.g. a.push(a)).
+		for(int i=0;i<arr.size();i++){
+			if(ScriptVM.deepEquals(arr.get(i), needle, 0, lineNumber))
+				return ScriptValue.of(i);
+		}
+		return ScriptValue.of(-1);
 	}
 
 	// endregion

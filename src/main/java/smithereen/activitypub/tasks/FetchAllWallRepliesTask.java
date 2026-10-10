@@ -25,6 +25,7 @@ import smithereen.model.Post;
 import smithereen.storage.PostStorage;
 
 public class FetchAllWallRepliesTask implements Callable<Post>{
+	private static final int MAX_PAGES=500;
 	protected static final Logger LOG=LoggerFactory.getLogger(FetchAllWallRepliesTask.class);
 
 	private final ActivityPubWorker apw;
@@ -85,8 +86,14 @@ public class FetchAllWallRepliesTask implements Callable<Post>{
 				if(page.items!=null && !page.items.isEmpty()){
 					doOneCollectionPage(page.items);
 				}
+				int pageCount=0;
+				HashSet<URI> seenPages=new HashSet<>();
 				while(page.next!=null){
 					LOG.trace("getting next page: {}", page.next);
+					if(++pageCount>MAX_PAGES || !seenPages.add(page.next)){
+						LOG.warn("Stopped fetching replies for post {}: too many pages or a page loop", post.getActivityPubID());
+						break;
+					}
 					try{
 						page=context.getObjectLinkResolver().resolve(page.next, CollectionPage.class, true, false, false, owner, false);
 						if(page.items==null){ // you're supposed to not return the "next" field when there are no more pages, but mastodon still does...

@@ -590,7 +590,7 @@ public class SmithereenApplication{
 			});
 			get("/about", SystemRoutes::aboutServer);
 			getLoggedIn("/qsearch", SystemRoutes::quickSearch);
-			postLoggedIn("/loadRemoteObject", SystemRoutes::loadRemoteObject);
+			postWithCSRF("/loadRemoteObject", SystemRoutes::loadRemoteObject);
 			postWithCSRF("/votePoll", SystemRoutes::votePoll);
 			getLoggedIn("/reportForm", SystemRoutes::reportForm);
 			postWithCSRF("/submitReport", SystemRoutes::submitReport);
@@ -1034,7 +1034,7 @@ public class SmithereenApplication{
 		path("/oauth", ()->{
 			get("/authorize", ApiRoutes::oauthAuthorize);
 			post("/token", ApiRoutes::oauthToken);
-			postLoggedIn("/doAuthorize", ApiRoutes::oauthDoAuthorize);
+			postWithCSRF("/doAuthorize", ApiRoutes::oauthDoAuthorize);
 		});
 
 		get("/healthz", (req, resp)->"");
@@ -1099,12 +1099,20 @@ public class SmithereenApplication{
 			String path=req.raw().getPathInfo();
 			LOG.warn("Exception while processing {} {}", req.requestMethod(), path, exception);
 			if(req.requestMethod().equals("POST") && (path.equals("/activitypub/sharedInbox") || path.endsWith("/inbox"))){
-				LOG.warn("Failed activity: {}", req.body());
+				String body=req.body();
+				if(body!=null && body.length()>4096)
+					body=body.substring(0, 4096)+"... ("+body.length()+" chars total)";
+				LOG.warn("Failed activity: {}", body);
 			}
 			res.status(500);
-			StringWriter sw=new StringWriter();
-			exception.printStackTrace(new PrintWriter(sw));
-			res.body("<h1 style='color: red;'>Unhandled exception</h1><pre>"+sw.toString().replace("<", "&lt;")+"</pre>");
+			if(Config.DEBUG){
+				StringWriter sw=new StringWriter();
+				exception.printStackTrace(new PrintWriter(sw));
+				res.body("<h1 style='color: red;'>Unhandled exception</h1><pre>"+sw.toString().replace("<", "&lt;")+"</pre>");
+			}else{
+				// Stack traces leak class names, file paths and library versions to anyone who can trigger an error
+				res.body("<h1>Internal server error</h1>");
+			}
 		});
 
 		after((req, resp)->{

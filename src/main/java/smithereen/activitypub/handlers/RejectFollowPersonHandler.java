@@ -17,6 +17,8 @@ public class RejectFollowPersonHandler extends NestedActivityTypeHandler<Foreign
 		User follower=UserStorage.getUserByActivityPubID(nested.actor.link);
 		if(follower==null)
 			throw new ObjectNotFoundException("Follower not found");
+		// Only follow requests originating from this server can be rejected here
+		follower.ensureLocal();
 		UserStorage.unfriendUser(follower.id, actor.id);
 	}
 }

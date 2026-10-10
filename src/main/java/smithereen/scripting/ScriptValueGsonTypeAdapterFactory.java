@@ -20,6 +20,8 @@ public class ScriptValueGsonTypeAdapterFactory implements TypeAdapterFactory{
 		return null;
 	}
 
+	private static final ThreadLocal<int[]> depth=ThreadLocal.withInitial(()->new int[1]);
+
 	private class Adapter extends TypeAdapter<ScriptValue>{
 		private final Gson gson;
 
@@ -38,8 +40,22 @@ public class ScriptValueGsonTypeAdapterFactory implements TypeAdapterFactory{
 						out.value(n);
 				}
 				case ScriptValue.Bool(boolean b) -> out.value(b);
-				case ScriptValue.Obj(Map<String, ScriptValue> o) -> gson.getAdapter(Map.class).write(out, o);
-				case ScriptValue.Arr(List<ScriptValue> a) -> gson.getAdapter(List.class).write(out, a);
+				// Scripts can build cyclic or very deep structures (e.g. a.push(a)); bound the recursion
+				case ScriptValue.Obj(Map<String, ScriptValue> o) -> writeNested(()->gson.getAdapter(Map.class).write(out, o));
+				case ScriptValue.Arr(List<ScriptValue> a) -> writeNested(()->gson.getAdapter(List.class).write(out, a));
+				case null -> out.nullValue();
+			}
+		}
+
+		private void writeNested(NestedWriter w) throws IOException{
+			int[] d=depth.get();
+			if(d[0]>=ScriptVM.MAX_NESTING_DEPTH)
+				throw new ScriptRuntimeException("Value is nested too deeply or contains a cycle", 0);
+			d[0]++;
+			try{
+				w.write();
+			}finally{
+				d[0]--;
 			}
 		}
 
@@ -47,5 +63,10 @@ public class ScriptValueGsonTypeAdapterFactory implements TypeAdapterFactory{
 		public ScriptValue read(JsonReader in) throws IOException{
 			return null;
 		}
+	}
+
+	@FunctionalInterface
+	private interface NestedWriter{
+		void write() throws IOException;
 	}
 }

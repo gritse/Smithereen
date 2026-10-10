@@ -14,6 +14,7 @@ import java.util.Objects;
 import io.pebbletemplates.pebble.extension.escaper.SafeString;
 import smithereen.ApplicationContext;
 import smithereen.Config;
+import smithereen.Utils;
 import smithereen.Mailer;
 import smithereen.SmithereenApplication;
 import smithereen.exceptions.BadRequestException;
@@ -379,9 +380,14 @@ public class SessionRoutes{
 					.with("passwordResetMessage", lang(req).get(error));
 		}
 
+		if(c.type!=EmailCode.Type.PASSWORD_RESET)
+			throw new BadRequestException();
 		SessionStorage.updatePassword(c.accountID, password);
 		SessionStorage.deleteEmailCode(code);
-		setupSessionWithAccount(req, resp, UserStorage.getAccount(c.accountID));
+		Account account=UserStorage.getAccount(c.accountID);
+		// A password reset must lock out anyone else who got hold of the account
+		context(req).getUsersController().terminateSessionsExcept(account, null);
+		setupSessionWithAccount(req, resp, account);
 		resp.redirect("/feed");
 
 		return "";
@@ -541,9 +547,8 @@ public class SessionRoutes{
 			message=lang(req).get("err_passwords_dont_match");
 		}else{
 			try{
-				ctx.getUsersController().changePassword(self, current, new1);
+				ctx.getUsersController().changePassword(self, current, new1, req.cookie("psid"));
 				ctx.getModerationController().clearUserBanStatus(self);
-				ctx.getUsersController().terminateSessionsExcept(self, req.cookie("psid"));
 				if(isAjax(req))
 					return new WebDeltaResponse(resp).replaceLocation("/feed");
 				resp.redirect("/feed");
@@ -579,13 +584,6 @@ public class SessionRoutes{
 	 * Only allow redirecting to paths on this server or to absolute URLs on this server's domain, to prevent open redirects.
 	 */
 	private static boolean isSafeLocalRedirect(String to){
-		if(to.startsWith("/"))
-			return !to.startsWith("//") && !to.startsWith("/\\") && to.chars().noneMatch(c->c<0x20);
-		try{
-			URI uri=new URI(to);
-			return uri.isAbsolute() && ("https".equalsIgnoreCase(uri.getScheme()) || "http".equalsIgnoreCase(uri.getScheme())) && uri.getHost()!=null && Config.isLocal(uri);
-		}catch(URISyntaxException x){
-			return false;
-		}
+		return Utils.isSafeLocalRedirect(to);
 	}
 }

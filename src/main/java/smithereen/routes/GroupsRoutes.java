@@ -25,6 +25,7 @@ import java.util.stream.Collectors;
 
 import smithereen.ApplicationContext;
 import smithereen.Config;
+import smithereen.Utils;
 import smithereen.activitypub.objects.Actor;
 import smithereen.activitypub.objects.Image;
 import smithereen.activitypub.objects.LocalImage;
@@ -389,8 +390,8 @@ public class GroupsRoutes{
 		if(StringUtils.isNotEmpty(group.summary))
 			profileFields.add(new PropertyValue(l.get(group.type==Group.Type.EVENT ? "about_event" : "about_group"), group.summary));
 		if(!isMobile(req)){
-			if(StringUtils.isNotEmpty(group.website)){
-				String escaped=TextProcessor.escapeHTML(group.website);
+			if(Utils.sanitizeWebsiteURL(group.website)!=null){
+				String escaped=TextProcessor.escapeHTML(Utils.sanitizeWebsiteURL(group.website));
 				profileFields.add(new PropertyValue(l.get("group_website"), "<a href=\""+escaped+"\">"+escaped+"</a>"));
 			}
 			if(StringUtils.isNotEmpty(group.location))

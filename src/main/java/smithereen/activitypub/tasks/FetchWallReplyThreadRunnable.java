@@ -22,6 +22,7 @@ import smithereen.activitypub.objects.NoteOrQuestion;
 import smithereen.model.Post;
 
 public class FetchWallReplyThreadRunnable implements Callable<List<Post>>{
+	private static final int MAX_THREAD_DEPTH=100;
 	private static final Logger LOG=LoggerFactory.getLogger(FetchWallReplyThreadRunnable.class);
 
 	private final LinkedList<NoteOrQuestion> thread=new LinkedList<>();
@@ -48,6 +49,8 @@ public class FetchWallReplyThreadRunnable implements Callable<List<Post>>{
 			LOG.debug("Started fetching parent thread for post {}", initialPost.activityPubID);
 			seenPosts.add(initialPost.activityPubID);
 			while(thread.getFirst().inReplyTo!=null){
+				if(thread.size()>=MAX_THREAD_DEPTH)
+					throw new IllegalStateException("Reply thread is too deep");
 				NoteOrQuestion post=context.getObjectLinkResolver().resolve(thread.getFirst().inReplyTo, NoteOrQuestion.class, true, false, false, (JsonObject) null, true);
 				if(seenPosts.contains(post.activityPubID)){
 					LOG.warn("Already seen post {} while fetching parent thread for {}", post.activityPubID, initialPost.activityPubID);

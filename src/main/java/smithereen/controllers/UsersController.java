@@ -394,6 +394,8 @@ public class UsersController{
 			throw new IllegalArgumentException();
 		try{
 			Account acc=SessionStorage.getAccountByUserID(user.id);
+			if(admin!=null)
+				context.getModerationController().ensureCanModerateAccount(admin, acc);
 			if(acc==null){
 				LOG.error("Database inconsistency, local user {} does not have an account", user.id);
 				return;
@@ -471,7 +473,7 @@ public class UsersController{
 		}
 	}
 
-	public void changePassword(Account self, String oldPassword, String newPassword){
+	public void changePassword(Account self, String oldPassword, String newPassword, String currentSessionID){
 		try{
 			if(newPassword.length()<4){
 				throw new UserErrorException("err_password_short");
@@ -481,6 +483,8 @@ public class UsersController{
 				throw new UserErrorException("err_old_password_incorrect");
 			}
 			FloodControl.PASSWORD_CHECK.reset(self);
+			// Changing the password must lock out anyone else who got hold of the account
+			terminateSessionsExcept(self, currentSessionID);
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -500,7 +504,7 @@ public class UsersController{
 
 	public void terminateSessionsExcept(Account self, String psid){
 		try{
-			byte[] sid=Base64.getDecoder().decode(psid);
+			byte[] sid=psid==null ? new byte[0] : Base64.getDecoder().decode(psid);
 			SessionStorage.deleteSessionsExcept(self.id, sid);
 			context.getAppsController().revokeUserAccessTokensExcept(self, sid);
 			SmithereenApplication.invalidateAllSessionsForAccount(self.id);

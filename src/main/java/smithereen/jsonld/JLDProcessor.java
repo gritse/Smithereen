@@ -271,11 +271,13 @@ public class JLDProcessor{
 		}
 	}
 
+	private static final long MAX_REMOTE_CONTEXT_SIZE=256*1024;
+
 	private static JsonObject loadRemoteContext(String url){
 		LOG.debug("Dereferencing remote context from '{}'", url);
 		try{
 			HttpRequest req=HttpRequest.newBuilder(new URI(url)).timeout(Duration.ofSeconds(10)).build();
-			HttpResponse<Reader> resp=ActivityPub.httpClient.send(req, new ReaderBodyHandler());
+			HttpResponse<Reader> resp=ActivityPub.httpClient.send(req, new ReaderBodyHandler(MAX_REMOTE_CONTEXT_SIZE));
 			try(Reader reader=resp.body()){
 				return JsonParser.parseReader(reader).getAsJsonObject();
 			}

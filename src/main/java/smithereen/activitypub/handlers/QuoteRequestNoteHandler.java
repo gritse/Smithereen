@@ -7,6 +7,8 @@ import smithereen.activitypub.ActivityTypeHandler;
 import smithereen.activitypub.objects.LocalPostNote;
 import smithereen.activitypub.objects.LocalPostQuestion;
 import smithereen.activitypub.objects.NoteOrQuestion;
+import smithereen.routes.ActivityPubRoutes;
+import smithereen.activitypub.objects.LinkOrObject;
 import smithereen.activitypub.objects.activities.QuoteRequest;
 import smithereen.controllers.ObjectLinkResolver;
 import smithereen.exceptions.BadRequestException;
@@ -43,7 +45,17 @@ public class QuoteRequestNoteHandler extends ActivityTypeHandler<ForeignUser, Qu
 				throw new BadRequestException("`instrument` must contain a Note or point to one", x);
 			}
 		}else if(activity.instrument.object instanceof NoteOrQuestion noq){
-			repostSource=noq;
+			// Only trust the embedded post if it's on the actor's own domain, otherwise fetch it from its origin
+			LinkOrObject instrument=ActivityPubRoutes.untrustedInlineObjectToLink(activity.instrument, actor);
+			if(instrument.link!=null){
+				try{
+					repostSource=context.appContext.getObjectLinkResolver().resolve(instrument.link, NoteOrQuestion.class, true, false, false);
+				}catch(ObjectNotFoundException x){
+					throw new BadRequestException("`instrument` must contain a Note or point to one", x);
+				}
+			}else{
+				repostSource=noq;
+			}
 		}else{
 			throw new BadRequestException("`instrument` must contain a Note or point to one");
 		}
