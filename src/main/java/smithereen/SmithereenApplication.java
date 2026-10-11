@@ -9,6 +9,7 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.InetAddress;
 import java.net.URLDecoder;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.time.Instant;
@@ -272,6 +273,8 @@ public class SmithereenApplication{
 			req.attribute("sessionInfo", info);
 			req.attribute("lang", lang(req));
 		});
+		if(Config.privateServer)
+			before(SmithereenApplication::enforcePrivateServer);
 		before(SmithereenApplication::enforceAccountLimitationsIfAny);
 
 		get("/", SmithereenApplication::indexPage);
@@ -1150,6 +1153,48 @@ public class SmithereenApplication{
 
 	private static void setupCustomSerializer(){
 		getSerializerChain().insertBeforeRoot(new ExtendedStreamingSerializer());
+	}
+
+	/**
+	 * With private_server=true in the config, everything except logging in, signing up and a few informational pages
+	 * requires an account. API calls are handled separately in ApiDispatcher because they authenticate with tokens.
+	 */
+	private static void enforcePrivateServer(Request req, Response resp){
+		SessionInfo info=sessionInfo(req);
+		if(info!=null && info.account!=null)
+			return;
+		String path=req.pathInfo();
+		if(isAllowedForAnonymousUsers(path))
+			return;
+		if("GET".equals(req.requestMethod()) || "HEAD".equals(req.requestMethod())){
+			String to=path;
+			if(StringUtils.isNotEmpty(req.queryString()))
+				to+="?"+req.queryString();
+			resp.header("Location", "/account/login?to="+URLEncoder.encode(to, StandardCharsets.UTF_8));
+			halt(302, "");
+		}
+		throw new UnauthorizedRequestException("This server requires logging in");
+	}
+
+	private static boolean isAllowedForAnonymousUsers(String path){
+		if(path.startsWith("/account/") || path.startsWith("/api/") || path.startsWith("/res/"))
+			return true;
+		return Set.of(
+				"/",
+				"/healthz",
+				"/favicon.ico",
+				"/robots.txt",
+				"/system/about",
+				"/system/privacyPolicy",
+				"/system/languageChooser",
+				"/system/captcha",
+				"/system/custom_desktop.css",
+				"/system/custom_mobile.css",
+				"/settings/setLanguage",
+				"/oauth/authorize",
+				"/oauth/doAuthorize",
+				"/oauth/token"
+		).contains(path);
 	}
 
 	private static boolean isAllowedForRestrictedAccounts(Request req){

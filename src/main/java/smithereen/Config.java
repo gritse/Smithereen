@@ -76,6 +76,7 @@ public class Config{
 	public static S3Configuration s3Configuration;
 
 	public static boolean demoMode;
+	public static boolean privateServer;
 	public static List<Integer> demoAddFriends;
 
 	// following fields are kept in the config table in database and some are configurable from /settings/admin
@@ -175,6 +176,7 @@ public class Config{
 			);
 		}
 
+		privateServer=Boolean.parseBoolean(props.getProperty("private_server", "false"));
 		demoMode=Boolean.parseBoolean(props.getProperty("demo_mode", "false"));
 		if(demoMode){
 			String addFriends=props.getProperty("demo_mode.add_friends");

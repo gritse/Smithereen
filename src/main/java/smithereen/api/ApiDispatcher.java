@@ -6,6 +6,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import smithereen.Config;
 import smithereen.ApplicationContext;
 import smithereen.api.methods.AccountMethods;
 import smithereen.api.methods.BoardMethods;
@@ -248,6 +249,11 @@ public class ApiDispatcher{
 		if(methodRecord!=null){
 			if(methodRecord.requireUser && actx.self==null){
 				throw actx.error(ApiErrorType.USER_AUTH_FAILED, "no access token passed");
+			}
+			// On a private server, content is never served without a logged-in user. Only methods that return nothing
+			// about users or their content stay available, so that apps can show a login screen.
+			if(Config.privateServer && actx.self==null && !method.equals("server.getInfo") && !method.equals("utils.getServerTime")){
+				throw actx.error(ApiErrorType.USER_AUTH_FAILED, "this server requires an access token for all methods");
 			}
 			if(!methodRecord.requirePermissions.isEmpty() && !actx.token.permissions().containsAll(methodRecord.requirePermissions) && !actx.token.permissions().contains(ClientAppPermission.PASSWORD_GRANT_USED)){
 				throw actx.error(ApiErrorType.NO_PERMISSION, "scope "+methodRecord.requirePermissions.stream().map(ClientAppPermission::getScopeValue).collect(Collectors.joining(", "))+" is required");

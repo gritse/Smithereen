@@ -58,6 +58,12 @@ Stop the services, replace `smithereen.jar`, the libvips libraries and the whole
 
 Tusovochka can take over a database from upstream Smithereen 1.0.x (schema version 91). The migration to schema version 92 **permanently deletes** every remote user and group and all content they authored, together with every table and column that only served federation. Local users and their content are kept. Back up the database first, this step cannot be undone. After the upgrade, nothing is delivered to the followers your users had on other servers, and those servers keep whatever copies they already hold.
 
+### Members-only server
+
+By default profiles, walls, public posts, groups and photos are visible to anyone on the internet, like on a classic public social network. To restrict everything to registered users, set `private_server=true` in `config.properties` and restart. Anonymous visitors then only get the front page, login, sign-up and password reset, the "about this server" page and the privacy policy; every other page redirects to the login form, and the API refuses calls without an access token.
+
+Uploaded files and resized images are served by your web server and imgproxy, not by the Java server, so this setting does not cover them. Their URLs are unguessable random names, but anyone who already has such a link can open it without logging in.
+
 ### Using S3 object storage
 
 Set `upload.backend=s3` in `config.properties`, then configure the properties for your provider:
