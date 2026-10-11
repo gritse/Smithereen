@@ -105,10 +105,10 @@ public class SessionRoutes{
 				throw new BadRequestException();
 			}
 			ApplicationContext ctx=context(req);
-			model.pageTitle(Config.serverDisplayName+" | "+lang(req).get("oauth_title"))
+			model.pageTitle(Config.getServerDisplayName()+" | "+lang(req).get("oauth_title"))
 					.with("app", ctx.getObjectLinkResolver().resolveLocally(clientID, ClientApp.class));
 		}else{
-			model.pageTitle(lang(req).get("login_title")+" | "+Config.serverDisplayName);
+			model.pageTitle(lang(req).get("login_title")+" | "+Config.getServerDisplayName());
 		}
 		return model;
 	}

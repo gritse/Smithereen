@@ -99,7 +99,7 @@
   "server_stats_activities_received": "Activities received",
   "server_stats_delivery_errors": "Delivery errors",
   "menu_users": "Users",
-  "menu_access": "Federation & Access",
+  "menu_access": "Access",
   "menu_stats": "Statistics",
   "admin_invites": "Invitations",
   "role_none": "(no role)",

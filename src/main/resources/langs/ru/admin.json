@@ -99,7 +99,7 @@
   "server_stats_activities_received": "Полученные активити",
   "server_stats_delivery_errors": "Ошибки отправки",
   "menu_users": "Пользователи",
-  "menu_access": "Федерация и доступ",
+  "menu_access": "Доступ",
   "menu_stats": "Статистика",
   "admin_invites": "Приглашения",
   "role_none": "(без роли)",

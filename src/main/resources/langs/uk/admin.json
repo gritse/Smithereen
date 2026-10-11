@@ -96,7 +96,7 @@
   "server_stats_activities_received": "Отримані активності",
   "server_stats_delivery_errors": "Помилки відправки",
   "menu_users": "Користувачі",
-  "menu_access": "Федерація і доступ",
+  "menu_access": "Доступ",
   "menu_stats": "Статистика",
   "admin_invites": "Запрошення",
   "role_none": "(немає ролі)",
