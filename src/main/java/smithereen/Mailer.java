@@ -87,8 +87,17 @@ public class Mailer{
 		props.put("mail.smtp.port", Config.smtpPort+"");
 		if(StringUtils.isNotEmpty(Config.smtpUsername))
 			props.put("mail.smtp.user", Config.smtpUsername);
-		if(Config.smtpUseTLS)
-			props.put("mail.smtp.starttls.enable", "true");
+		if(Config.smtpUseTLS){
+			// Port 465 (submissions) expects TLS from the first byte, every other port upgrades with STARTTLS
+			if(Config.smtpPort==465)
+				props.put("mail.smtp.ssl.enable", "true");
+			else
+				props.put("mail.smtp.starttls.enable", "true");
+		}
+		// JavaMail waits forever by default, so a wrong port or TLS mode would hang the sending thread without any error
+		props.put("mail.smtp.connectiontimeout", "30000");
+		props.put("mail.smtp.timeout", "30000");
+		props.put("mail.smtp.writetimeout", "30000");
 		if(StringUtils.isEmpty(Config.smtpPassword)){
 			session=Session.getInstance(props);
 		}else{
