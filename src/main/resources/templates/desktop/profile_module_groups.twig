@@ -1,8 +1,14 @@
 {% extends "profile_module" %}
 {% block moduleContent %}
-<div class="padded fixLineHeight">
-{% for group in groups %}
-	<a href="{{ group.profileURL }}">{{ group.name }}</a>{% if not loop.last %} · {% endif %}
+<div class="memberList">
+{% for group in (groups | length>5 ? (groups | slice(0, 5)) : groups) %}
+	<a href="{{ group.profileURL }}">{{ group | pictureForAvatar('a', 32) }}</a>
+	<div class="nameAndInfo">
+		<div class="ellipsize"><a href="{{ group.profileURL }}">{{ group.name }}</a></div>
+		{% set info=group | actorSummary %}
+		{% if info is empty %}{% set info=L('X_members', {'count': group.memberCount}) %}{% endif %}
+		<div class="info ellipsize">{{ info }}</div>
+	</div>
 {% endfor %}
 </div>
 {% endblock %}

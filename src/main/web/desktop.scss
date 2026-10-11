@@ -940,6 +940,7 @@ _::-webkit-full-page-media, _:future, :root .post .repostIcon, :root .post .post
 	.nameAndInfo{
 		align-self: center;
 		padding-bottom: 1px;
+		min-width: 0;
 	}
 	.info{
 		color: $auxiliaryGrey;
