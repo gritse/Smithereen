@@ -87,6 +87,9 @@ public class Mailer{
 		props.put("mail.smtp.port", Config.smtpPort+"");
 		if(StringUtils.isNotEmpty(Config.smtpUsername))
 			props.put("mail.smtp.user", Config.smtpUsername);
+		// Message-ID takes its domain from this, otherwise from the local hostname (the pod name in Kubernetes)
+		if(StringUtils.isNotEmpty(Config.mailFrom))
+			props.put("mail.from", Config.mailFrom);
 		if(Config.smtpUseTLS){
 			// Port 465 (submissions) expects TLS from the first byte, every other port upgrades with STARTTLS
 			if(Config.smtpPort==465)
