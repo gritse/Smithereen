@@ -381,20 +381,6 @@ public class Utils{
 		}
 	}
 
-	public static URI userIdFromKeyId(URI keyID){
-		try{
-			// most AP servers use key IDs in the form http://example.com/users/username#main-key so removing the URI fragment is enough
-			if(keyID.getFragment()!=null){
-				return new URI(keyID.getScheme(), keyID.getSchemeSpecificPart(), null);
-			}
-			// Misskey does this: https://misskey.io/users/7rkrarq81i/publickey
-			URI uri=keyID.resolve("./");
-			return new URI(uri.getScheme(), uri.getSchemeSpecificPart().replaceAll("/$", ""), null);
-		}catch(URISyntaxException x){
-			throw new RuntimeException("checked exceptions are stupid");
-		}
-	}
-
 	public static long parseFileSize(String size){
 		size=size.toUpperCase();
 		if(!size.matches("^\\d+[KMGT]?$"))
