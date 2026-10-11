@@ -20,7 +20,6 @@
 			{% set defaultUsername=(group.event ? "event" : "club")+group.id %}
 			{% if group.username!=defaultUsername %}[ <a href="/groups/{{ group.id }}/adminConfirmResetUsername" data-confirm-action="/groups/{{ group.id }}/adminChangeUsername?username={{ defaultUsername }}" data-confirm-title="{{ L('admin_reset_username_title') }}" data-confirm-message="{{ L('admin_reset_username_confirm', {'newUsername': defaultUsername}) | forceEscape }}" data-confirm-button="{{ L('admin_username_reset') }}">{{ L('admin_username_reset') }}</a> ]{% endif %}
 		</div>
-		{% endif %}
 	</div>
 	<h2 class="marginBefore marginAfter">{{ L('admin_group_action_log') }}</h2>
 	{% include "admin_groups_info_log" with {'items': actionLog.list, 'totalItems': actionLog.total, 'paginationOffset': 0, 'paginationPerPage': actionLog.list | length, 'paginationUrlPrefix': "/groups/#{group.id}/ajaxActionLog?offset="} %}
