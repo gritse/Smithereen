@@ -41,6 +41,7 @@
 		{% endif %}
 		</div>
 		<div class="" id="msgActions">
+			{% if peer is not null %}<a class="button" href="/my/mail/with/{{ peer.id }}">{{ L('mail_tab_conversation') }}</a>{% endif %}
 			{% if message.senderID!=currentUser.id and canReply %}<a class="button" href="/my/mail/compose?replyTo={{ message.idString }}">{{ L('add_reply') }}</a>{% endif %}
 			<a class="button" href="/my/mail/messages/{{ message.idString }}/delete?csrf={{ csrf }}&fromView" data-ajax data-ajax-hide="msgActions" data-ajax-show="msgActionsLoader">{{ L('delete') }}</a>
 		</div>

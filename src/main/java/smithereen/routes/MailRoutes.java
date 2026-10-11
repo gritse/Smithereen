@@ -2,8 +2,12 @@ package smithereen.routes;
 
 import com.google.gson.reflect.TypeToken;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -178,8 +182,20 @@ public class MailRoutes{
 		long id=ctx.getMailController().sendMessage(self.user, toUsers, req.queryParamOrDefault("text", ""), self.prefs.textFormat, subject, attachments, attachmentAltTexts, inReplyTo, null);
 		MailMessage msg=ctx.getMailController().getMessage(self.user, id, false);
 		req.session().attribute("recentMessage", msg);
+		String from=req.queryParams("from");
+		if("conversation".equals(from)){
+			// Sent from the chat view: append the message there instead of leaving the page
+			int peerID=safeParseInt(req.queryParams("peer"));
+			User peer=toUsers.stream().filter(u->u.id==peerID).findFirst().orElse(toUsers.iterator().next());
+			if(isAjax(req)){
+				String lastID=req.queryParams("lastID");
+				long afterID=StringUtils.isNotEmpty(lastID) ? XTEA.decodeObjectID(lastID, ObfuscatedObjectIDType.MAIL_MESSAGE) : 0;
+				return appendNewMessages(req, resp, self, ctx, peer, afterID);
+			}
+			resp.redirect("/my/mail/with/"+peer.id);
+			return "";
+		}
 		if(isAjax(req)){
-			String from=req.queryParams("from");
 			User toUser=toUsers.iterator().next();
 			if("ajaxBox".equals(from)){
 				return new WebDeltaResponse(resp).showSnackbar(lang(req).get("mail_message_sent", Map.of("name", toUser.getFirstLastAndGender())));
@@ -188,6 +204,129 @@ public class MailRoutes{
 		}
 		resp.redirect("/my/mail?fromCompose");
 		return "";
+	}
+
+	private static final int CONVERSATION_PAGE_SIZE=50;
+
+	/**
+	 * The chat-style view of all messages exchanged with one person.
+	 */
+	public static Object conversation(Request req, Response resp, Account self, ApplicationContext ctx){
+		User peer=ctx.getUsersController().getUserOrThrow(safeParseInt(req.params(":peerID")));
+		if(peer.id==self.user.id)
+			throw new BadRequestException();
+		PaginatedList<MailMessage> page=ctx.getMailController().getHistory(self.user, peer, 0, CONVERSATION_PAGE_SIZE);
+		List<MailMessage> messages=new ArrayList<>(page.list);
+		Collections.reverse(messages); // oldest first
+		ctx.getMailController().markIncomingMessagesRead(self.user, messages);
+		Map<Integer, User> users=Map.of(self.user.id, self.user, peer.id, peer);
+		RenderedTemplateResponse model=new RenderedTemplateResponse("mail_conversation", req);
+		model.with("tab", "conversation")
+				.with("peer", peer)
+				.with("users", users)
+				.with("messages", messages)
+				.with("dayLabels", computeDayLabels(req, messages, null))
+				.with("hasEarlier", page.total>messages.size())
+				.with("firstID", messages.isEmpty() ? "" : messages.getFirst().getIdString())
+				.with("lastID", messages.isEmpty() ? "" : messages.getLast().getIdString())
+				.with("canReply", ctx.getPrivacyController().checkUserPrivacy(self.user, peer, UserPrivacySettingKey.PRIVATE_MESSAGES))
+				.with("onlines", ctx.getUsersController().getUserPresencesOnlineOnly(List.of(peer.id)))
+				.pageTitle(lang(req).get("mail_conversation_title", Map.of("name", peer.getFirstLastAndGender())));
+		model.with("toolbarTitle", peer.getFullName());
+		Templates.addJsLangForNewPostForm(req);
+		return model;
+	}
+
+	/**
+	 * Loads the page of messages older than the given one and prepends it to the chat view.
+	 */
+	public static Object conversationEarlier(Request req, Response resp, Account self, ApplicationContext ctx){
+		if(!isAjax(req)){
+			resp.redirect("/my/mail/with/"+req.params(":peerID"));
+			return "";
+		}
+		User peer=ctx.getUsersController().getUserOrThrow(safeParseInt(req.params(":peerID")));
+		requireQueryParams(req, "before");
+		long beforeID=XTEA.decodeObjectID(req.queryParams("before"), ObfuscatedObjectIDType.MAIL_MESSAGE);
+		// The history is newest-first, so find the page that follows the oldest message currently shown
+		int offset=offset(req);
+		PaginatedList<MailMessage> page=ctx.getMailController().getHistory(self.user, peer, offset, CONVERSATION_PAGE_SIZE);
+		List<MailMessage> messages=page.list.stream().filter(m->m.id<beforeID).collect(Collectors.toCollection(ArrayList::new));
+		Collections.reverse(messages);
+		ctx.getMailController().markIncomingMessagesRead(self.user, messages);
+		Map<Integer, User> users=Map.of(self.user.id, self.user, peer.id, peer);
+		String html=new RenderedTemplateResponse("mail_conversation_messages", req)
+				.with("messages", messages)
+				.with("users", users)
+				.with("dayLabels", computeDayLabels(req, messages, null))
+				.renderToString();
+		boolean hasMore=page.total>offset+page.list.size();
+		WebDeltaResponse r=new WebDeltaResponse(resp).insertHTML(WebDeltaResponse.ElementInsertionMode.AFTER_BEGIN, "conversationMessagesInner", html);
+		if(!messages.isEmpty())
+			r.setAttribute("conversation", "data-first-id", messages.getFirst().getIdString());
+		r.setAttribute("conversation", "data-earlier-offset", String.valueOf(offset+page.list.size()));
+		if(!hasMore)
+			r.remove("conversationEarlier");
+		return r;
+	}
+
+	/**
+	 * Returns messages newer than the given one, for live updates of the chat view.
+	 */
+	public static Object conversationNew(Request req, Response resp, Account self, ApplicationContext ctx){
+		if(!isAjax(req)){
+			resp.redirect("/my/mail/with/"+req.params(":peerID"));
+			return "";
+		}
+		User peer=ctx.getUsersController().getUserOrThrow(safeParseInt(req.params(":peerID")));
+		String after=req.queryParams("after");
+		long afterID=StringUtils.isNotEmpty(after) ? XTEA.decodeObjectID(after, ObfuscatedObjectIDType.MAIL_MESSAGE) : 0;
+		return appendNewMessages(req, resp, self, ctx, peer, afterID);
+	}
+
+	private static WebDeltaResponse appendNewMessages(Request req, Response resp, Account self, ApplicationContext ctx, User peer, long afterID){
+		List<MailMessage> messages=ctx.getMailController().getHistoryAfter(self.user, peer, afterID, CONVERSATION_PAGE_SIZE);
+		ctx.getMailController().markIncomingMessagesRead(self.user, messages);
+		WebDeltaResponse r=new WebDeltaResponse(resp);
+		if(messages.isEmpty())
+			return r;
+		MailMessage previous=null;
+		if(afterID!=0){
+			try{
+				previous=ctx.getMailController().getMessage(self.user, afterID, false);
+			}catch(ObjectNotFoundException ignore){}
+		}
+		Map<Integer, User> users=Map.of(self.user.id, self.user, peer.id, peer);
+		String html=new RenderedTemplateResponse("mail_conversation_messages", req)
+				.with("messages", messages)
+				.with("users", users)
+				.with("dayLabels", computeDayLabels(req, messages, previous))
+				.renderToString();
+		r.insertHTML(WebDeltaResponse.ElementInsertionMode.BEFORE_END, "conversationMessagesInner", html);
+		r.remove("conversationEmpty");
+		r.runScript("MailConversation.onMessagesAppended(\""+messages.getLast().getIdString()+"\")");
+		return r;
+	}
+
+	/**
+	 * For each message that starts a new calendar day, the label to show above it ("today", "yesterday", a date).
+	 * {@code previous} is the message shown right before this batch, if any, so a day already labelled is not labelled twice.
+	 */
+	private static Map<Long, String> computeDayLabels(Request req, List<MailMessage> messages, MailMessage previous){
+		ZoneId tz=timeZoneForRequest(req);
+		if(tz==null)
+			tz=ZoneId.of("UTC");
+		Lang l=lang(req);
+		Map<Long, String> labels=new HashMap<>();
+		LocalDate lastDay=previous==null ? null : LocalDate.ofInstant(previous.createdAt, tz);
+		for(MailMessage msg:messages){
+			LocalDate day=LocalDate.ofInstant(msg.createdAt, tz);
+			if(!day.equals(lastDay)){
+				labels.put(msg.id, l.formatDayRelative(day, tz));
+				lastDay=day;
+			}
+		}
+		return labels;
 	}
 
 	public static Object compose(Request req, Response resp, Account self, ApplicationContext ctx){

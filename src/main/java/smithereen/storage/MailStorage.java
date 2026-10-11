@@ -274,6 +274,19 @@ public class MailStorage{
 		}
 	}
 
+	/**
+	 * Messages exchanged with a peer that are newer than the given message ID, oldest first.
+	 */
+	public static List<MailMessage> getHistoryAfter(int ownerID, int peerID, long afterID, int count) throws SQLException{
+		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
+			PreparedStatement stmt=SQLQueryBuilder.prepareStatement(conn, "SELECT mail_messages.* FROM mail_messages_peers JOIN mail_messages ON message_id=mail_messages.id" +
+					" WHERE mail_messages_peers.owner_id=? AND mail_messages_peers.peer_id=? AND mail_messages.deleted_at IS NULL AND message_id>? ORDER BY message_id ASC LIMIT ?", ownerID, peerID, afterID, count);
+			List<MailMessage> msgs=DatabaseUtils.resultSetToObjectStream(stmt.executeQuery(), MailMessage::fromResultSet, null).toList();
+			postprocessMessages(msgs);
+			return msgs;
+		}
+	}
+
 	public static Map<Long, MailMessage> getMessagesAsModerator(Collection<Long> ids) throws SQLException{
 		Map<Long, MailMessage> msgs=new SQLQueryBuilder()
 				.selectFrom("mail_messages")

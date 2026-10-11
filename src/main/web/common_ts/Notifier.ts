@@ -239,6 +239,9 @@ class Notifier{
 	}
 
 	private static handleNotification(n:RealtimeNotification){
+		// A message from the person whose conversation is open goes straight into it, without a popup
+		if(n.type=="MAIL_MESSAGE" && MailConversation.handleIncomingMessage(n.actorID))
+			return;
 		if(!Notifier.animating && !Notifier.frozen && Notifier.notificationsEl.childElementCount<Notifier.MAX_NOTIFICATIONS){
 			Notifier.showNotifications([n]);
 		}else{

@@ -13,12 +13,12 @@
 <a href="/my/mail/compose" class="fab iconPencil" title="{{ L('mail_compose') }}"></a>
 <div id="mailMessagesList">
 {% for msg in items %}
-<a href="/my/mail/messages/{{ msg.idString }}" class="mailMessageRow{{ msg.unread ? ' unread' : '' }}" id="msgRow{{ msg.idString }}">
-	{%- if tab=="outbox" %}
-	{%- set user=users[msg.firstRecipientID] %}
-	{%- else %}
-	{%- set user=users[msg.senderID] %}
-	{%- endif %}
+{%- if tab=="outbox" %}
+{%- set user=users[msg.firstRecipientID] %}
+{%- else %}
+{%- set user=users[msg.senderID] %}
+{%- endif %}
+<a href="/my/mail/with/{{ user.id }}" class="mailMessageRow{{ msg.unread ? ' unread' : '' }}" id="msgRow{{ msg.idString }}">
 	{{ user | pictureForAvatar('a') }}
 	<div class="msgContent">
 		<div class="time">{{ LD(msg.createdAt) }}</div>

@@ -840,6 +840,11 @@ public class SmithereenApplication{
 				getLoggedIn("/compose", MailRoutes::compose);
 				postWithCSRF("/send", MailRoutes::sendMessage);
 				getLoggedIn("/history", MailRoutes::history);
+				path("/with/:peerID", ()->{
+					getLoggedIn("", MailRoutes::conversation);
+					getLoggedIn("/earlier", MailRoutes::conversationEarlier);
+					getLoggedIn("/new", MailRoutes::conversationNew);
+				});
 				path("/messages/:id", ()->{
 					getLoggedIn("", MailRoutes::viewMessage);
 					getWithCSRF("/delete", MailRoutes::delete);

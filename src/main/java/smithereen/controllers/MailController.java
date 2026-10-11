@@ -320,6 +320,24 @@ public class MailController{
 		}
 	}
 
+	public List<MailMessage> getHistoryAfter(User self, User peer, long afterID, int count){
+		try{
+			return MailStorage.getHistoryAfter(self.id, peer.id, afterID, count);
+		}catch(SQLException x){
+			throw new InternalServerErrorException(x);
+		}
+	}
+
+	/**
+	 * Marks every unread incoming message in the list as read.
+	 */
+	public void markIncomingMessagesRead(User self, List<MailMessage> messages){
+		for(MailMessage msg:messages){
+			if(msg.senderID!=self.id && msg.isUnread() && (msg.to.contains(self.id) || msg.cc.contains(self.id)))
+				markMessageRead(self, msg);
+		}
+	}
+
 	public Map<Long, MailMessage> getMessagesAsModerator(Collection<Long> ids){
 		if(ids.isEmpty())
 			return Map.of();

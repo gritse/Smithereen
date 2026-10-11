@@ -1,0 +1,16 @@
+{# @pebvariable name="msg" type="smithereen.model.MailMessage" #}
+{%- set sender=users[msg.senderID] -%}
+<div class="convMessage{{ msg.senderID==currentUser.id ? ' own' : '' }}" id="convMsg{{ msg.idString }}">
+	<a href="{{ profileURL(msg.senderID) }}" class="avaW">{{ sender | pictureForAvatar('a', 36) }}</a>
+	<div class="body">
+		<div class="msgHeader">
+			<a href="{{ profileURL(msg.senderID) }}" class="name">{{ sender | name('first') }}</a>
+			<a href="/my/mail/messages/{{ msg.idString }}" class="time" data-tooltip="{{ LD(msg.createdAt, true) }}">{{ LD(msg.createdAt, format="time") }}</a>
+		</div>
+		{% if msg.subject is not empty %}<div class="subject">{{ msg.subject }}</div>{% endif %}
+		<div class="text">
+			{{- msg.text | postprocessHTML -}}
+			{%- if msg.attachments is not empty %}{{ renderAttachments(msg, null) }}{% endif -%}
+		</div>
+	</div>
+</div>

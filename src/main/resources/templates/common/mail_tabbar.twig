@@ -3,6 +3,7 @@
 	<a href="/my/mail/outbox" class="{{ tab=='outbox' ? "selected" : "" }}">{{ L('mail_outbox') }}</a>
 	{% if tab=='compose' %}<a href="javascript:void(0)" class="selected">{{ L('mail_tab_compose') }}</a>{% endif %}
 	{% if tab=='view' %}<a href="javascript:void(0)" class="selected">{{ L('mail_tab_message_view') }}</a>{% endif %}
+	{% if tab=='conversation' %}<a href="javascript:void(0)" class="selected">{{ L('mail_tab_conversation') }}</a>{% endif %}
 	{% if tab!='compose' and not isMobile %}
 	<div class="aux">
 		<a href="/my/mail/compose">{{ L('mail_compose') }}</a>

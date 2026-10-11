@@ -1,0 +1,5 @@
+{# @pebvariable name="messages" type="java.util.List<smithereen.model.MailMessage>" #}
+{%- for msg in messages -%}
+{%- if dayLabels[msg.id] is not empty %}<div class="convDaySeparator">{{ dayLabels[msg.id] }}</div>{% endif %}
+{% include "mail_conversation_message" %}
+{%- endfor -%}

@@ -3437,6 +3437,115 @@ h2, h3, h4{
 	padding: 0;
 }
 
+.conversation{
+	display: flex;
+	flex-direction: column;
+	height: calc(100vh - 150px);
+	min-height: 420px;
+	.convHeader{
+		display: flex;
+		align-items: center;
+		padding: 8px 10px;
+		border-bottom: 1px solid $wallPostSeparator;
+		background: $bgGrey;
+		.avaW{
+			margin-right: 10px;
+		}
+		.name{
+			font-weight: bold;
+		}
+		.onlineText{
+			color: $auxiliaryGrey;
+		}
+	}
+	.convMessages{
+		flex: 1;
+		min-height: 0;
+		overflow-y: auto;
+		padding: 4px 10px;
+	}
+	.convEarlier{
+		text-align: center;
+		padding: 8px;
+		.loader{
+			height: 13px;
+		}
+	}
+	.convDaySeparator{
+		text-align: center;
+		color: $auxiliaryGrey;
+		font-size: 10px;
+		padding: 10px 0 4px;
+	}
+	.convEmpty{
+		text-align: center;
+		color: $auxiliaryGrey;
+		padding: 40px 10px;
+	}
+	.convComposer{
+		border-top: 1px solid $wallPostSeparator;
+		background: $bgGrey;
+		padding: 8px 10px;
+		.mailMessageForm{
+			padding: 0;
+		}
+		textarea{
+			min-height: 34px;
+		}
+		.sendHint{
+			color: $auxiliaryGrey;
+			font-size: 9px;
+		}
+	}
+}
+
+.convMessage{
+	display: flex;
+	padding: 6px 0;
+	>*{
+		min-width: 0;
+	}
+	.avaW{
+		flex: none;
+		margin-right: 10px;
+	}
+	.body{
+		flex: 1;
+	}
+	.msgHeader{
+		margin-bottom: 2px;
+		.name{
+			font-weight: bold;
+		}
+		.time{
+			color: $auxiliaryGrey;
+			font-size: 9px;
+			margin-left: 6px;
+			text-decoration: none;
+		}
+	}
+	&.own .msgHeader .name{
+		color: $mailHistorySelf;
+	}
+	.subject{
+		font-weight: bold;
+		margin-bottom: 2px;
+	}
+	.text{
+		line-height: 130%;
+		word-wrap: break-word;
+		p:first-child{
+			margin-top: 0;
+		}
+		p:last-child{
+			margin-bottom: 0;
+		}
+		.postAttachments .aspectWrapper .pseudoImage{
+			max-width: 300px;
+		}
+	}
+}
+
 #mailHistoryWrap{
 	padding: 0;
 	border-top: solid 1px $wallPostSeparator;

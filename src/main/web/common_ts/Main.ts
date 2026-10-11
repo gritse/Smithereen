@@ -71,6 +71,7 @@ function initDynamicControls(root:HTMLElement=null){
 	updatePostForms(root);
 	initEndlessPaginations(root);
 	renderBlurhashes(root);
+	MailConversation.init(root);
 }
 
 initDynamicControls();

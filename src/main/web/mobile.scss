@@ -1677,6 +1677,90 @@ input.searchField{
 	}
 }
 
+.conversation{
+	display: flex;
+	flex-direction: column;
+	min-height: calc(100vh - 56px);
+	.convHeader{
+		display: flex;
+		align-items: center;
+		padding: 8px 16px;
+		.avaW{
+			margin-right: 8px;
+		}
+		.name{
+			font-weight: $mediumWeight;
+		}
+		.onlineText{
+			color: $grayText;
+			font-size: 13px;
+		}
+	}
+	.convMessages{
+		flex: 1;
+		padding: 0 16px;
+	}
+	.convEarlier{
+		text-align: center;
+		padding: 8px;
+	}
+	.convDaySeparator{
+		text-align: center;
+		color: $grayText;
+		font-size: 13px;
+		padding: 12px 0 4px;
+	}
+	.convEmpty{
+		text-align: center;
+		color: $grayText;
+		padding: 40px 16px;
+	}
+	.convComposer{
+		position: sticky;
+		bottom: 0;
+		background: $bg;
+		padding: 8px 16px;
+		box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.08);
+		textarea{
+			min-height: 40px;
+			max-height: 120px;
+		}
+	}
+}
+
+.convMessage{
+	display: flex;
+	padding: 6px 0;
+	>*{
+		min-width: 0;
+	}
+	.avaW{
+		flex: none;
+		margin-right: 8px;
+	}
+	.body{
+		flex: 1;
+	}
+	.msgHeader{
+		.name{
+			font-weight: $mediumWeight;
+		}
+		.time{
+			color: $grayText;
+			font-size: 13px;
+			margin-left: 6px;
+		}
+	}
+	.text{
+		p:first-child{
+			margin-top: 0;
+		}
+		p:last-child{
+			margin-bottom: 0;
+		}
+	}
+}
+
 #mailMessagesList{
 	padding: 8px 0;
 }

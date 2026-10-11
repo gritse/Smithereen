@@ -64,8 +64,7 @@
 </div>
 {% if peer is not null %}
 <div id="mailHistoryWrap">
-	<a id="mailShowHistory" class="ellipsize" href="/my/mail/history?peer={{ peer.id }}" data-ajax data-ajax-show="mailHistoryLoader" data-ajax-hide="mailShowHistory">{{ L('mail_show_history', {'name': peer.firstLastAndGender}) }}</a>
-	<div class="loader" id="mailHistoryLoader" style="display: none"></div>
+	<a id="mailShowHistory" class="ellipsize" href="/my/mail/with/{{ peer.id }}">{{ L('mail_open_conversation', {'name': peer.firstLastAndGender}) }}</a>
 </div>
 {% endif %}
 {% endblock %}

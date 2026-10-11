@@ -1,0 +1,35 @@
+{# @pebvariable name="peer" type="smithereen.model.User" #}
+{% extends "page" %}
+{% block content %}
+{% include "mail_tabbar" %}
+<div class="conversation" id="conversation" data-peer="{{ peer.id }}" data-first-id="{{ firstID }}" data-last-id="{{ lastID }}" data-earlier-offset="{{ messages | length }}">
+	<div class="convHeader">
+		<a href="{{ peer.profileURL }}" class="avaW">{{ peer | pictureForAvatar('a', 36) }}</a>
+		<div>
+			<a href="{{ peer.profileURL }}" class="name">{{ peer | name('complete') }}</a>
+			{% if onlines contains peer.id and onlines[peer.id].isOnline %}<div class="onlineText">{{ L('user_online') }}{% if onlines[peer.id].mobile %}<span class="mobileOnlineIcon"></span>{% endif %}</div>{% endif %}
+		</div>
+	</div>
+	<div class="convMessages" id="conversationMessages">
+		{% if hasEarlier %}
+		<div class="convEarlier" id="conversationEarlier">
+			<a href="/my/mail/with/{{ peer.id }}/earlier?before={{ firstID }}&offset={{ messages | length }}" id="conversationEarlierLink" data-no-al="1">{{ L('mail_load_earlier') }}</a>
+			<span class="loader" id="conversationEarlierLoader" style="display: none"></span>
+		</div>
+		{% endif %}
+		<div id="conversationMessagesInner">
+			{% if messages is empty %}<div class="convEmpty" id="conversationEmpty">{{ L('mail_conversation_empty') }}</div>{% endif %}
+			{% include "mail_conversation_messages" %}
+		</div>
+	</div>
+	{% if canReply %}
+	<form action="/my/mail/send?from=conversation&peer={{ peer.id }}&to={{ peer.id }}" method="post" id="wallPostFormForm_mailMessage" class="convComposer">
+		<input type="hidden" name="lastID" id="conversationLastID" value="{{ lastID }}"/>
+		{% include "mail_message_form" %}
+		<div class="sendHint jsRequired">{{ L('mail_conversation_send_hint') }}</div>
+	</form>
+	{% else %}
+	<div class="settingsMessage">{{ L('mail_privacy_forbidden') }}</div>
+	{% endif %}
+</div>
+{% endblock %}

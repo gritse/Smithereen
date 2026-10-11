@@ -36,5 +36,11 @@
   "profile_write_message_short": "Сообщение",
   "messages_title": "Сообщения",
   "mail_conversation_history": "История сообщений",
-  "mail_privacy_forbidden": "Вы не можете написать этому пользователю, поскольку он ограничил круг лиц, которые могут присылать ему сообщения"
+  "mail_privacy_forbidden": "Вы не можете написать этому пользователю, поскольку он ограничил круг лиц, которые могут присылать ему сообщения",
+  "mail_tab_conversation": "Диалог",
+  "mail_conversation_title": "Диалог с {name, inflect, instrumental}",
+  "mail_open_conversation": "Открыть диалог с {name, inflect, instrumental}",
+  "mail_load_earlier": "Показать более ранние сообщения",
+  "mail_conversation_empty": "Сообщений пока нет. Напишите первое!",
+  "mail_conversation_send_hint": "Ctrl+Enter — отправить"
 }
