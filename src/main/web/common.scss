@@ -847,14 +847,8 @@ small{
 	}
 }
 
-#registerForm{
-	#formRow_website, #formRow_passwordConfirm{
-		display: none;
-	}
-}
-
-#requestInviteForm{
-	#formRow_website, #formRow_password{
+#registerForm, #requestInviteForm{
+	#formRow_website{
 		display: none;
 	}
 }

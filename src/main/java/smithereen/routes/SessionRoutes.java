@@ -165,13 +165,10 @@ public class SessionRoutes{
 		if(redirectIfLoggedIn(req, resp))
 			return "";
 
-		// Honeypot fields
-		String passwordConfirm=req.queryParams("passwordConfirm");
-		String website=req.queryParams("website");
-		if(StringUtils.isNotEmpty(passwordConfirm) || StringUtils.isNotEmpty(website)){
-			req.session().attribute("bannedBot", true);
+		// Honeypot field. Only this request is rejected: browsers with form autofill can trip it too,
+		// and a human must be able to simply try again.
+		if(StringUtils.isNotEmpty(req.queryParams("website")))
 			throw new UserActionNotAllowedException();
-		}
 
 		return doRegister(req, resp);
 	}
@@ -472,13 +469,9 @@ public class SessionRoutes{
 			throw new UserActionNotAllowedException();
 		}
 
-		// Honeypot fields
-		String password=req.queryParams("password");
-		String website=req.queryParams("website");
-		if(StringUtils.isNotEmpty(password) || StringUtils.isNotEmpty(website)){
-			req.session().attribute("bannedBot", true);
+		// Honeypot field, see register()
+		if(StringUtils.isNotEmpty(req.queryParams("website")))
 			throw new UserActionNotAllowedException();
-		}
 
 		try{
 			String email=requireFormField(req, "email", "err_invalid_email");

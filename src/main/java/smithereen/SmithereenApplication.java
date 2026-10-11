@@ -250,10 +250,6 @@ public class SmithereenApplication{
 						});
 					}
 				}
-			}else{
-				if(session!=null && session.attribute("bannedBot")!=null){
-					throw new UserActionNotAllowedException();
-				}
 			}
 //			String hs="";
 //			for(String h:request.headers())

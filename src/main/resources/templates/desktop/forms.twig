@@ -43,6 +43,7 @@
 			{%- if options.required %} required{%endif%}
 			{%- if options.autocomplete==false %} autocomplete="off"{% elseif options.autocomplete is not empty %} autocomplete="{{ options.autocomplete }}"{% endif %}
 			{%- if options.pattern is not empty %} pattern="{{ options.pattern }}"{% endif %}
+			{%- if options.tabindex is not null %} tabindex="{{ options.tabindex }}"{% endif %}
 			{%- if options.min is not null %} min="{{options.min}}"{%endif%}
 			{%- if options.max is not null %} max="{{ options.max }}"{%endif%}
 			{%- if options.placeholder is not null %} placeholder="{{ options.placeholder }}"{% endif %}/>
