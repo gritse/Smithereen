@@ -32,7 +32,7 @@ The Java packages, the jar file, the database name and the systemd service are s
       ├╴ activation-1.1.jar
       └╴ ...other dependencies
    ```
-2. Make libvips available: use one from a Smithereen release bundle, download a prebuilt one from [sharp-libvips](https://github.com/lovell/sharp-libvips), or build it with [the CI build script](ci/libvips/build.sh). A distribution package may work, but not all libvips builds include every feature the server needs.
+2. Make libvips available: download a prebuilt one from [sharp-libvips](https://github.com/lovell/sharp-libvips), or build it with [the build script](ci/libvips/build.sh). A distribution package may work, but not all libvips builds include every feature the server needs.
 3. Install and configure imgproxy.
 4. Create a config file from [the commented example](examples/config.properties). Uploaded files can be stored on the local file system (default) or in an S3-compatible object storage, see below.
 5. Create a MySQL database and load [the schema](schema.sql) into it, for example with `mysql -p smithereen < schema.sql`.
@@ -44,13 +44,11 @@ The Java packages, the jar file, the database name and the systemd service are s
 8. Configure your web server to proxy requests to the server and to imgproxy, and to serve uploaded files. See the examples for [nginx](examples/nginx.conf) and [Caddy](examples/Caddyfile).
 9. Log in with that account and configure the rest in the admin panel: server name, sign-up mode, email confirmation, captcha, rules.
 
-### Install with the bundle scripts
-
-The scripts in [ci](ci) build a self-contained bundle with the jar, imgproxy and libvips. `install.sh` from such a bundle installs everything under `/opt/smithereen`, creates the systemd services and the first account, and `update.sh` upgrades an existing installation. The GitHub workflow in this repository builds those bundles; there are no prebuilt bundles for Tusovochka published anywhere, so build your own or install from sources.
-
 ### Using Docker
 
 Copy [the Docker config example](examples/config_docker.properties) to the project root as `config.properties` and set your domain. Edit `docker-compose.yml` to add your imgproxy secrets. `docker compose up` then builds the image from this repository and runs the server, MySQL and imgproxy. You still need a web server in front: [nginx](examples/nginx.conf), [Caddy](examples/Caddyfile). Create the first account with `docker compose exec web bash -c ./smithereen-init-admin`.
+
+A prebuilt image is published to the GitHub Container Registry of this repository as `ghcr.io/gritse/smithereen:latest`, with an additional tag for every commit it was built from. It is built by hand with the "Build and publish Docker image" workflow in the Actions tab, always from the latest commit on `master`. To use it instead of building locally, replace `build: .` with `image: ghcr.io/gritse/smithereen:latest` in `docker-compose.yml`.
 
 ### Upgrading
 
