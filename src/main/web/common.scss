@@ -354,6 +354,12 @@ pre>code{
 	.bottomBar{
 		display: none;
 	}
+	textarea{
+		/* The collapsed field is exactly one line high. Safari lays the placeholder out a pixel or two taller than
+		   that and shows overlay scrollbars over it; the field grows on focus anyway, so never scroll it. */
+		overflow: hidden;
+		resize: none;
+	}
 }
 
 body:not(.hasJS) .jsRequired{
