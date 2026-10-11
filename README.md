@@ -1,58 +1,30 @@
-<p align="center"><img src="/img/logo_text.svg" alt="Smithereen"/></p>
+# Tusovochka
 
-<p align="center"><a href="https://smithereen.software">Official website</a> | <a href="https://smithereen.software/docs">API documentation</a></p>
+Self-hosted social network with friends, walls, groups, photo albums, private messages and events. One server, one community: there is no federation, nothing is ever sent to or fetched from other servers.
 
-Self-hosted social network with friends, walls, and groups.
+## About this project
 
-This is a fork of [Smithereen](https://github.com/grishka/Smithereen) with ActivityPub federation removed entirely: the server never talks to other servers, so there are no inboxes, signatures, remote object fetching, or media caching of other servers' files. All users, groups and content live on this server only.
+Tusovochka is a fork of [Smithereen](https://github.com/grishka/Smithereen) by [Gregory Klyushnikov (@grishka)](https://github.com/grishka). Smithereen is an excellent old-school social network engine, and all of the design, the data model, the web UI and the vast majority of the code in this repository are his work. Smithereen is released into the public domain under [the Unlicense](UNLICENSE), and so is this fork. The original README asks forks to change the name, which is why this project is called Tusovochka rather than Smithereen.
 
-If you have any questions or feedback, there's a [Telegram chat](https://t.me/SmithereenProject) you can join.
+The one big difference from upstream is the removal of ActivityPub federation. Smithereen can talk to Mastodon and other fediverse servers; Tusovochka cannot and never will. Everything that existed only for that purpose is gone: inboxes and outboxes, HTTP signatures, JSON-LD processing, remote actor and object fetching, caching of other servers' media, domain blocks and account migration. The goal is a smaller attack surface and a simpler server for a closed community where every user, group and post lives on this one installation.
 
-[![Crowdin](https://badges.crowdin.net/smithereen/localized.svg)](https://crowdin.com/project/smithereen)
+Because of that, Tusovochka does not track upstream Smithereen releases. Bug fixes from upstream are ported by hand when they apply.
 
-## Building/installation
+The Java packages, the jar file, the database name and the systemd service are still called `smithereen`, so that existing installations and upgrade scripts keep working. Only the product name changed.
 
-### Running directly on your server
+## Building and installation
 
-#### Recommended: use the installation script
+### Requirements
 
-1. Install JRE or JDK 21 or newer from your distribution's package manager, [here](https://adoptium.net/temurin/releases/), [here](https://www.azul.com/downloads/) or [here](https://aws.amazon.com/corretto/)
-2. [Install MySQL](https://dev.mysql.com/doc/refman/8.4/en/linux-installation.html). Note: on Debian, `apt-get install mysql-server` would instead install MariaDB, which is known to be incompatible with Smithereen.
-3. Download a prebuilt bundle for your CPU architecture from [the latest release](https://github.com/grishka/Smithereen/releases/latest) to your server and unpack it somewhere
-4. Run `./install.sh`
-5. Answer a few questions to configure Smithereen and create the first account. If you're using S3 storage for files, see the section about that below to better understand what the script asks you and configure your storage provider correctly.
-6. Configure your web server to proxy the requests to Smithereen and imgproxy and serve user-uploaded files. See example configs for [nginx](examples/nginx.conf) and [Caddy](examples/Caddyfile).
-7. Log into your admin account from your web browser, then configure the rest of the server settings from its UI
+- JDK 21 or newer, for example from your distribution's package manager, [Adoptium](https://adoptium.net/temurin/releases/), [Azul](https://www.azul.com/downloads/) or [Amazon Corretto](https://aws.amazon.com/corretto/)
+- [MySQL 8](https://dev.mysql.com/doc/refman/8.4/en/linux-installation.html). MariaDB is **not** supported: the schema uses MySQL-only syntax. Note that on Debian `apt-get install mysql-server` installs MariaDB.
+- [imgproxy](https://docs.imgproxy.net/GETTING_STARTED) for serving resized images
+- [libvips](https://github.com/libvips/libvips) for processing uploads
+- A web server such as nginx or Caddy in front of everything, terminating TLS
 
-#### Updating from an older version
+### Install from sources
 
-Download the release bundle for the new version, unpack it, and run `./update.sh`. Pass your installation directory as an argument to this script if it's not `/opt/smithereen`.
-
-<details>
-<summary>Alternatively, do the same thing manually</summary>
-
-Stop services:
-
-```bash
-service smithereen stop
-service smithereen_imgproxy stop
-```
-Copy `smithereen.jar`, `imgproxy`, `libvips` libraries and their symlinks, and the `lib` directory over your existing installation. **Important**: make sure that you **do not** merge the contents of the `lib` directories from your old and new installations, or the JVM class loader will get angry.
-
-Start the services back up:
-```bash
-service smithereen start
-service smithereen_imgproxy start
-```
-</details>
-
-The first startup after installing an update might take a while as the new Smithereen version performs database migrations.
-
-#### Install manually from sources
-
-1. Install JDK 21 or newer from your distribution's package manager, [here](https://adoptium.net/temurin/releases/), [here](https://www.azul.com/downloads/) or [here](https://aws.amazon.com/corretto/)
-2. [Install MySQL](https://dev.mysql.com/doc/refman/8.4/en/linux-installation.html). Note: on Debian, `apt-get install mysql-server` would instead install MariaDB, which is known to be incompatible with Smithereen.
-3. Build the jar by running `mvn package -DskipTests=true`, place it at `/opt/smithereen/smithereen.jar` and also copy the dependencies from `target/lib`. You should end up with this file structure:
+1. Build the jar with `mvn package -DskipTests=true`. Place `target/smithereen.jar` at `/opt/smithereen/smithereen.jar` and copy the dependencies from `target/lib` next to it:
    ```
    /opt/smithereen
    ├╴ smithereen.jar
@@ -60,64 +32,68 @@ The first startup after installing an update might take a while as the new Smith
       ├╴ activation-1.1.jar
       └╴ ...other dependencies
    ```
-4. Somehow cause [libvips](https://github.com/libvips/libvips) to exist on your system: use the one from a release bundle, download a prebuilt one from [here](https://github.com/lovell/sharp-libvips), or build it from sources, maybe using [the CI build script](ci/libvips/build.sh). If you already have libvips installed on your system, you may skip this step, but be aware that not all libvips builds include all the features Smithereen needs.
-5. Install and configure [imgproxy](https://docs.imgproxy.net/GETTING_STARTED)
-6. Fill in the config file, see a commented example [here](examples/config.properties)
-	- You can use either the local file system (default) or an S3-compatible object storage service for user-uploaded media files.
-7. Create a new MySQL database and initialize it with the [schema](schema.sql) using a command (`mysql -p smithereen < schema.sql`) or any GUI like phpMyAdmin
-8. Configure and start the daemon: assuming your distribution uses systemd, copy [the service file](examples/smithereen.service) to /etc/systemd/system, then run `systemctl daemon-reload` and `service smithereen start`
-9. Run `java -jar /opt/smithereen/smithereen.jar /etc/smithereen/config.properties init_admin` to create the first account
-10. Configure your web server to proxy the requests to Smithereen and imgproxy and serve user-uploaded files. See example configs for [nginx](examples/nginx.conf) and [Caddy](examples/Caddyfile).
-11. Log into that account from your web browser, then configure the rest of the server settings from its UI
+2. Make libvips available: use one from a Smithereen release bundle, download a prebuilt one from [sharp-libvips](https://github.com/lovell/sharp-libvips), or build it with [the CI build script](ci/libvips/build.sh). A distribution package may work, but not all libvips builds include every feature the server needs.
+3. Install and configure imgproxy.
+4. Create a config file from [the commented example](examples/config.properties). Uploaded files can be stored on the local file system (default) or in an S3-compatible object storage, see below.
+5. Create a MySQL database and load [the schema](schema.sql) into it, for example with `mysql -p smithereen < schema.sql`.
+6. Install the daemon. On systemd, copy [the service file](examples/smithereen.service) to `/etc/systemd/system`, then run `systemctl daemon-reload` and `service smithereen start`.
+7. Create the first account, which becomes the server owner:
+   ```
+   java -jar /opt/smithereen/smithereen.jar /etc/smithereen/config.properties init_admin
+   ```
+8. Configure your web server to proxy requests to the server and to imgproxy, and to serve uploaded files. See the examples for [nginx](examples/nginx.conf) and [Caddy](examples/Caddyfile).
+9. Log in with that account and configure the rest in the admin panel: server name, sign-up mode, email confirmation, captcha, rules.
+
+### Install with the bundle scripts
+
+The scripts in [ci](ci) build a self-contained bundle with the jar, imgproxy and libvips. `install.sh` from such a bundle installs everything under `/opt/smithereen`, creates the systemd services and the first account, and `update.sh` upgrades an existing installation. The GitHub workflow in this repository builds those bundles; there are no prebuilt bundles for Tusovochka published anywhere, so build your own or install from sources.
 
 ### Using Docker
 
-Copy [Docker-specific config example](examples/config_docker.properties) to the project root directory as `config.properties` and edit it to set your domain. Also edit `docker-compose.yml` to add your imgproxy secrets. You can then use `docker-compose` to run Smithereen, MySQL, and imgproxy. You still need to configure your web server: [nginx](examples/nginx.conf), [Caddy](examples/Caddyfile). Create the first account by running `docker-compose exec web bash -c ./smithereen-init-admin`.
+Copy [the Docker config example](examples/config_docker.properties) to the project root as `config.properties` and set your domain. Edit `docker-compose.yml` to add your imgproxy secrets. `docker compose up` then builds the image from this repository and runs the server, MySQL and imgproxy. You still need a web server in front: [nginx](examples/nginx.conf), [Caddy](examples/Caddyfile). Create the first account with `docker compose exec web bash -c ./smithereen-init-admin`.
+
+### Upgrading
+
+Stop the services, replace `smithereen.jar`, the libvips libraries and the whole `lib` directory, and start the services again. Never merge an old `lib` directory with a new one, or the JVM class loader will get confused. The first start after an upgrade may take a while because database migrations run then.
+
+#### Upgrading an existing Smithereen installation
+
+Tusovochka can take over a database from upstream Smithereen 1.0.x (schema version 91). The migration to schema version 92 **permanently deletes** every remote user and group and all content they authored, together with every table and column that only served federation. Local users and their content are kept. Back up the database first, this step cannot be undone. After the upgrade, nothing is delivered to the followers your users had on other servers, and those servers keep whatever copies they already hold.
 
 ### Using S3 object storage
 
-Smithereen supports S3-compatible object storage for user-uploaded media files (but not media file cache for files downloaded from other servers).
+Set `upload.backend=s3` in `config.properties`, then configure the properties for your provider:
 
-To enable S3 storage, set `upload.backend=s3` in your `config.properties`. Configure other properties depending on your cloud provider:
-- `upload.s3.region`: the region to use, `us-east-1` by default. Required for AWS, but some other cloud providers accept arbitrary values here.
-- `upload.s3.endpoint`: the S3 endpoint, `s3.<region>.amazonaws.com` by default. Required if **not** using AWS.
-- `upload.s3.key_id` and `upload.s3.secret_key`: your credentials for request authentication.
-- `upload.s3.bucket`: the name of your bucket.
-- `upload.s3.override_path_style`: if `upload.s3.endpoint` is set, set this to `true` if your cloud provider requires 
-putting the bucket name into the hostname instead of in the path for API requests, like `<bucket>.<endpoint>`.
+- `upload.s3.region`: the region, `us-east-1` by default. Required for AWS; other providers may accept any value.
+- `upload.s3.endpoint`: the S3 endpoint, `s3.<region>.amazonaws.com` by default. Required when **not** using AWS.
+- `upload.s3.key_id` and `upload.s3.secret_key`: your credentials.
+- `upload.s3.bucket`: the bucket name.
+- `upload.s3.override_path_style`: when `upload.s3.endpoint` is set, set this to `true` if your provider wants the bucket name in the hostname rather than in the path, like `<bucket>.<endpoint>`.
 - `upload.s3.protocol`: `https` by default, can be set to `http`.
 
-The following properties control the public URLs for clients to read the files from your S3 bucket. These are used for imgproxy and given out to clients directly when they click "Open original" in the image viewer, and will be used for non-image (e.g. video) attachments in a future Smithereen version:
-- `upload.s3.hostname`: defaults to `s3-<region>.amazonaws.com`. Needs to be set if not using AWS and `upload.s3.alias_host` is not set.
-- `upload.s3.alias_host`: can be used instead of `upload.s3.hostname` if you don't want your bucket name to be visible. Requires that you have a CDN or a reverse proxy in front of the storage provider.
-  - If this is set, the bucket name is **not** included in the generated URLs. The URLs will have the form of `<protocol>://<alias_host>/<object>`.
-  - If this is **not** set, the generated URLs will be of the form `<protocol>://<hostname>/<bucket>/<object>`.
+These properties control the public URLs that imgproxy and browsers use to read files from the bucket:
 
-You will need to configure your bucket to allow anonymous read access to objects, but not allow directory listing. [Refer to Mastodon documentation on how to do this on different cloud providers.](https://docs.joinmastodon.org/admin/optional/object-storage/#minio)
+- `upload.s3.hostname`: defaults to `s3-<region>.amazonaws.com`. Set it when not using AWS and `upload.s3.alias_host` is not set.
+- `upload.s3.alias_host`: use instead of `upload.s3.hostname` to hide the bucket name behind a CDN or reverse proxy. With it set, URLs look like `<protocol>://<alias_host>/<object>`; without it, `<protocol>://<hostname>/<bucket>/<object>`.
 
-You will also need to configure imgproxy to allow it to access your S3 storage:
+The bucket must allow anonymous reads of objects but not directory listing. [The Mastodon documentation](https://docs.joinmastodon.org/admin/optional/object-storage/#minio) explains how to set that up with various providers.
+
+imgproxy also has to be allowed to read from the bucket, with a trailing slash in the URL:
+
 ```
 IMGPROXY_ALLOWED_SOURCES=local://,https://<your S3 hostname or alias host>/
 ```
-[Make sure to include a trailing slash in the URL.](https://docs.imgproxy.net/configuration/options#IMGPROXY_ALLOWED_SOURCES)
+
+## API
+
+The server exposes a JSON API for third-party applications under `/api/method/<name>` with OAuth authorization. Applications are registered in the "Applications" tab of the user settings. The API is inherited from Smithereen, and [its documentation](https://smithereen.software/docs/api) still applies, except for anything that mentions remote servers or federation.
 
 ## Contributing
 
-If you would like to help translate Smithereen into your language, please [do so on Crowdin](https://crowdin.com/project/smithereen). If your language isn't listed there, please ask to have it added.
+Issues and pull requests are welcome in this repository. Please keep the scope in mind: this fork will not add federation back, and it keeps the upstream philosophy of a network you use to stay in touch with people you know, without hashtags, public feeds or global search.
 
-If you would like to add a feature, please ask first before starting to work on it! This project is mostly "open-source but not open-contribution" because I (@grishka) have a rather specific vision of what it should be — an **old-school social network** that one primarily uses to stay up to date on the lives of people they know IRL and get to know these people better. An important part of that vision is to limit people's exposure to out-of-network content (created by those they don't have any connections with) as much as possible. The intended way to explore the network is by going along the social graph or (coming in the future) search for people. In particular, the following features will definitely **not** be added:
+Translations live in `src/main/resources/langs`. Edit the JSON files directly; the upstream Crowdin project belongs to Smithereen and is not used here.
 
-- **Hashtags.** The whole idea behind them is to be able to easily see what *people you don't know* post about some topics or global events. They thus serve as an easy gateway to out-of-network content. They encourage the creation of content that is more appealing to the global audience rather than one's followers. Account-scoped hashtags (`#tag@username`) may be added in the future though.
-- **Public feeds**. For the same reason, but also so that Smithereen servers don't become communities. They should just be the infrastructure that the network runs on.
-- **Global full-text post search.** Same as hashtags.
-- **Public pages** and **posting on behalf of a group or an event.** Logo accounts are bad. Logos shouldn't say things. Their existence erodes the humanness of the whole experience because you get these "higher beings" that aren't human and don't *feel* human. The intentional lack of easily obtainable logo accounts (no one is stopping one from creating a fake user profile for an organization, of course) serves to encourage authentic human interactions.
-- **Custom emojis.** Very few people use them in practice. And when they do, it almost always looks too colorful and distracting. Especially when they're animated.
-- **Non-quote reposts**, like on Mastodon. Separate comment threads for each repost reduce user confusion and invite more meaningful conversations. Combined with Smithereen's privacy settings and the ability of the post author to delete any comments on their posts, this completely eliminates all the abuse potential that, for example, quote tweets on Twitter present.
-- **Animated profile pictures** as well as those with alpha transparency. Smithereen is explicitly for authentic human interactions. So, it is built with the expectation that people will use their own photo, taken with a camera, as their profile picture, just like on Facebook or VKontakte.
+## License
 
-If you disagree, feel free to fork this project, but please change the name if you do.
-
-## Building an app for Smithereen
-
-Please [see the API documentation](https://smithereen.software/docs/api).
-
+This is free and unencumbered software released into the public domain. See [UNLICENSE](UNLICENSE).

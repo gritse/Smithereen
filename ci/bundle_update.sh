@@ -14,11 +14,11 @@ if [[ ! -d $installLocation ]]; then
 	failWithError "$installLocation does not exist."
 fi
 if [[ ! -f "$installLocation/smithereen.jar" ]]; then
-	failWithError "$installLocation does not appear to contain a Smithereen installation."
+	failWithError "$installLocation does not appear to contain a Tusovochka installation."
 fi
 
 echo "This script will now:"
-echo "- Stop Smithereen and imgproxy services"
+echo "- Stop Tusovochka and imgproxy services"
 echo "- Copy new files over the old ones in $installLocation"
 echo "- Start the services"
 read -p "Press Enter to continue..."

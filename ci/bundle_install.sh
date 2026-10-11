@@ -24,7 +24,7 @@ fi
 arch="$(uname -m)"
 
 if [ "$arch" != "__arch__" ]; then
-	failWithError "This bundle is built for __arch__, but your machine is $arch. Please download the correct bundle for your CPU architecture or follow the steps to install Smithereen manually."
+	failWithError "This bundle is built for __arch__, but your machine is $arch. Please download the correct bundle for your CPU architecture or follow the steps to install Tusovochka manually."
 fi
 
 if [ "$EUID" -ne 0 ]; then
@@ -34,7 +34,7 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 if [ ! -d /run/systemd/system ]; then
-	failWithError "Your system is not running systemd. As this installer relies on systemd services to run daemons, it's of no use on your system. You will have to install Smithereen manually."
+	failWithError "Your system is not running systemd. As this installer relies on systemd services to run daemons, it's of no use on your system. You will have to install Tusovochka manually."
 fi
 
 echo ""
@@ -58,13 +58,13 @@ mysqlHelpUrl="https://dev.mysql.com/doc/refman/8.4/en/linux-installation.html"
 echo "Checking for MySQL..."
 if ! [ -x "$(command -v mysql)" ]; then
 	failWithError "You don't have MySQL installed. See $mysqlHelpUrl for installation instructions.
-If you would like to run the database on a separate server, you will have to install Smithereen manually."
+If you would like to run the database on a separate server, you will have to install Tusovochka manually."
 fi
 mysqlVersion="$(mysql --version | tr -s " ")"
 echo $mysqlVersion | grep -q MariaDB
 if [ "$?" ]; then
-	failWithError "You have MariaDB instead of MySQL. Unfortunately, some distribution maintainers think that it's a drop-in replacement, but MariaDB is known to be incompatible with Smithereen.
-See $mysqlHelpUrl for instructions on how to install MySQL, or, if you need MariaDB for other applications on your server, consider running Smithereen in a container like Docker or LXC."
+	failWithError "You have MariaDB instead of MySQL. Unfortunately, some distribution maintainers think that it's a drop-in replacement, but MariaDB is known to be incompatible with Tusovochka.
+See $mysqlHelpUrl for instructions on how to install MySQL, or, if you need MariaDB for other applications on your server, consider running Tusovochka in a container like Docker or LXC."
 fi
 echo $mysqlVersion | grep -q Distrib
 if [ "$?" ]; then
@@ -73,12 +73,12 @@ else
 	mysqlActualVersion="$(echo $mysqlVersion | cut -d " " -f 3)"
 fi
 if [ "$(echo $mysqlActualVersion | cut -d "." -f 1)" -lt "8" ]; then
-	failWithError "Your version of MySQL, $mysqlActualVersion, is too old to work with Smithereen. Please update it. See $mysqlHelpUrl for installation instructions."
+	failWithError "Your version of MySQL, $mysqlActualVersion, is too old to work with Tusovochka. Please update it. See $mysqlHelpUrl for installation instructions."
 fi
 echo "Found MySQL $mysqlActualVersion."
 
 echo ""
-echo "Your server has all prerequisites installed. This script will now ask a few questions to configure your Smithereen installation."
+echo "Your server has all prerequisites installed. This script will now ask a few questions to configure your Tusovochka installation."
 echo ""
 
 while :
@@ -94,13 +94,13 @@ do
 	if [ $mysqlRes == 0 ]; then break; fi
 	echo "Failed to connect to MySQL with this password. Try again. $mysqlRes"
 done
-while [ -z "$domain" ]; do read -p "Domain name your Smithereen server will use: " domain; done
+while [ -z "$domain" ]; do read -p "Domain name your Tusovochka server will use: " domain; done
 read -p "Installation location [/opt/smithereen]: " installLocation
 if [ -z "$installLocation" ]; then installLocation="/opt/smithereen"; fi
 
 if [[ -d "$installLocation" ]]; then
 	if [[ -f "$installLocation/smithereen.jar" ]]; then
-		echo "There appears to be an existing installation of Smithereen in $installLocation."
+		echo "There appears to be an existing installation of Tusovochka in $installLocation."
 		read -p "Press Enter to run the update script instead."
 		./update.sh
 		exit 0
@@ -113,7 +113,7 @@ read -p "Would you like to use an S3 cloud storage service for user-uploaded fil
 echo "$useS3" | grep -q '[yY]'
 if [ "$?" ]; then
 	echo ""
-	echo "Make sure you've read the readme and configured your storage service correctly: https://github.com/grishka/Smithereen/blob/master/README.md#using-s3-object-storage"
+	echo "Make sure you've read the readme and configured your storage service correctly: https://github.com/gritse/Smithereen/blob/master/README.md#using-s3-object-storage"
 	echo ""
 	read -p "Endpoint for your S3 storage provider - this is where API requests will be sent (leave empty if using Amazon Web Services): " s3Endpoint
 	read -p "S3 region (some non-AWS cloud providers don't care): " s3Region
@@ -124,9 +124,9 @@ if [ "$?" ]; then
 		read -p "Does your storage provider require the bucket name to be put into the hostname instead of the path for API requests (y/n)? [n]: " s3OverridePathStyle
 		while [ -z "$s3Hostname" ]; do read -p "Hostname for your S3 storage provider - this will be used to serve files to the outside world: " s3Hostname; done
 	fi
-	read -p "Location for cached files from remote servers, must be under the web server root directory [/var/www/smithereen]: " webRoot
+	read -p "Web server root directory [/var/www/smithereen]: " webRoot
 else
-	read -p "Location for user-uploaded files and cached files from remote servers, must be under the web server root directory [/var/www/smithereen]: " webRoot
+	read -p "Location for user-uploaded files, must be under the web server root directory [/var/www/smithereen]: " webRoot
 fi
 if [ -z "$webRoot" ]; then webRoot="/var/www/smithereen"; fi
 
@@ -135,9 +135,9 @@ echo "This script will now:"
 echo "- Copy the necessary files to $installLocation"
 echo "- Create a new MySQL database '$dbName' and initialize it"
 echo "- Create a MySQL user '$dbName' with a random password for that database"
-echo "- Generate the configuration file for Smithereen"
-echo "- Create the first Smithereen account that will be the server admin"
-echo "- Install systemd services for Smithereen and imgproxy"
+echo "- Generate the configuration file for Tusovochka"
+echo "- Create the first Tusovochka account that will be the server admin"
+echo "- Install systemd services for Tusovochka and imgproxy"
 read -p "Press Enter to continue..."
 
 echo ""
@@ -253,7 +253,7 @@ java --module-path $installLocation/smithereen.jar:$installLocation/lib -m smith
 echo ""
 echo "Installing systemd services..."
 echo "[Unit]
-Description=Smithereen social network server
+Description=Tusovochka social network server
 After=network.target mysqld.service
 
 [Service]
@@ -266,7 +266,7 @@ Group=www-data
 [Install]
 WantedBy=multi-user.target" > /etc/systemd/system/smithereen.service
 echo "[Unit]
-Description=imgproxy for Smithereen
+Description=imgproxy for Tusovochka
 After=network.target
 
 [Service]

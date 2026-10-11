@@ -2,7 +2,7 @@
 
 # Adapted from https://github.com/lovell/sharp-libvips/blob/4591f6f6d86bb6208534a055ba3b08655a53384e/build/posix.sh
 # Changes:
-# - Removed librsvg and its dependencies because Smithereen doesn't need any of that
+# - Removed librsvg and its dependencies because Tusovochka doesn't need any of that
 # - Removed libtiff for the same reason
 # - Added libde265 to support HEIC because 99.99% of people don't care about patents
 # - Minor tweaks to make the build work outside of Docker

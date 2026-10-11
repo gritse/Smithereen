@@ -1,5 +1,5 @@
 [Unit]
-Description=Smithereen social network server
+Description=Tusovochka social network server
 After=network.target mysqld.service
 
 [Service]

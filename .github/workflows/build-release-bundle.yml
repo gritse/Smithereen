@@ -69,7 +69,7 @@ jobs:
                   path: ~/.m2
                   key: maven-${{ hashFiles('pom.xml') }}
 
-            - name: Build Smithereen
+            - name: Build Tusovochka
               run: mvn package -Dmaven.test.skip=true -DnodeInstallLocation=$HOME/.m2
 
             - name: Download imgproxy and libvips

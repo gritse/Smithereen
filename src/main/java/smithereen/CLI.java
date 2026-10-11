@@ -35,7 +35,7 @@ public class CLI{
 				return;
 			}
 
-			System.out.println(E_FG_GREEN+E_BOLD+"Welcome to Smithereen!"+E_RESET+E_BOLD+" You will now answer a few questions to create the first user on your server."+E_RESET+"\n" +
+			System.out.println(E_FG_GREEN+E_BOLD+"Welcome to Tusovochka!"+E_RESET+E_BOLD+" You will now answer a few questions to create the first user on your server."+E_RESET+"\n" +
 					"This user will have administrative privileges.\n");
 
 			String email, password;

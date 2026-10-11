@@ -2,8 +2,10 @@
 
 ## Supported Versions
 
-**1.0.x** is the only stable version that exists right now; versions **0.x.x** are not supported.
+Only the latest commit on the `master` branch of this repository is supported.
 
 ## Reporting a Vulnerability
 
-To report a vulnerability, please submit an advisory via GitHub (preferred), email smithereen@grishka.me, or send a message to [@grishka on Telegram](https://t.me/grishka).
+Please report vulnerabilities privately through a GitHub security advisory on this repository. Do not open a public issue for a security problem.
+
+Tusovochka is a fork of [Smithereen](https://github.com/grishka/Smithereen). If the problem also affects upstream Smithereen, please report it there as well, following [its security policy](https://github.com/grishka/Smithereen/blob/master/SECURITY.md). Do not report Tusovochka-only problems to the Smithereen maintainer.

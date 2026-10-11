@@ -98,7 +98,7 @@ public class UserDataExportWorker{
 		User user=account.user;
 		LOG.debug("Starting data export {} for user {}", id, user.id);
 		try{
-			File archive=File.createTempFile("SmithereenUserExport", ".zip");
+			File archive=File.createTempFile("TusovochkaUserExport", ".zip");
 			HashSet<MediaFileID> filesToInclude=new HashSet<>();
 			try(ZipOutputStream zos=new ZipOutputStream(new FileOutputStream(archive), StandardCharsets.UTF_8)){
 
