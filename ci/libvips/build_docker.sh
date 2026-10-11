@@ -21,15 +21,11 @@ else
 		$SUDO dpkg-reconfigure man-db
     fi
     $SUDO apt-get update
-	$SUDO apt-get -y install pkg-config cmake python3 autoconf automake binutils git patch ninja-build || exit 1
-	if ! [ -x "$(command -v gcc)" ]; then
-		$SUDO apt-get -y install gcc g++ || exit 1
+	# gcc alone is not enough: zlib-ng and other dependencies need a C++ compiler too
+	$SUDO apt-get -y install pkg-config cmake python3 autoconf automake binutils git patch ninja-build gcc g++ || exit 1
+	if [ "$(uname -m)" = "x86_64" ]; then
+		$SUDO apt-get -y install nasm || exit 1
 	fi
-    if [ "$PLATFORM" = "linux-x64" ]; then
-		if ! [ -x "$(command -v nasm)" ]; then
-			$SUDO apt-get install nasm || exit 1
-    	fi
-    fi
 	echo "Building libvips"
 	cd ci/libvips
 	./build.sh || exit 1
