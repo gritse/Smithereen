@@ -38,6 +38,7 @@ public record UserRole(int id, String name, EnumSet<Permission> permissions){
 		MANAGE_USERS,
 		MANAGE_USER_ACCESS,
 		MANAGE_REPORTS,
+		/** Unused since federation was removed; kept so stored permission bit positions stay stable. */
 		MANAGE_FEDERATION,
 		MANAGE_BLOCKING_RULES,
 		MANAGE_INVITES,
@@ -45,6 +46,7 @@ public record UserRole(int id, String name, EnumSet<Permission> permissions){
 		DELETE_USERS_IMMEDIATE,
 		MANAGE_GROUPS,
 		VISIBLE_IN_STAFF,
+		/** Unused since federation was removed; kept so stored permission bit positions stay stable. */
 		MANAGE_FASPS;
 
 		public String getLangKey(){

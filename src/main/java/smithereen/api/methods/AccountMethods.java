@@ -92,28 +92,6 @@ public class AccountMethods{
 		return true;
 	}
 
-	public static Object getBannedDomains(ApplicationContext ctx, ApiCallContext actx){
-		List<String> domains=ctx.getPrivacyController().getBlockedDomains(actx.self.user);
-		int offset=actx.getOffset();
-		int count=actx.getCount(100, 1000);
-		if(offset>=domains.size())
-			return new ApiPaginatedList<>(0, List.of());
-		return new ApiPaginatedList<>(domains.size(), domains.subList(offset, Math.min(offset+count, domains.size())));
-	}
-
-	public static Object banDomain(ApplicationContext ctx, ApiCallContext actx){
-		String domain=actx.requireParamString("domain");
-		if(!domain.matches("^([a-zA-Z0-9-]+\\.)+[a-zA-Z0-9-]{2,}$"))
-			throw actx.paramError("invalid domain");
-		ctx.getPrivacyController().blockDomain(actx.self.user, domain);
-		return true;
-	}
-
-	public static Object unbanDomain(ApplicationContext ctx, ApiCallContext actx){
-		ctx.getPrivacyController().unblockDomain(actx.self.user, actx.requireParamString("domain"));
-		return true;
-	}
-
 	public static Object revokeToken(ApplicationContext ctx, ApiCallContext actx){
 		ctx.getAppsController().revokeAccessToken(actx.token.id());
 		return true;

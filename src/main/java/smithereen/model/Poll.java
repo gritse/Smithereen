@@ -31,9 +31,6 @@ public class Poll implements OwnedContentObject{
 
 	public int numVoters;
 
-	@Nullable
-	public URI activityPubID;
-
 	@NotNull
 	public Instant lastVoteTime=Instant.EPOCH;
 
@@ -48,9 +45,6 @@ public class Poll implements OwnedContentObject{
 		p.numVoters=res.getInt("num_voted_users");
 		p.lastVoteTime=Objects.requireNonNull(DatabaseUtils.getInstant(res, "last_vote_time"));
 		p.options=new ArrayList<>();
-		String apID=res.getString("ap_id");
-		if(apID!=null)
-			p.activityPubID=URI.create(apID);
 		return p;
 	}
 

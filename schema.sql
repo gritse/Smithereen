@@ -54,18 +54,6 @@ CREATE TABLE `announcements` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 --
--- Table structure for table `ap_id_index`
---
-
-CREATE TABLE `ap_id_index` (
-  `ap_id` varchar(300) CHARACTER SET ascii COLLATE ascii_general_ci NOT NULL,
-  `object_type` int unsigned NOT NULL,
-  `object_id` bigint unsigned NOT NULL,
-  PRIMARY KEY (`ap_id`),
-  UNIQUE KEY `object_type` (`object_type`,`object_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
---
 -- Table structure for table `api_app_installs`
 --
 
@@ -85,23 +73,15 @@ CREATE TABLE `api_app_installs` (
 
 CREATE TABLE `api_applications` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `ap_id` varchar(300) CHARACTER SET ascii COLLATE ascii_general_ci DEFAULT NULL,
   `username` varchar(64) DEFAULT NULL,
-  `domain` varchar(100) NOT NULL DEFAULT '',
-  `public_key` blob,
-  `private_key` blob,
   `type` tinyint unsigned NOT NULL,
   `name` varchar(50) NOT NULL,
   `description` text,
   `logo` json DEFAULT NULL,
   `developer_id` int DEFAULT NULL,
   `extra` json DEFAULT NULL,
-  `ap_inbox` varchar(300) DEFAULT NULL,
-  `ap_shared_inbox` varchar(300) DEFAULT NULL,
-  `last_updated` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `ap_id` (`ap_id`),
-  UNIQUE KEY `username` (`username`,`domain`)
+  UNIQUE KEY `username` (`username`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 --
@@ -191,18 +171,6 @@ CREATE TABLE `blocks_email_domain` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 --
--- Table structure for table `blocks_group_domain`
---
-
-CREATE TABLE `blocks_group_domain` (
-  `owner_id` int unsigned NOT NULL,
-  `domain` varchar(100) CHARACTER SET ascii COLLATE ascii_general_ci NOT NULL,
-  UNIQUE KEY `owner_id` (`owner_id`,`domain`),
-  KEY `domain` (`domain`),
-  CONSTRAINT `blocks_group_domain_ibfk_1` FOREIGN KEY (`owner_id`) REFERENCES `groups` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
---
 -- Table structure for table `blocks_group_user`
 --
 
@@ -229,18 +197,6 @@ CREATE TABLE `blocks_ip` (
   `note` text NOT NULL,
   `creator_id` int unsigned NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
---
--- Table structure for table `blocks_user_domain`
---
-
-CREATE TABLE `blocks_user_domain` (
-  `owner_id` int unsigned NOT NULL,
-  `domain` varchar(100) CHARACTER SET ascii COLLATE ascii_general_ci NOT NULL,
-  UNIQUE KEY `owner_id` (`owner_id`,`domain`),
-  KEY `domain` (`domain`),
-  CONSTRAINT `blocks_user_domain_ibfk_1` FOREIGN KEY (`owner_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 --
@@ -271,11 +227,8 @@ CREATE TABLE `board_topics` (
   `num_comments` int unsigned NOT NULL DEFAULT '0',
   `last_comment_author_id` int unsigned NOT NULL,
   `is_closed` tinyint(1) NOT NULL DEFAULT '0',
-  `ap_url` varchar(300) DEFAULT NULL,
-  `ap_id` varchar(300) CHARACTER SET ascii COLLATE ascii_general_ci DEFAULT NULL,
   `first_comment_id` bigint unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `ap_id` (`ap_id`),
   KEY `group_id` (`group_id`),
   KEY `updated_at` (`updated_at`),
   KEY `created_at` (`created_at`),
@@ -324,8 +277,6 @@ CREATE TABLE `comments` (
   `parent_object_id` bigint unsigned NOT NULL,
   `text` text,
   `attachments` json DEFAULT NULL,
-  `ap_url` varchar(300) DEFAULT NULL,
-  `ap_id` varchar(300) CHARACTER SET ascii COLLATE ascii_general_ci DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `content_warning` text,
   `updated_at` timestamp NULL DEFAULT NULL,
@@ -333,12 +284,9 @@ CREATE TABLE `comments` (
   `mentions` varbinary(1024) DEFAULT NULL,
   `reply_count` int unsigned NOT NULL DEFAULT '0',
   `immediate_reply_count` int unsigned NOT NULL DEFAULT '0',
-  `ap_replies` varchar(300) DEFAULT NULL,
-  `federation_state` tinyint unsigned NOT NULL DEFAULT '0',
   `source` text,
   `source_format` tinyint unsigned DEFAULT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `ap_id` (`ap_id`),
   KEY `owner_user_id` (`owner_user_id`),
   KEY `author_id` (`author_id`),
   KEY `reply_key` (`reply_key`),
@@ -364,7 +312,6 @@ CREATE TABLE `config` (
 
 CREATE TABLE `deleted_user_bans` (
   `user_id` int unsigned NOT NULL,
-  `domain` varchar(100) DEFAULT NULL,
   `ban_status` tinyint unsigned NOT NULL DEFAULT '0',
   `ban_info` json NOT NULL,
   PRIMARY KEY (`user_id`)
@@ -397,45 +344,6 @@ CREATE TABLE `email_codes` (
   PRIMARY KEY (`code`),
   KEY `account_id` (`account_id`),
   CONSTRAINT `email_codes_ibfk_1` FOREIGN KEY (`account_id`) REFERENCES `accounts` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
---
--- Table structure for table `fasp_debug_callbacks`
---
-
-CREATE TABLE `fasp_debug_callbacks` (
-  `id` int unsigned NOT NULL AUTO_INCREMENT,
-  `provider_id` bigint unsigned NOT NULL,
-  `ip` binary(16) NOT NULL,
-  `body` text NOT NULL,
-  `received_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `provider_id` (`provider_id`),
-  CONSTRAINT `fasp_debug_callbacks_ibfk_1` FOREIGN KEY (`provider_id`) REFERENCES `fasp_providers` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
---
--- Table structure for table `fasp_providers`
---
-
-CREATE TABLE `fasp_providers` (
-  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `confirmed` tinyint(1) NOT NULL DEFAULT '0',
-  `name` varchar(300) NOT NULL,
-  `base_url` varchar(300) NOT NULL,
-  `sign_in_url` varchar(300) DEFAULT NULL,
-  `remote_id` varchar(64) NOT NULL,
-  `public_key` blob NOT NULL,
-  `private_key` blob NOT NULL,
-  `capabilities` json NOT NULL,
-  `enabled_capabilities` json NOT NULL,
-  `privacy_policy` json DEFAULT NULL,
-  `contact_email` varchar(300) DEFAULT NULL,
-  `actor_id` int DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `base_url` (`base_url`),
-  KEY `confirmed` (`confirmed`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 --
@@ -535,9 +443,7 @@ CREATE TABLE `group_invites` (
   `group_id` int unsigned NOT NULL,
   `time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `is_event` tinyint(1) NOT NULL,
-  `ap_id` varchar(300) CHARACTER SET ascii COLLATE ascii_general_ci DEFAULT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `ap_id` (`ap_id`),
   KEY `inviter_id` (`inviter_id`),
   KEY `invitee_id` (`invitee_id`),
   KEY `group_id` (`group_id`),
@@ -559,12 +465,8 @@ CREATE TABLE `group_links` (
   `object_type` int unsigned DEFAULT NULL,
   `object_id` bigint unsigned DEFAULT NULL,
   `image_id` bigint DEFAULT NULL,
-  `ap_image_url` varchar(300) DEFAULT NULL,
   `display_order` int unsigned NOT NULL DEFAULT '0',
-  `ap_id` varchar(300) DEFAULT NULL,
-  `is_unresolved_ap_object` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `ap_id` (`ap_id`),
   KEY `group_id` (`group_id`),
   CONSTRAINT `group_links_ibfk_1` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -611,13 +513,6 @@ CREATE TABLE `groups` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
   `name` varchar(200) NOT NULL DEFAULT '',
   `username` varchar(64) NOT NULL,
-  `domain` varchar(100) NOT NULL DEFAULT '',
-  `ap_id` varchar(300) CHARACTER SET ascii COLLATE ascii_general_ci DEFAULT NULL,
-  `ap_url` varchar(300) DEFAULT NULL,
-  `ap_inbox` varchar(300) DEFAULT NULL,
-  `ap_shared_inbox` varchar(300) DEFAULT NULL,
-  `public_key` blob NOT NULL,
-  `private_key` blob,
   `avatar` json DEFAULT NULL,
   `about` text,
   `about_source` text,
@@ -627,15 +522,11 @@ CREATE TABLE `groups` (
   `type` tinyint unsigned NOT NULL DEFAULT '0',
   `member_count` int unsigned NOT NULL DEFAULT '0',
   `tentative_member_count` int unsigned NOT NULL DEFAULT '0',
-  `last_updated` timestamp NULL DEFAULT NULL,
-  `flags` bigint unsigned NOT NULL DEFAULT '0',
-  `endpoints` json DEFAULT NULL,
   `access_type` tinyint NOT NULL DEFAULT '0',
   `ban_status` tinyint unsigned NOT NULL DEFAULT '0',
   `ban_info` json DEFAULT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `username` (`username`,`domain`),
-  UNIQUE KEY `ap_id` (`ap_id`),
+  UNIQUE KEY `username` (`username`),
   KEY `type` (`type`),
   KEY `ban_status` (`ban_status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -649,7 +540,6 @@ CREATE TABLE `likes` (
   `user_id` int unsigned NOT NULL,
   `object_id` bigint unsigned NOT NULL,
   `object_type` int unsigned NOT NULL,
-  `ap_id` varchar(300) CHARACTER SET ascii COLLATE ascii_general_ci DEFAULT NULL,
   UNIQUE KEY `user_id` (`user_id`,`object_id`,`object_type`),
   UNIQUE KEY `id` (`id`),
   KEY `object_type` (`object_type`,`object_id`)
@@ -672,13 +562,11 @@ CREATE TABLE `mail_messages` (
   `updated_at` timestamp NULL DEFAULT NULL,
   `deleted_at` timestamp NULL DEFAULT NULL,
   `read_receipts` varbinary(1024) DEFAULT NULL,
-  `ap_id` varchar(300) CHARACTER SET ascii COLLATE ascii_general_ci DEFAULT NULL,
   `reply_info` json DEFAULT NULL,
   `related_message_ids` varbinary(1024) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `owner_id` (`owner_id`),
   KEY `sender_id` (`sender_id`),
-  KEY `ap_id` (`ap_id`),
   KEY `deleted_at` (`deleted_at`),
   KEY `read_receipts` (`read_receipts`),
   FULLTEXT KEY `text` (`text`,`subject`),
@@ -713,20 +601,6 @@ CREATE TABLE `mail_privacy_grants` (
   KEY `user_id` (`user_id`),
   CONSTRAINT `mail_privacy_grants_ibfk_1` FOREIGN KEY (`owner_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
   CONSTRAINT `mail_privacy_grants_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
---
--- Table structure for table `media_cache`
---
-
-CREATE TABLE `media_cache` (
-  `url_hash` binary(16) NOT NULL,
-  `size` int unsigned NOT NULL,
-  `last_access` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `info` blob,
-  `type` tinyint NOT NULL,
-  PRIMARY KEY (`url_hash`),
-  KEY `last_access` (`last_access`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 --
@@ -854,12 +728,8 @@ CREATE TABLE `photo_albums` (
   `system_type` tinyint unsigned DEFAULT NULL,
   `cover_id` bigint unsigned DEFAULT NULL,
   `flags` bigint NOT NULL DEFAULT '0',
-  `ap_id` varchar(300) CHARACTER SET ascii COLLATE ascii_general_ci DEFAULT NULL,
-  `ap_url` varchar(300) CHARACTER SET ascii COLLATE ascii_general_ci DEFAULT NULL,
   `display_order` int unsigned NOT NULL DEFAULT '0',
-  `ap_comments` varchar(300) CHARACTER SET ascii COLLATE ascii_general_ci DEFAULT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `ap_id` (`ap_id`),
   KEY `owner_user_id` (`owner_user_id`),
   KEY `owner_group_id` (`owner_group_id`),
   KEY `display_order` (`display_order`),
@@ -883,10 +753,8 @@ CREATE TABLE `photo_tags` (
   `y1` float NOT NULL,
   `x2` float NOT NULL,
   `y2` float NOT NULL,
-  `ap_id` varchar(300) CHARACTER SET ascii COLLATE ascii_general_ci DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `photo_id` (`photo_id`,`user_id`),
-  UNIQUE KEY `ap_id` (`ap_id`),
   KEY `user_id` (`user_id`),
   KEY `approved` (`approved`),
   CONSTRAINT `photo_tags_ibfk_1` FOREIGN KEY (`photo_id`) REFERENCES `photos` (`id`) ON DELETE CASCADE,
@@ -903,16 +771,13 @@ CREATE TABLE `photos` (
   `author_id` int unsigned NOT NULL,
   `album_id` bigint unsigned NOT NULL,
   `local_file_id` bigint unsigned DEFAULT NULL,
-  `remote_src` varchar(300) CHARACTER SET ascii COLLATE ascii_general_ci DEFAULT NULL,
   `description` text NOT NULL,
   `description_source` text,
   `description_source_format` tinyint unsigned DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `metadata` json DEFAULT NULL,
-  `ap_id` varchar(300) CHARACTER SET ascii COLLATE ascii_general_ci DEFAULT NULL,
   `display_order` int unsigned NOT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `ap_id` (`ap_id`),
   KEY `owner_id` (`owner_id`),
   KEY `album_id` (`album_id`),
   KEY `display_order` (`display_order`),
@@ -929,11 +794,9 @@ CREATE TABLE `photos` (
 CREATE TABLE `poll_options` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
   `poll_id` int unsigned NOT NULL,
-  `ap_id` varchar(300) CHARACTER SET ascii COLLATE ascii_general_ci DEFAULT NULL,
   `text` text NOT NULL,
   `num_votes` int unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `ap_id` (`ap_id`),
   KEY `poll_id` (`poll_id`),
   CONSTRAINT `poll_options_ibfk_1` FOREIGN KEY (`poll_id`) REFERENCES `polls` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -947,9 +810,7 @@ CREATE TABLE `poll_votes` (
   `user_id` int unsigned NOT NULL,
   `poll_id` int unsigned NOT NULL,
   `option_id` int unsigned NOT NULL,
-  `ap_id` varchar(300) CHARACTER SET ascii COLLATE ascii_general_ci DEFAULT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `ap_id` (`ap_id`),
   KEY `user_id` (`user_id`),
   KEY `poll_id` (`poll_id`),
   KEY `option_id` (`option_id`),
@@ -964,15 +825,13 @@ CREATE TABLE `poll_votes` (
 CREATE TABLE `polls` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
   `owner_id` int NOT NULL,
-  `ap_id` varchar(300) CHARACTER SET ascii COLLATE ascii_general_ci DEFAULT NULL,
   `question` text,
   `is_anonymous` tinyint(1) NOT NULL DEFAULT '0',
   `is_multi_choice` tinyint(1) NOT NULL DEFAULT '0',
   `end_time` timestamp NULL DEFAULT NULL,
   `num_voted_users` int unsigned NOT NULL DEFAULT '0',
   `last_vote_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `ap_id` (`ap_id`)
+  PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 --
@@ -1019,7 +878,6 @@ CREATE TABLE `reports` (
   `comment` text NOT NULL,
   `moderator_id` int unsigned DEFAULT NULL,
   `time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `server_domain` varchar(100) DEFAULT NULL,
   `content` json DEFAULT NULL,
   `state` tinyint unsigned NOT NULL DEFAULT '0',
   `has_file_refs` tinyint(1) NOT NULL DEFAULT '1',
@@ -1045,29 +903,6 @@ CREATE TABLE `rules` (
   `priority` int NOT NULL DEFAULT '0',
   `is_deleted` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
---
--- Table structure for table `servers`
---
-
-CREATE TABLE `servers` (
-  `id` int unsigned NOT NULL AUTO_INCREMENT,
-  `host` varchar(100) CHARACTER SET ascii COLLATE ascii_general_ci NOT NULL,
-  `software` varchar(100) DEFAULT NULL,
-  `version` varchar(30) DEFAULT NULL,
-  `last_updated` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `last_error_day` date DEFAULT NULL,
-  `error_day_count` int NOT NULL DEFAULT '0',
-  `is_up` tinyint unsigned NOT NULL DEFAULT '1',
-  `is_restricted` tinyint unsigned NOT NULL DEFAULT '0',
-  `restriction` json DEFAULT NULL,
-  `features` bigint unsigned NOT NULL DEFAULT '0',
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `host` (`host`),
-  KEY `is_up` (`is_up`),
-  KEY `error_day_count` (`error_day_count`),
-  KEY `is_restricted` (`is_restricted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 --
@@ -1209,21 +1044,12 @@ CREATE TABLE `users` (
   `maiden_name` varchar(100) DEFAULT NULL,
   `bdate` date DEFAULT NULL,
   `username` varchar(64) NOT NULL,
-  `domain` varchar(100) NOT NULL DEFAULT '',
-  `public_key` blob NOT NULL,
-  `private_key` blob,
-  `ap_url` varchar(300) DEFAULT NULL,
-  `ap_inbox` varchar(300) DEFAULT NULL,
-  `ap_shared_inbox` varchar(300) DEFAULT NULL,
   `about` text,
   `about_source` text,
   `gender` tinyint unsigned NOT NULL DEFAULT '0',
   `profile_fields` json DEFAULT NULL,
   `avatar` json DEFAULT NULL,
-  `ap_id` varchar(300) CHARACTER SET ascii COLLATE ascii_general_ci DEFAULT NULL,
-  `last_updated` timestamp NULL DEFAULT NULL,
   `flags` bigint unsigned NOT NULL,
-  `endpoints` json DEFAULT NULL,
   `privacy` json DEFAULT NULL,
   `ban_status` tinyint unsigned NOT NULL DEFAULT '0',
   `ban_info` json DEFAULT NULL,
@@ -1233,8 +1059,7 @@ CREATE TABLE `users` (
   `num_following` bigint NOT NULL DEFAULT '0',
   `num_friends` bigint NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `username` (`username`,`domain`),
-  UNIQUE KEY `ap_id` (`ap_id`),
+  UNIQUE KEY `username` (`username`),
   KEY `ban_status` (`ban_status`),
   KEY `num_followers` (`num_followers`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -1265,8 +1090,6 @@ CREATE TABLE `wall_posts` (
   `text` text,
   `attachments` json DEFAULT NULL,
   `repost_of` int unsigned DEFAULT NULL,
-  `ap_url` varchar(300) DEFAULT NULL,
-  `ap_id` varchar(300) CHARACTER SET ascii COLLATE ascii_general_ci DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `content_warning` text,
   `updated_at` timestamp NULL DEFAULT NULL,
@@ -1274,9 +1097,7 @@ CREATE TABLE `wall_posts` (
   `mentions` varbinary(1024) DEFAULT NULL,
   `reply_count` int unsigned NOT NULL DEFAULT '0',
   `immediate_reply_count` int unsigned NOT NULL DEFAULT '0',
-  `ap_replies` varchar(300) DEFAULT NULL,
   `poll_id` int unsigned DEFAULT NULL,
-  `federation_state` tinyint unsigned NOT NULL DEFAULT '0',
   `source` text,
   `source_format` tinyint unsigned DEFAULT NULL,
   `privacy` tinyint unsigned NOT NULL DEFAULT '0',
@@ -1285,7 +1106,6 @@ CREATE TABLE `wall_posts` (
   `top_parent_is_wall_to_wall` tinyint(1) GENERATED ALWAYS AS (((`flags` & 2) = 2)) VIRTUAL,
   `extra` json DEFAULT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `ap_id` (`ap_id`),
   KEY `owner_user_id` (`owner_user_id`),
   KEY `repost_of` (`repost_of`),
   KEY `author_id` (`author_id`),

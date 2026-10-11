@@ -31,7 +31,6 @@ public class ViolationReport{
 	public String comment;
 	public int moderatorID;
 	public Instant time;
-	public String serverDomain;
 	public State state;
 	public List<ReportableContentObject> content=List.of();
 	public Reason reason;
@@ -45,7 +44,6 @@ public class ViolationReport{
 		r.comment=res.getString("comment");
 		r.moderatorID=res.getInt("moderator_id");
 		r.time=DatabaseUtils.getInstant(res, "time");
-		r.serverDomain=res.getString("server_domain");
 		r.state=State.values()[res.getInt("state")];
 		String content=res.getString("content");
 		if(StringUtils.isNotEmpty(content)){

@@ -27,7 +27,6 @@ import smithereen.libvips.VipsImage;
 import smithereen.model.ObfuscatedObjectIDType;
 import smithereen.model.PaginatedList;
 import smithereen.model.Post;
-import smithereen.model.Server;
 import smithereen.model.ServerAnnouncement;
 import smithereen.model.ServerRule;
 import smithereen.model.User;
@@ -69,11 +68,6 @@ public class ServerMethods{
 						ctx.getGroupsController().getLocalGroupCount()
 				)
 		);
-	}
-	
-	public static Object getRestrictedServers(ApplicationContext ctx, ApiCallContext actx){
-		PaginatedList<Server> servers=ctx.getModerationController().getAllServers(actx.getOffset(), actx.getCount(Integer.MAX_VALUE, Integer.MAX_VALUE), null, true, null);
-		return new ApiPaginatedList<>(servers.total, servers.list.stream().map(s->new RestrictedServer(s.host(), s.restriction().publicComment, "suspension")).toList());
 	}
 
 	public static Object report(ApplicationContext ctx, ApiCallContext actx){
@@ -173,7 +167,7 @@ public class ServerMethods{
 			}
 		}
 
-		ctx.getModerationController().createViolationReport(actx.self.user, target, content, reason, rules, actx.optParamString("comment", ""), actx.optParamBoolean("forward"));
+		ctx.getModerationController().createViolationReport(actx.self.user, target, content, reason, rules, actx.optParamString("comment", ""));
 		return true;
 	}
 
@@ -209,5 +203,4 @@ public class ServerMethods{
 		private record Stats(int users, int activeUsers, int groups){}
 	}
 
-	private record RestrictedServer(String domain, String reason, String restriction){}
 }

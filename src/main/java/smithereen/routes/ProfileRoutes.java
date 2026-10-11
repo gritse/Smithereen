@@ -33,7 +33,6 @@ import smithereen.exceptions.UserActionNotAllowedException;
 import smithereen.lang.Lang;
 import smithereen.model.Account;
 import smithereen.model.CommentViewType;
-import smithereen.model.ForeignUser;
 import smithereen.model.ObfuscatedObjectIDType;
 import smithereen.model.PaginatedList;
 import smithereen.model.Post;
@@ -386,14 +385,6 @@ public class ProfileRoutes{
 			model.with("moreMetaTags", Map.of("description", descr));
 		}
 
-		if(user instanceof ForeignUser)
-			model.with("noindex", true);
-		model.with("activityPubURL", user.activityPubID);
-
-		if(user.movedTo>0){
-			User newProfile=ctx.getUsersController().getUserOrThrow(user.movedTo);
-			model.with("movedTo", newProfile);
-		}
 
 		PaginatedList<PhotoAlbum> albums;
 		if(isMobile(req))
@@ -414,7 +405,6 @@ public class ProfileRoutes{
 		try{
 			Photo photo=switch(user.getAvatarImage()){
 				case LocalImage li when li.photoID!=0 -> ctx.getPhotosController().getPhotoIgnoringPrivacy(li.photoID);
-				case Image img when img.photoApID!=null -> ctx.getObjectLinkResolver().resolveLocally(img.photoApID, Photo.class);
 				case null, default -> null;
 			};
 			if(photo!=null){

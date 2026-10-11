@@ -73,20 +73,7 @@ public class MailStorage{
 		}
 	}
 
-	public static void updateForeignMessage(MailMessage updatedMsg, boolean markAsUpdated) throws SQLException{
-		new SQLQueryBuilder()
-				.update("mail_messages")
-				.value("to", Utils.serializeIntList(updatedMsg.to))
-				.value("cc", Utils.serializeIntList(updatedMsg.cc))
-				.value("text", updatedMsg.text)
-				.value("subject", updatedMsg.subject)
-				.value("attachments", updatedMsg.getSerializedAttachments())
-				.value("updated_at", markAsUpdated && updatedMsg.updatedAt==null ? Instant.now() : updatedMsg.updatedAt)
-				.where("ap_id=?", updatedMsg.activityPubID)
-				.executeNoResult();
-	}
-
-	public static long createMessage(String text, String subject, String attachments, int senderID, Set<Integer> to, Set<Integer> cc, Set<Integer> localOwners, URI apID, Map<Integer, MailMessage.ReplyInfo> replyInfos, Map<Integer, Long> allIDs) throws SQLException{
+	public static long createMessage(String text, String subject, String attachments, int senderID, Set<Integer> to, Set<Integer> cc, Set<Integer> localOwners, Map<Integer, MailMessage.ReplyInfo> replyInfos, Map<Integer, Long> allIDs) throws SQLException{
 		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
 			long[] _id={0};
 			DatabaseUtils.doWithTransaction(conn, ()->{
@@ -106,7 +93,6 @@ public class MailStorage{
 							.value("text", text)
 							.value("subject", subject)
 							.value("attachments", attachments)
-							.value("ap_id", Objects.toString(apID, null))
 							.value("reply_info", replyInfo)
 							.executeAndGetIDLong();
 					if(allIDs!=null)
@@ -164,72 +150,19 @@ public class MailStorage{
 				.executeNoResult();
 	}
 
-	public static void actuallyDeleteMessages(Collection<Long> ids, URI activityPubID) throws SQLException{
-		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
-			Set<Long> realIDs=new HashSet<>(ids);
-			new SQLQueryBuilder(conn)
-					.deleteFrom("mail_messages")
-					.whereIn("id", realIDs)
-					.executeNoResult();
-			if(activityPubID!=null){
-				long otherID=new SQLQueryBuilder(conn)
-						.selectFrom("mail_messages")
-						.columns("id")
-						.where("ap_id=?", activityPubID.toString())
-						.limit(1, 0)
-						.executeAndGetLong();
-				if(otherID!=-1){
-					new SQLQueryBuilder(conn)
-							.update("ap_id_index")
-							.value("object_id", otherID)
-							.where("ap_id=?", activityPubID.toString())
-							.executeNoResult();
-				}else{
-					new SQLQueryBuilder(conn)
-							.deleteFrom("ap_id_index")
-							.where("ap_id=?", activityPubID)
-							.executeNoResult();
-				}
-			}
-		}
+	public static void actuallyDeleteMessages(Collection<Long> ids) throws SQLException{
+		new SQLQueryBuilder()
+				.deleteFrom("mail_messages")
+				.whereIn("id", ids)
+				.executeNoResult();
 	}
 
-	public static void actuallyDeleteMessages(Collection<MailMessage> msgs) throws SQLException{
+	public static void actuallyDeleteMessagesByObjects(Collection<MailMessage> msgs) throws SQLException{
 		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
 			new SQLQueryBuilder(conn)
 					.deleteFrom("mail_messages")
 					.whereIn("id", msgs.stream().map(m->m.id).collect(Collectors.toSet()))
 					.executeNoResult();
-			Set<String> apIDs=msgs.stream().map(m->m.activityPubID).filter(Objects::nonNull).map(URI::toString).collect(Collectors.toSet());
-			if(apIDs.isEmpty())
-				return;
-			HashMap<String, Long> newIDs=new HashMap<>();
-			for(MailMessage msg:msgs){
-				if(msg.activityPubID!=null)
-					newIDs.put(msg.activityPubID.toString(), null);
-			}
-			new SQLQueryBuilder(conn)
-					.selectFrom("mail_messages")
-					.columns("id", "ap_id")
-					.whereIn("ap_id", apIDs)
-					.executeAsStream(r->new Pair<>(r.getLong(1), r.getString(2)))
-					.forEach(p->newIDs.put(p.second(), p.first()));
-			Set<String> toDelete=newIDs.entrySet().stream().filter(e->e.getValue()==null).map(Map.Entry::getKey).collect(Collectors.toSet());
-			if(!toDelete.isEmpty()){
-				new SQLQueryBuilder(conn)
-						.deleteFrom("ap_id_index")
-						.whereIn("ap_id", toDelete)
-						.executeNoResult();
-			}
-			for(Map.Entry<String, Long> e:newIDs.entrySet()){
-				if(e.getValue()==null)
-					continue;
-				new SQLQueryBuilder(conn)
-						.update("ap_id_index")
-						.where("ap_id=?", e.getKey())
-						.value("id=?", e.getValue())
-						.executeNoResult();
-			}
 		}
 	}
 
@@ -294,17 +227,6 @@ public class MailStorage{
 				.selectFrom("mail_messages")
 				.allColumns()
 				.where("deleted_at IS NOT NULL AND deleted_at<?", before)
-				.executeAsStream(MailMessage::fromResultSet)
-				.toList();
-		postprocessMessages(msgs);
-		return msgs;
-	}
-
-	public static List<MailMessage> getMessages(URI apID) throws SQLException{
-		List<MailMessage> msgs=new SQLQueryBuilder()
-				.selectFrom("mail_messages")
-				.allColumns()
-				.where("ap_id=?", apID)
 				.executeAsStream(MailMessage::fromResultSet)
 				.toList();
 		postprocessMessages(msgs);

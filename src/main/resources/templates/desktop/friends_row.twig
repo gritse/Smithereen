@@ -5,21 +5,17 @@
 		<td width="100">
 			{% if avatarPhotos contains friend.id %}
 			<div class="avaZoomableW">
-				<a href="{{friend.profileURL}}"{{ profileRel(friend) }}>{{friend | pictureForAvatar('b')}}</a>
+				<a href="{{friend.profileURL}}">{{friend | pictureForAvatar('b')}}</a>
 				<a href="{{ avatarPhotos[friend.id].url }}" class="avaZoom ellipsize" data-pv="{{ json(avatarPvInfos[friend.id]) }}" onclick="return openPhotoViewer(this)"><span class="icon"></span><span>{{ L('view_user_profile_photos') }}</span></a>
 			</div>
 			{% else %}
-			<a href="{{friend.profileURL}}"{{ profileRel(friend) }}>{{friend | pictureForAvatar('b')}}</a>
+			<a href="{{friend.profileURL}}">{{friend | pictureForAvatar('b')}}</a>
 			{% endif %}
 		</td>
 		<td class="info">
 			<div class="infoInner">
 				<div class="grayText">{{ L('name') }}:</div>
-				<div><a href="{{ friend.profileURL }}"{{ profileRel(friend) }}>{{ friend | name('complete') }}</a></div>
-				{% if friend.domain is not empty %}
-					<div class="grayText">{{ L('server') }}:</div>
-					<div><a href="{{ friend.url }}" target="_blank">{{ friend.domain }}</a></div>
-				{% endif %}
+				<div><a href="{{ friend.profileURL }}">{{ friend | name('complete') }}</a></div>
 				{% if onlines contains friend.id and onlines[friend.id].isOnline %}<div></div><div class="onlineText">{{ L('user_online') }}{% if onlines[friend.id].mobile %}<span class="mobileOnlineIcon"></span>{% endif %}</div>{% endif %}
 				{% if userLists is not null and userLists contains friend.id and userLists[friend.id] is not empty %}
 				<div></div>

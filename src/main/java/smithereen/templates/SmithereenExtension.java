@@ -30,7 +30,6 @@ import smithereen.templates.functions.JsonFunction;
 import smithereen.templates.functions.LangDateFunction;
 import smithereen.templates.functions.FormatFileSizeFunction;
 import smithereen.templates.functions.LangFunction;
-import smithereen.templates.functions.ProfileRelFunction;
 import smithereen.templates.functions.ProfileUrlFunction;
 import smithereen.templates.functions.RandomStringFunction;
 import smithereen.templates.functions.RenderAttachmentsFunction;
@@ -51,7 +50,6 @@ public class SmithereenExtension extends AbstractExtension{
 		f.put("addQueryParams", new AddQueryParamsFunction());
 		f.put("randomString", new RandomStringFunction());
 		f.put("profileURL", new ProfileUrlFunction());
-		f.put("profileRel", new ProfileRelFunction());
 		f.put("arraysEqual", new ArraysEqualFunction());
 		f.put("renderPhotoGrid", new RenderPhotoGridFunction());
 		f.put("inlineTextResource", new InlineTextResourceFunction());

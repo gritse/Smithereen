@@ -70,21 +70,21 @@ public class DatabaseUtils{
 			int userCount=new SQLQueryBuilder(conn)
 					.selectFrom("users")
 					.count()
-					.where("username=? AND domain=''", username)
+					.where("username=?", username)
 					.executeAndGetInt();
 			if(userCount>0)
 				return false;
 			int groupCount=new SQLQueryBuilder(conn)
 					.selectFrom("groups")
 					.count()
-					.where("username=? AND domain=''", username)
+					.where("username=?", username)
 					.executeAndGetInt();
 			if(groupCount>0)
 				return false;
 			int appCount=new SQLQueryBuilder(conn)
 					.selectFrom("api_applications")
 					.count()
-					.where("username=? AND domain=''", username)
+					.where("username=?", username)
 					.executeAndGetInt();
 			if(appCount>0)
 				return false;

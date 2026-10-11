@@ -37,29 +37,22 @@
 <table width="100%" class="friendsRow noBorderSpacing" id="grow{{group.id}}">
 	<tr valign="top">
 		<td width="100">
-			<a href="{{group.profileURL}}"{{ profileRel(group) }}>{{group | pictureForAvatar('b')}}</a>
+			<a href="{{group.profileURL}}">{{group | pictureForAvatar('b')}}</a>
 		</td>
 		<td class="info">
 			<div class="infoInner">
 				<div class="grayText">{{ L('group_name') }}:</div>
-				<div><a href="{{ group.profileURL }}"{{ profileRel(group) }}>{{ group.name }}</a></div>
+				<div><a href="{{ group.profileURL }}">{{ group.name }}</a></div>
 				<div class="grayText">{{ L('group_size') }}:</div>
 				<div>{{ L('X_members', {'count': group.memberCount}) }}</div>
 				{% if group.event %}
 				<div class="grayText">{{ L('event_start_time') }}:</div>
 				<div>{{ LD(group.eventStartTime) }}	</div>
 				{% endif %}
-				{% if group.domain is not empty %}
-				<div class="grayText">{{ L('server') }}:</div>
-				<div>{{ group.domain }}</div>
-				{% endif %}
 			</div>
 		</td>
 		<td width="130">
 			<ul class="actionList">
-                {%if group.domain is not null%}
-					<li><a href="{{ group.url }}" target="_blank">{{ L('open_on_server_X', {'domain': group.domain}) }}</a></li>
-				{%endif%}
 			</ul>
 		</td>
 	</tr>

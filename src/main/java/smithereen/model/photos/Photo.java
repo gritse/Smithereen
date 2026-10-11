@@ -11,12 +11,10 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.util.Set;
 
-import smithereen.ApplicationContext;
+import smithereen.model.LikeObjectType;
 import smithereen.Config;
 import smithereen.Utils;
 import smithereen.activitypub.objects.LocalImage;
-import smithereen.activitypub.objects.activities.Like;
-import smithereen.model.ActivityPubRepresentable;
 import smithereen.model.BlurHashable;
 import smithereen.model.LikeableContentObject;
 import smithereen.model.ObfuscatedObjectIDType;
@@ -36,22 +34,19 @@ import smithereen.storage.DatabaseUtils;
 import smithereen.util.JsonObjectBuilder;
 import smithereen.util.UriBuilder;
 import smithereen.util.XTEA;
-import spark.utils.StringUtils;
 
-public sealed class Photo implements SizedAttachment, OwnedContentObject, LikeableContentObject, ActivityPubRepresentable, CommentableContentObject, ReportableContentObject, BlurHashable permits ReportedPhoto{
+public sealed class Photo implements SizedAttachment, OwnedContentObject, LikeableContentObject, CommentableContentObject, ReportableContentObject, BlurHashable permits ReportedPhoto{
 	public long id;
 	public int ownerID;
 	public int authorID;
 	public long albumID;
 	public long localFileID;
-	public URI remoteSrc;
 
 	@NotNull
 	public String description="";
 
 	public Instant createdAt;
 	public PhotoMetadata metadata;
-	public URI apID;
 	public int displayOrder;
 
 	public SizedImage image;
@@ -63,17 +58,11 @@ public sealed class Photo implements SizedAttachment, OwnedContentObject, Likeab
 		p.authorID=res.getInt("author_id");
 		p.albumID=res.getLong("album_id");
 		p.localFileID=res.getLong("local_file_id");
-		String remoteSrc=res.getString("remote_src");
-		if(StringUtils.isNotEmpty(remoteSrc))
-			p.remoteSrc=URI.create(remoteSrc);
 		p.description=res.getString("description");
 		p.createdAt=DatabaseUtils.getInstant(res, "created_at");
 		String meta=res.getString("metadata");
 		if(meta!=null)
 			p.metadata=Utils.gson.fromJson(meta, PhotoMetadata.class);
-		String apID=res.getString("ap_id");
-		if(apID!=null)
-			p.apID=URI.create(apID);
 		p.displayOrder=res.getInt("display_order");
 		return p;
 	}
@@ -108,8 +97,8 @@ public sealed class Photo implements SizedAttachment, OwnedContentObject, Likeab
 	}
 
 	@Override
-	public Like.ObjectType getLikeObjectType(){
-		return Like.ObjectType.PHOTO;
+	public LikeObjectType getLikeObjectType(){
+		return LikeObjectType.PHOTO;
 	}
 
 	@Override
@@ -135,22 +124,7 @@ public sealed class Photo implements SizedAttachment, OwnedContentObject, Likeab
 	@Override
 	@NotNull
 	public URI getActivityPubID(){
-		if(apID!=null)
-			return apID;
 		return UriBuilder.local().path("photos", getIdString()).build();
-	}
-
-	@Override
-	public URI getCommentCollectionID(ApplicationContext context){
-		PhotoAlbum album=context.getPhotosController().getAlbumIgnoringPrivacy(albumID);
-		return album.activityPubComments!=null ? album.activityPubComments : new UriBuilder(album.getActivityPubID()).appendPath("comments").build();
-	}
-
-	@NotNull
-	public URI getActivityPubURL(){
-		if(metadata!=null && metadata.apURL!=null)
-			return metadata.apURL;
-		return getActivityPubID();
 	}
 
 	@Nullable
@@ -200,9 +174,6 @@ public sealed class Photo implements SizedAttachment, OwnedContentObject, Likeab
 			outFileIDs.add(localFileID);
 			jb.add("file_id", localFileID);
 		}
-		if(remoteSrc!=null){
-			jb.add("remote_src", remoteSrc.toString());
-		}
 		return jb.build();
 	}
 
@@ -218,8 +189,6 @@ public sealed class Photo implements SizedAttachment, OwnedContentObject, Likeab
 			description=jo.get("description").getAsString();
 		if(jo.has("file_id"))
 			localFileID=jo.get("file_id").getAsLong();
-		if(jo.has("remote_src"))
-			remoteSrc=URI.create(jo.get("remote_src").getAsString());
 	}
 
 	@Override

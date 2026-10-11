@@ -17,16 +17,13 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import smithereen.model.LikeObjectType;
 import smithereen.Config;
 import smithereen.Utils;
 import smithereen.activitypub.objects.LocalImage;
-import smithereen.activitypub.objects.activities.Like;
-import smithereen.model.CachedRemoteImage;
-import smithereen.model.NonCachedRemoteImage;
 import smithereen.model.ObfuscatedObjectIDType;
 import smithereen.model.PaginatedList;
 import smithereen.model.PrivacySetting;
-import smithereen.model.RemoteImage;
 import smithereen.model.SizedImage;
 import smithereen.model.feed.NewsfeedEntry;
 import smithereen.model.media.MediaFileRecord;
@@ -174,7 +171,7 @@ public class PhotoStorage{
 			}
 			new SQLQueryBuilder(conn)
 					.deleteFrom("likes")
-					.where("object_type=? AND object_id IN (SELECT id FROM photos WHERE album_id=?)", Like.ObjectType.PHOTO, id)
+					.where("object_type=? AND object_id IN (SELECT id FROM photos WHERE album_id=?)", LikeObjectType.PHOTO, id)
 					.executeNoResult();
 			new SQLQueryBuilder(conn)
 					.deleteFrom("notifications")
@@ -371,16 +368,11 @@ public class PhotoStorage{
 
 	public static void postprocessPhotos(Collection<Photo> photos) throws SQLException{
 		HashSet<Long> needFileIDs=new HashSet<>();
-		HashSet<URI> needCacheItems=new HashSet<>();
 		ArrayList<Photo> localPhotos=new ArrayList<>();
-		ArrayList<Photo> remotePhotos=new ArrayList<>();
 		for(Photo p:photos){
 			if(p.localFileID!=0){
 				needFileIDs.add(p.localFileID);
 				localPhotos.add(p);
-			}else{
-				needCacheItems.add(p.remoteSrc);
-				remotePhotos.add(p);
 			}
 		}
 		if(!needFileIDs.isEmpty()){
@@ -395,20 +387,6 @@ public class PhotoStorage{
 				if(p.metadata!=null)
 					li.rotation=p.metadata.rotation;
 				p.image=li;
-			}
-		}
-		if(!needCacheItems.isEmpty()){
-			Map<URI, MediaCache.Item> items=MediaCache.getInstance().get(needCacheItems);
-			for(Photo p:remotePhotos){
-				MediaCache.Item item=items.get(p.remoteSrc);
-				RemoteImage ri;
-				if(item instanceof MediaCache.PhotoItem pi){
-					ri=new CachedRemoteImage(pi, p.remoteSrc);
-				}else{
-					ri=new NonCachedRemoteImage(new NonCachedRemoteImage.AlbumPhotoArgs(p), new SizedImage.Dimensions(p.metadata.width, p.metadata.height), p.remoteSrc);
-				}
-				ri.setBlurHash(p.getBlurHash());
-				p.image=ri;
 			}
 		}
 	}
@@ -431,142 +409,6 @@ public class PhotoStorage{
 				.andWhere("description_source IS NOT NULL")
 				.executeAsStream(r->new Pair<>(r.getLong("id"), new FormattedTextSource(r.getString("description_source"), FormattedTextFormat.values()[r.getInt("description_source_format")])))
 				.collect(Collectors.toMap(Pair::first, Pair::second));
-	}
-
-	public static long getAlbumIdByActivityPubId(URI activityPubID) throws SQLException{
-		long id=new SQLQueryBuilder()
-				.selectFrom("photo_albums")
-				.columns("id")
-				.where("ap_id=?", activityPubID.toString())
-				.executeAndGetLong();
-		return id==-1 ? 0 : id;
-	}
-
-	public static void putOrUpdateForeignAlbum(PhotoAlbum album) throws SQLException{
-		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
-			album.id=getAlbumIdByActivityPubId(album.getActivityPubID());
-			if(album.systemType!=null){
-				// Make sure there's only ever one of each type of system album per owner.
-				// This query will not match any rows 99.9999% of the time, but if the other server is doing weird shit, it'll
-				// make the already-existing system album of this type into a regular one. Then it might eventually get deleted
-				// as part of a content collection sync.
-				new SQLQueryBuilder(conn)
-						.update("photo_albums")
-						.where((album.ownerID>0 ? "owner_user_id" : "owner_group_id")+"=? AND system_type=? AND id<>?", Math.abs(album.ownerID), album.systemType, album.id)
-						.value("system_type", null)
-						.executeNoResult();
-			}
-			if(album.id==0){
-				SQLQueryBuilder qb=new SQLQueryBuilder(conn)
-						.insertInto("photo_albums")
-						.value(album.ownerID>0 ? "owner_user_id" : "owner_group_id", Math.abs(album.ownerID))
-						.value("title", album.title)
-						.value("description", album.description)
-						.value("created_at", album.createdAt)
-						.value("updated_at", album.updatedAt)
-						.value("flags", Utils.serializeEnumSet(album.flags))
-						.value("ap_id", album.activityPubID.toASCIIString())
-						.value("ap_url", album.activityPubURL.toASCIIString())
-						.value("ap_comments", album.activityPubComments==null ? null : album.activityPubComments.toASCIIString())
-						.value("display_order", album.displayOrder)
-						.value("system_type", album.systemType)
-						.value("cover_id", album.coverID>0 ? album.coverID : null);
-				if(album.ownerID>0){
-					qb.value("privacy", Utils.gson.toJson(Map.of("view", album.viewPrivacy, "comment", album.commentPrivacy)));
-				}
-				album.id=qb.executeAndGetIDLong();
-			}else{
-				SQLQueryBuilder qb=new SQLQueryBuilder(conn)
-						.update("photo_albums")
-						.where("id=?", album.id)
-						.value("title", album.title)
-						.value("description", album.description)
-						.value("updated_at", album.updatedAt)
-						.value("display_order", album.displayOrder)
-						.value("cover_id", album.coverID>0 ? album.coverID : null)
-						.value("ap_url", album.activityPubURL.toASCIIString())
-						.value("ap_comments", album.activityPubComments==null ? null : album.activityPubComments.toASCIIString())
-						.value("system_type", album.systemType)
-						.value("flags", Utils.serializeEnumSet(album.flags));
-				if(album.ownerID>0){
-					qb.value("privacy", Utils.gson.toJson(Map.of("view", album.viewPrivacy, "comment", album.commentPrivacy)));
-				}
-				qb.executeNoResult();
-			}
-		}
-	}
-
-	public static long getPhotoIdByActivityPubId(URI activityPubID) throws SQLException{
-		long id=new SQLQueryBuilder()
-				.selectFrom("photos")
-				.columns("id")
-				.where("ap_id=?", activityPubID.toString())
-				.executeAndGetLong();
-		return id==-1 ? 0 : id;
-	}
-
-	public static Map<URI, Long> getPhotoIdsByActivityPubIds(Collection<URI> apIDs) throws SQLException{
-		return new SQLQueryBuilder()
-				.selectFrom("photos")
-				.columns("ap_id", "id")
-				.whereIn("ap_id", apIDs.stream().map(Object::toString).collect(Collectors.toSet()))
-				.executeAsStream(r->new Pair<>(URI.create(r.getString(1)), r.getLong(2)))
-				.collect(Collectors.toMap(Pair::first, Pair::second));
-	}
-
-	public static void putOrUpdateForeignPhoto(Photo photo) throws SQLException{
-		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
-			photo.id=getPhotoIdByActivityPubId(photo.getActivityPubID());
-			if(photo.id==0){
-				photo.id=new SQLQueryBuilder(conn)
-						.insertInto("photos")
-						.value("owner_id", photo.ownerID)
-						.value("author_id", photo.authorID)
-						.value("album_id", photo.albumID)
-						.value("remote_src", photo.remoteSrc)
-						.value("description", photo.description)
-						.value("created_at", photo.createdAt)
-						.value("metadata", Utils.gson.toJson(photo.metadata))
-						.value("ap_id", photo.apID.toString())
-						.value("display_order", photo.displayOrder)
-						.executeAndGetIDLong();
-				new SQLQueryBuilder(conn)
-						.update("photo_albums")
-						.valueExpr("updated_at", "CURRENT_TIMESTAMP()")
-						.valueExpr("num_photos", "num_photos+1")
-						.where("id=?", photo.albumID)
-						.executeNoResult();
-			}else{
-				long currentAlbum=new SQLQueryBuilder(conn)
-						.selectFrom("photos")
-						.columns("album_id")
-						.where("id=?", photo.id)
-						.executeAndGetLong();
-				new SQLQueryBuilder(conn)
-						.update("photos")
-						.value("album_id", photo.albumID)
-						.value("remote_src", photo.remoteSrc)
-						.value("description", photo.description)
-						.value("metadata", Utils.gson.toJson(photo.metadata))
-						.value("display_order", photo.displayOrder)
-						.where("id=?", photo.id)
-						.executeNoResult();
-				if(currentAlbum!=photo.albumID){
-					new SQLQueryBuilder(conn)
-							.update("photo_albums")
-							.valueExpr("updated_at", "CURRENT_TIMESTAMP()")
-							.valueExpr("num_photos", "num_photos-1")
-							.where("id=?", currentAlbum)
-							.executeNoResult();
-					new SQLQueryBuilder(conn)
-							.update("photo_albums")
-							.valueExpr("updated_at", "CURRENT_TIMESTAMP()")
-							.valueExpr("num_photos", "num_photos+1")
-							.where("id=?", photo.albumID)
-							.executeNoResult();
-				}
-			}
-		}
 	}
 
 	public static Set<Long> getAlbumPhotosNotInSet(long albumID, Set<Long> photoIDs) throws SQLException{
@@ -606,7 +448,7 @@ public class PhotoStorage{
 			new SQLQueryBuilder(conn)
 					.deleteFrom("likes")
 					.whereIn("object_id", ids)
-					.where("object_type=?", Like.ObjectType.PHOTO)
+					.where("object_type=?", LikeObjectType.PHOTO)
 					.executeNoResult();
 		}
 	}
@@ -662,7 +504,7 @@ public class PhotoStorage{
 		}
 	}
 
-	public static long createPhotoTag(long photoID, int placerID, int userID, @NotNull String name, boolean approved, @NotNull ImageRect rect, @Nullable URI apID) throws SQLException{
+	public static long createPhotoTag(long photoID, int placerID, int userID, @NotNull String name, boolean approved, @NotNull ImageRect rect) throws SQLException{
 		return new SQLQueryBuilder()
 				.insertInto("photo_tags")
 				.value("photo_id", photoID)
@@ -674,7 +516,6 @@ public class PhotoStorage{
 				.value("y1", rect.y1())
 				.value("x2", rect.x2())
 				.value("y2", rect.y2())
-				.value("ap_id", apID==null ? null : apID.toString())
 				.executeAndGetIDLong();
 	}
 
@@ -821,20 +662,6 @@ public class PhotoStorage{
 
 			return new PaginatedList<>(photos, total, offset, count);
 		}
-	}
-
-	public static Map<Long, URI> getPhotoActivityPubIDsByLocalIDs(Collection<Long> ids) throws SQLException{
-		return new SQLQueryBuilder()
-				.selectFrom("photos")
-				.columns("id", "ap_id")
-				.whereIn("id", ids)
-				.executeAsStream(res->new Pair<>(res.getLong("id"), res.getString("ap_id")))
-				.collect(Collectors.toMap(Pair::first, p->{
-					String apID=p.second();
-					if(apID==null)
-						return Config.localURI("/photos/"+XTEA.encodeObjectID(p.first(), ObfuscatedObjectIDType.PHOTO));
-					return URI.create(apID);
-				}));
 	}
 
 	public static long getPhotoIdByFileId(long fileID, int ownerID) throws SQLException{

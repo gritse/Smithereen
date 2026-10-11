@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.sql.SQLException;
@@ -17,12 +18,13 @@ import java.util.stream.Collectors;
 
 import smithereen.Config;
 import smithereen.Utils;
-import smithereen.activitypub.ActivityPub;
+import smithereen.http.ExtendedHttpClient;
 
 public class TopLevelDomainList{
 	private static final Logger LOG=LoggerFactory.getLogger(TopLevelDomainList.class);
 
 	private static Set<String> list=Collections.emptySet();
+	private static final HttpClient httpClient=ExtendedHttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build();
 	public static long lastUpdatedTime;
 
 	public static void updateIfNeeded(){
@@ -32,7 +34,7 @@ public class TopLevelDomainList{
 					HttpRequest req=HttpRequest.newBuilder(URI.create("https://data.iana.org/TLD/tlds-alpha-by-domain.txt"))
 							.timeout(Duration.ofSeconds(30))
 							.build();
-					HttpResponse<String> resp=ActivityPub.httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+					HttpResponse<String> resp=httpClient.send(req, HttpResponse.BodyHandlers.ofString());
 					if(resp.statusCode()/100==2){
 						String file=resp.body();
 						update(file);

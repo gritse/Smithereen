@@ -3,13 +3,13 @@
 	<div class="tipW"><div class="tip"></div></div>
 	<div class="post">
 		<div class="postAvaWrap">
-			<a href="{{ profileURL(realPost.authorID) }}"{{ profileRel(realPost.authorID) }}>{{ users[realPost.authorID] | pictureForAvatar('a', 39) }}</a>
+			<a href="{{ profileURL(realPost.authorID) }}">{{ users[realPost.authorID] | pictureForAvatar('a', 39) }}</a>
 		</div>
 		<div class="postContentWrap">
 			<div class="flR revealOnHover floatingPostActions">
 				<a href="{{ realPost.internalURL }}/confirmDelete" data-confirm-title="{{ L('delete_reply') }}" data-confirm-message="{{ L('delete_reply_confirm') }}" data-confirm-action="{{ realPost.internalURL }}/delete?elid=notificationsOwnReply_{{ randomID }}" class="flR postIconAction actionDelete" data-tooltip="{{ L('delete') }}" aria-label="{{ L('delete') }}"></a>
 			</div>
-			<a href="{{ profileURL(realPost.authorID) }}" class="authorName"{{ profileRel(realPost.authorID) }}>{{ users[realPost.authorID] | name }}</a>
+			<a href="{{ profileURL(realPost.authorID) }}" class="authorName">{{ users[realPost.authorID] | name }}</a>
 			<div>
 				{% include "wall_post_inner" with {'post': post, 'repostDepth': 0, 'repostParent': post, 'randomID': randomID} %}
 				{% set realPost=post.post %}{# because included template overwrote it #}

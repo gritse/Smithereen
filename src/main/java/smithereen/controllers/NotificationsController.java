@@ -27,7 +27,6 @@ import smithereen.exceptions.InternalServerErrorException;
 import smithereen.exceptions.ObjectNotFoundException;
 import smithereen.lang.Lang;
 import smithereen.model.Account;
-import smithereen.model.ForeignUser;
 import smithereen.model.Group;
 import smithereen.model.MailMessage;
 import smithereen.model.ObfuscatedObjectIDType;
@@ -142,15 +141,13 @@ public class NotificationsController{
 				}
 				OwnerAndAuthor oaa=context.getWallController().getContentAuthorAndOwner(post);
 				// For a reply to a local post, notify the parent post author about the reply
-				if(parent!=null && parent.isLocal() && parent.authorID!=post.authorID){
+				if(parent!=null && parent.authorID!=post.authorID){
 					User parentAuthor=context.getUsersController().getUserOrThrow(parent.authorID);
 					createNotification(parentAuthor, Notification.Type.REPLY, post, parent, oaa.author());
 				}
 
 				// Notify every mentioned local user, except the parent post author, if any
 				for(User user:context.getUsersController().getUsers(post.mentionedUserIDs).values()){
-					if(user instanceof ForeignUser)
-						continue;
 					if(parent!=null && user.id==parent.authorID)
 						continue;
 					if(user.id==post.authorID)
@@ -159,14 +156,14 @@ public class NotificationsController{
 				}
 
 				// Finally, if it's a wall post on a local user's wall, notify them
-				if(post.getReplyLevel()==0 && post.ownerID!=post.authorID && post.ownerID>0 && !(oaa.owner() instanceof ForeignUser)){
+				if(post.getReplyLevel()==0 && post.ownerID!=post.authorID && post.ownerID>0){
 					createNotification((User)oaa.owner(), Notification.Type.POST_OWN_WALL, post, null, oaa.author());
 				}
 
 				// If this is a quote-repost of a local post, notify its author
 				if(post.repostOf!=0){
 					Post firstRepost=context.getWallController().getPostOrThrow(post.repostOf);
-					if(firstRepost.isLocal() && post.authorID!=firstRepost.authorID){
+					if(post.authorID!=firstRepost.authorID){
 						User repostedPostAuthor=context.getUsersController().getUserOrThrow(firstRepost.authorID);
 						createNotification(repostedPostAuthor, Notification.Type.REPOST, firstRepost, post, oaa.author());
 					}
@@ -195,8 +192,6 @@ public class NotificationsController{
 
 				// Notify every mentioned local user, except the parent post author, if any
 				for(User user:context.getUsersController().getUsers(comment.mentionedUserIDs).values()){
-					if(user instanceof ForeignUser)
-						continue;
 					if(notifiedUsers.contains(user.id))
 						continue;
 					if(user.id==comment.authorID)
@@ -209,8 +204,6 @@ public class NotificationsController{
 	}
 
 	public void createNotification(User owner, Notification.Type type, OwnedContentObject object, OwnedContentObject relatedObject, User actor){
-		if(owner instanceof ForeignUser)
-			return;
 		if(context.getPrivacyController().isUserBlocked(actor, owner))
 			return;
 		try{

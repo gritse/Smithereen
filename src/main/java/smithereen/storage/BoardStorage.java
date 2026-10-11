@@ -82,57 +82,14 @@ public class BoardStorage{
 				.collect(Collectors.toMap(bt->bt.id, Function.identity()));
 	}
 
-	public static long createTopic(int groupID, String title, int authorID, String activityPubID, String activityPubURL) throws SQLException{
+	public static long createTopic(int groupID, String title, int authorID) throws SQLException{
 		return new SQLQueryBuilder()
 				.insertInto("board_topics")
 				.value("title", title)
 				.value("author_id", authorID)
 				.value("group_id", groupID)
 				.value("last_comment_author_id", authorID)
-				.value("ap_id", activityPubID)
-				.value("ap_url", activityPubURL)
 				.executeAndGetIDLong();
-	}
-
-	public static long getTopicIDByActivityPubID(URI apID) throws SQLException{
-		return new SQLQueryBuilder()
-				.selectFrom("board_topics")
-				.columns("id")
-				.where("ap_id=?", apID.toString())
-				.executeAndGetLong();
-	}
-
-	public static long putForeignTopic(BoardTopic topic) throws SQLException{
-		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
-			long id=new SQLQueryBuilder(conn)
-					.selectFrom("board_topics")
-					.columns("id")
-					.where("ap_id=?", topic.apID.toString())
-					.executeAndGetLong();
-			if(id!=-1)
-				return id;
-			id=new SQLQueryBuilder(conn)
-					.insertInto("board_topics")
-					.value("title", topic.title)
-					.value("author_id", topic.authorID)
-					.value("group_id", topic.groupID)
-					.value("last_comment_author_id", topic.authorID)
-					.value("ap_id", topic.getActivityPubID())
-					.value("ap_url", topic.getActivityPubURL())
-					.value("created_at", topic.createdAt)
-					.value("updated_at", topic.updatedAt)
-					.executeAndGetIDLong();
-			return id;
-		}
-	}
-
-	public static void setTopicActivityPubID(long id, URI apID, URI apURL) throws SQLException{
-		new SQLQueryBuilder()
-				.update("board_topics")
-				.where("id=? AND ap_id IS NULL", id)
-				.value("ap_id", apID.toString())
-				.value("ap_url", apURL==null ? apID.toString() : apURL.toString())
-				.executeNoResult();
 	}
 
 	public static void setTopicFirstCommentID(long topicID, long commentID) throws SQLException{

@@ -83,29 +83,6 @@ function initQSearch(){
 	});
 }
 
-function loadRemoteObject(url:string, opts:any={}):void{
-	LayerManager.getInstance().showBoxLoader();
-	if(!opts)
-		opts={};
-	ajaxPost("/system/loadRemoteObject", {uri: url, ...opts}, (resp:any)=>{
-		if(resp.success){
-			window.location.href=resp.success;
-		}else if(resp.error){
-			var content=resp.error as string;
-			if(resp.details){
-				content+=`<input type="checkbox" class="toggler" id="errorDetailsExpander"/>
-					<div class="marginBefore toggled">
-						<label for="errorDetailsExpander" class="link hideWhenOn">${lang("show_technical_details")} &raquo;</label>
-						<div class="showWhenOn">${(resp.details as string).escapeHTML()}</div>
-					</div>`;
-			}
-			new MessageBox(lang("error"), content, lang("close")).show();
-		}
-	}, ()=>{
-		new MessageBox(lang("error"), lang("network_error"), lang("close")).show();
-	});
-}
-
 if(mobile){
 	var searchBtn=ge("mainMenuSearchButton");
 	if(searchBtn){

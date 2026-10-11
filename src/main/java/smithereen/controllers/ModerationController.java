@@ -43,16 +43,11 @@ import smithereen.exceptions.ObjectNotFoundException;
 import smithereen.exceptions.UserActionNotAllowedException;
 import smithereen.exceptions.UserErrorException;
 import smithereen.model.Account;
-import smithereen.model.ActivityPubRepresentable;
-import smithereen.model.FederationRestriction;
-import smithereen.model.ForeignGroup;
-import smithereen.model.ForeignUser;
 import smithereen.model.Group;
 import smithereen.model.MailMessage;
 import smithereen.model.OtherSession;
 import smithereen.model.PaginatedList;
 import smithereen.model.Post;
-import smithereen.model.Server;
 import smithereen.model.ServerAnnouncement;
 import smithereen.model.ServerRule;
 import smithereen.model.SessionInfo;
@@ -88,7 +83,6 @@ import smithereen.model.reports.ReportedComment;
 import smithereen.model.viewmodel.AdminUserViewModel;
 import smithereen.model.viewmodel.UserRoleViewModel;
 import smithereen.storage.DatabaseUtils;
-import smithereen.storage.FederationStorage;
 import smithereen.storage.GroupStorage;
 import smithereen.storage.MediaStorage;
 import smithereen.storage.ModerationStorage;
@@ -109,7 +103,6 @@ public class ModerationController{
 
 	private final Object serverUpdateLock=new Object();
 	private final ApplicationContext context;
-	private final LruCache<String, Server> serversByDomainCache=new LruCache<>(500);
 	private List<EmailDomainBlockRule> emailDomainRules;
 	private List<IPBlockRule> ipRules;
 	private List<ServerRule> serverRules;
@@ -121,23 +114,11 @@ public class ModerationController{
 
 	// region Reporting
 
-	public int createViolationReport(User self, @Nullable Actor target, @Nullable List<ReportableContentObject> content, ViolationReport.Reason reason, Set<Integer> rules, String comment, boolean forward){
-		int reportID=createViolationReportInternal(self, target, content, reason, rules, comment, null);
-		if(forward && (target instanceof ForeignGroup || target instanceof ForeignUser)){
-			ArrayList<URI> objectIDs=new ArrayList<>();
-			objectIDs.add(target.activityPubID);
-			if(content instanceof ActivityPubRepresentable apr)
-				objectIDs.add(apr.getActivityPubID());
-			context.getActivityPubWorker().sendViolationReport(reportID, comment, objectIDs, target);
-		}
-		return reportID;
+	public int createViolationReport(User self, @Nullable Actor target, @Nullable List<ReportableContentObject> content, ViolationReport.Reason reason, Set<Integer> rules, String comment){
+		return createViolationReportInternal(self, target, content, reason, rules, comment);
 	}
 
-	public void createViolationReport(@Nullable User self, Actor target, @Nullable List<ReportableContentObject> content, String comment, String otherServerDomain){
-		createViolationReportInternal(self, target, content, ViolationReport.Reason.OTHER, null, comment, otherServerDomain);
-	}
-
-	private int createViolationReportInternal(@Nullable User self, @Nullable Actor target, @Nullable List<ReportableContentObject> content, ViolationReport.Reason reason, Set<Integer> rules, String comment, String otherServerDomain){
+	private int createViolationReportInternal(@Nullable User self, @Nullable Actor target, @Nullable List<ReportableContentObject> content, ViolationReport.Reason reason, Set<Integer> rules, String comment){
 		try{
 			int targetID;
 			if(target!=null){
@@ -174,7 +155,7 @@ public class ModerationController{
 			if(reason!=ViolationReport.Reason.SERVER_RULES)
 				rules=Set.of();
 
-			int id=ModerationStorage.createViolationReport(self!=null ? self.id : 0, targetID, comment, otherServerDomain, contentJson==null ? null : contentJson.toString(), !contentFileIDs.isEmpty(), reason, rules);
+			int id=ModerationStorage.createViolationReport(self!=null ? self.id : 0, targetID, comment, contentJson==null ? null : contentJson.toString(), !contentFileIDs.isEmpty(), reason, rules);
 			updateReportsCounter();
 			for(long fid: contentFileIDs){
 				// ownerID set to 0 because reports aren't owned by any particular actor
@@ -435,10 +416,9 @@ public class ModerationController{
 					if(report.targetID>0 && report.reason!=ViolationReport.Reason.SPAM){
 						try{
 							User user=context.getUsersController().getUserOrThrow(report.targetID);
-							if(!(user instanceof ForeignUser)){
-								Account account=context.getUsersController().getAccountForUser(user);
-								Mailer.getInstance().sendContentRemovalNotification(account, report.content, report.rules!=null ? getServerRulesByIDs(report.rules) : null);
-							}
+							Account account=context.getUsersController().getAccountForUser(user);
+							Mailer.getInstance().sendContentRemovalNotification(account, report.content, report.rules!=null ? getServerRulesByIDs(report.rules) : null);
+
 						}catch(ObjectNotFoundException ignore){}
 					}
 				}
@@ -533,116 +513,6 @@ public class ModerationController{
 	}
 
 	// endregion
-	// region Federation & federation restrictions
-
-	public PaginatedList<Server> getAllServers(int offset, int count, @Nullable Server.Availability availability, boolean onlyRestricted, String query){
-		try{
-			if(StringUtils.isNotEmpty(query)){
-				query=Utils.convertIdnToAsciiIfNeeded(query);
-			}
-			return FederationStorage.getAllServers(offset, count, availability, onlyRestricted, query);
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	public Server getServerByDomain(String domain){
-		domain=domain.toLowerCase();
-		Server server=serversByDomainCache.get(domain);
-		if(server!=null)
-			return server;
-
-		try{
-			server=FederationStorage.getServerByDomain(domain);
-			if(server==null)
-				throw new ObjectNotFoundException();
-			serversByDomainCache.put(domain, server);
-			return server;
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	public void setServerRestriction(Server server, FederationRestriction restriction){
-		try{
-			ModerationStorage.setServerRestriction(server.id(), restriction!=null ? Utils.gson.toJson(restriction) : null);
-			serversByDomainCache.remove(server.host());
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	public Server getOrAddServer(String domain){
-		domain=domain.toLowerCase();
-		Server server=serversByDomainCache.get(domain);
-		if(server!=null)
-			return server;
-
-		try{
-			synchronized(serverUpdateLock){
-				server=FederationStorage.getServerByDomain(domain);
-				if(server==null){
-					int id=FederationStorage.addServer(domain);
-					server=new Server(id, domain, null, null, Instant.now(), null, 0, true, null, EnumSet.noneOf(Server.Feature.class));
-				}
-			}
-			serversByDomainCache.put(domain, server);
-			return server;
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	public void addServerFeatures(String domain, EnumSet<Server.Feature> features){
-		Server server=getOrAddServer(domain);
-		if(server.features().containsAll(features))
-			return;
-		server.features().addAll(features);
-		try{
-			FederationStorage.setServerFeatures(server.id(), server.features());
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	public void resetServerAvailability(Server server){
-		try{
-			FederationStorage.setServerAvailability(server.id(), null, 0, true);
-			serversByDomainCache.remove(server.host());
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	public void recordFederationFailure(Server server){
-		try{
-			LocalDate today=LocalDate.now(ZoneId.systemDefault());
-			if(!today.equals(server.lastErrorDay())){
-				int dayCount=server.errorDayCount()+1;
-				FederationStorage.setServerAvailability(server.id(), today, dayCount, dayCount<7);
-				serversByDomainCache.remove(server.host());
-			}
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	public int getPeerDomainCount(){
-		try{
-			return UserStorage.getPeerDomainCount();
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	public List<String> getPeerDomains(){
-		try{
-			return UserStorage.getPeerDomains();
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
 	// endregion
 	// region Account roles
 
@@ -799,10 +669,10 @@ public class ModerationController{
 	// endregion
 	// region User management
 
-	public PaginatedList<AdminUserViewModel> getAllUsers(int offset, int count, String query, Boolean localOnly, String emailDomain, String ipSubnet, int roleID, UserBanStatus banStatus, boolean remoteSuspended){
+	public PaginatedList<AdminUserViewModel> getAllUsers(int offset, int count, String query, String emailDomain, String ipSubnet, int roleID, UserBanStatus banStatus){
 		try{
 			InetAddressRange subnet=ipSubnet!=null ? InetAddressRange.parse(ipSubnet) : null;
-			return ModerationStorage.getUsers(query, localOnly, emailDomain, subnet, roleID, banStatus, remoteSuspended, offset, count);
+			return ModerationStorage.getUsers(query, emailDomain, subnet, roleID, banStatus, offset, count);
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -891,15 +761,12 @@ public class ModerationController{
 					auditLogArgs.put("report", info.reportID());
 			}
 			ModerationStorage.createAuditLogEntry(self.id, AuditLogEntry.Action.BAN_USER, target.id, 0, null, auditLogArgs);
-			if(!(target instanceof ForeignUser) && (status==UserBanStatus.FROZEN || status==UserBanStatus.SUSPENDED) && info!=null){
+			if((status==UserBanStatus.FROZEN || status==UserBanStatus.SUSPENDED) && info!=null){
 				Account account=SessionStorage.getAccountByUserID(target.id);
 				ViolationReport report=info.reportID()!=0 ? getViolationReportByID(info.reportID(), true) : null;
 				if(report!=null && report.reason!=ViolationReport.Reason.SPAM){
 					Mailer.getInstance().sendAccountBanNotification(account, status, info, report, report==null || report.rules==null || report.rules.isEmpty() ? null : getServerRulesByIDs(report.rules));
 				}
-			}
-			if(!(target instanceof ForeignUser) && (status==UserBanStatus.SUSPENDED || prevStatus==UserBanStatus.SUSPENDED)){
-				context.getActivityPubWorker().sendUpdateUserActivity(target);
 			}
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
@@ -1413,9 +1280,6 @@ public class ModerationController{
 					auditLogArgs.put("report", info.reportID());
 			}
 			ModerationStorage.createAuditLogEntry(self.id, AuditLogEntry.Action.BAN_GROUP, -target.id, 0, null, auditLogArgs);
-			if(!(target instanceof ForeignGroup) && (status==GroupBanStatus.SUSPENDED || prevStatus==GroupBanStatus.SUSPENDED)){
-				context.getActivityPubWorker().sendUpdateGroupActivity(target);
-			}
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -1439,7 +1303,6 @@ public class ModerationController{
 				throw new UserErrorException("err_group_username_taken");
 			target.username=username;
 			target.url=Config.localURI(username);
-			context.getActivityPubWorker().sendUpdateGroupActivity(target);
 			ModerationStorage.createAuditLogEntry(self.id, AuditLogEntry.Action.CHANGE_GROUP_USERNAME, -target.id, 0, null, Map.of("old", oldUsername, "new", username));
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);

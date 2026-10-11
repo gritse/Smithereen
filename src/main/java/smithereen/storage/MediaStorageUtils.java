@@ -28,22 +28,17 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.Part;
 import smithereen.ApplicationContext;
 import smithereen.Utils;
-import smithereen.activitypub.ActivityPub;
-import smithereen.activitypub.SerializerContext;
 import smithereen.activitypub.objects.ActivityPubObject;
 import smithereen.activitypub.objects.Audio;
 import smithereen.activitypub.objects.LocalImage;
 import smithereen.exceptions.BadRequestException;
 import smithereen.exceptions.InternalServerErrorException;
 import smithereen.exceptions.UserActionNotAllowedException;
-import smithereen.id3tag.ID3v2TagParser;
 import smithereen.lang.Lang;
 import smithereen.libvips.VipsImage;
 import smithereen.model.Account;
 import smithereen.model.AttachmentHostContentObject;
-import smithereen.model.CachedRemoteImage;
 import smithereen.model.Group;
-import smithereen.model.NonCachedRemoteImage;
 import smithereen.model.ObfuscatedObjectIDType;
 import smithereen.model.SizedImage;
 import smithereen.model.User;
@@ -61,7 +56,6 @@ import smithereen.storage.sql.DatabaseConnection;
 import smithereen.storage.sql.DatabaseConnectionManager;
 import smithereen.util.BlurHash;
 import smithereen.util.JsonObjectBuilder;
-import smithereen.util.RangeRequestReader;
 import smithereen.util.XTEA;
 import spark.Request;
 import spark.Response;
@@ -117,66 +111,6 @@ public class MediaStorageUtils{
 		return file.length();
 	}
 
-	public static void fetchAudioMetadata(AttachmentHostContentObject obj, ApplicationContext ctx){
-		List<ActivityPubObject> oldAttachments=obj.getAttachments();
-		if(oldAttachments.isEmpty()) return;
-		List<ActivityPubObject> newAttachments=new ArrayList<>(oldAttachments);
-		for(int i=0;i<newAttachments.size();++i){
-			ActivityPubObject att=newAttachments.get(i);
-			Audio audio;
-			if(att instanceof Audio a){
-				audio=a;
-			}else if(att.mediaType!=null && att.mediaType.startsWith("audio/")){
-				audio=new Audio();
-				audio.url=att.url;
-				audio.name=att.name;
-				audio.mediaType=att.mediaType;
-				audio.duration=att.duration;
-			}else{
-				continue;
-			}
-
-			// We only support loading ID3 tags for MP3 files
-			if(!Objects.equals(audio.mediaType, "audio/mpeg")){
-				continue;
-			}
-
-			if(audio.url==null){
-				continue;
-			}
-
-			if(audio.title!=null || audio.artist!=null){
-				// The metadata is already present, no need to fetch it.
-				continue;
-			}
-
-			LOG.trace("Fetching ID3 tags for audio attachment {}", att.asRootActivityPubObject(ctx, (String)null));
-			var rrr = new RangeRequestReader(audio.url);
-
-			try{
-				if (!rrr.supportsRangeRequests()){
-					LOG.trace("The target server does not support range requests, skipping");
-					continue;
-				}
-				new ID3v2TagParser(rrr).parseInto(audio);
-				if(audio.title==null && audio.artist==null){
-					LOG.trace("No valid supported ID3 tags found");
-					continue;
-				}
-			}catch(IOException e){
-				LOG.trace("Could not fetch ID3 metadata", e);
-			}catch(InterruptedException ignored){
-				return;
-			}catch(Throwable e){
-				LOG.error("Error while parsing ID3 tags of {}", att.url, e);
-				throw e;
-			}
-
-			newAttachments.set(i, audio);
-		}
-		obj.setAttachments(newAttachments);
-	}
-
 	public static JsonObject serializeAttachment(ActivityPubObject att){
 		if(att instanceof LocalImage li){
 			JsonObjectBuilder jb=new JsonObjectBuilder()
@@ -192,7 +126,7 @@ public class MediaStorageUtils{
 				jb.add("name", li.name);
 			return jb.build();
 		}
-		return att.asActivityPubObject(null, new SerializerContext(null, (String)null));
+		return att.asActivityPubObject(null);
 	}
 
 	public static void fillAttachmentObjects(ApplicationContext context, User self, List<ActivityPubObject> attachObjects, List<String> attachmentIDs, Map<String, String> altTexts, int attachmentCount, int maxAttachments, boolean allowGraffiti) throws SQLException{
@@ -205,7 +139,7 @@ public class MediaStorageUtils{
 				long photoID=XTEA.decodeObjectID(idParts[1], ObfuscatedObjectIDType.PHOTO);
 				Photo photo=context.getPhotosController().getPhotoIgnoringPrivacy(photoID);
 				if(photo.localFileID==0){
-					LOG.debug("Not attaching photo {} to {}'s post because it's not local (AP ID {})", photoID, self.username, photo.apID);
+					LOG.debug("Not attaching photo {} to {}'s post because it has no local file", photoID, self.username);
 					continue;
 				}
 				try{
@@ -367,82 +301,4 @@ public class MediaStorageUtils{
 		}
 	}
 
-	public static LocalImage copyRemoteImageToLocalStorage(@NotNull User self, @NotNull SizedImage image) throws SQLException, IOException{
-		if(image instanceof LocalImage)
-			throw new IllegalArgumentException("The method name literally says it's for REMOTE images. Why would you pass a local image here?");
-		CachedRemoteImage cached=switch(image){
-			case CachedRemoteImage cri -> cri;
-			case NonCachedRemoteImage nri -> {
-				var item=(MediaCache.PhotoItem) MediaCache.getInstance().downloadAndPut(nri.getOriginalURI(), "image/jpeg", MediaCache.ItemType.PHOTO, false, 0, 0);
-				yield new CachedRemoteImage(item, nri.getOriginalURI());
-			}
-			default -> throw new IllegalStateException("Unexpected value: " + image);
-		};
-		File file=cached.getPathInMediaCache();
-		if(!file.exists())
-			throw new IllegalStateException("This file was supposed to exist, but somehow it doesn't");
-		String blurhash=calculateBlurHash(file);
-		MediaFileMetadata meta=new ImageMetadata(image.getOriginalDimensions().width, image.getOriginalDimensions().height, blurhash, null);
-		MediaFileRecord fileRecord=MediaStorage.createMediaFileRecord(MediaFileType.IMAGE_PHOTO, file.length(), self.id, meta);
-		LocalImage li=new LocalImage();
-		li.fileID=fileRecord.id().id();
-		li.fillIn(fileRecord);
-		MediaFileStorageDriver.getInstance().storeFile(file, fileRecord.id(), true);
-		return li;
-	}
-
-	public static LocalImage downloadRemoteImageForGroupLink(@NotNull Group group, @NotNull URI url) throws SQLException, IOException{
-		File tmp=File.createTempFile("SmithereenDownloadedImage", null);
-		VipsImage img=null;
-		try{
-			HttpRequest req=HttpRequest.newBuilder(url)
-					.timeout(Duration.ofSeconds(10))
-					.build();
-			HttpResponse<InputStream> resp;
-			try{
-				resp=ActivityPub.httpClient.send(req, HttpResponse.BodyHandlers.ofInputStream());
-			}catch(InterruptedException e){
-				throw new RuntimeException(e);
-			}
-			String contentType=resp.headers().firstValue("content-type").orElse(null);
-			if(StringUtils.isEmpty(contentType) || !contentType.startsWith("image/"))
-				throw new IOException("Content-Type isn't an image: "+contentType);
-			try(InputStream in=resp.body(); FileOutputStream out=new FileOutputStream(tmp)){
-				Utils.copyBytes(in, out, 5*1024*1024);
-			}
-			img=new VipsImage(tmp.getAbsolutePath());
-			if(img.hasAlpha()){
-				VipsImage flat=img.flatten(255, 255, 255);
-				img.release();
-				img=flat;
-			}
-			int w=img.getWidth(), h=img.getHeight();
-			if(w!=h){
-				VipsImage cropped;
-				if(w>h){
-					cropped=img.crop(w/2-h/2, 0, h, h);
-				}else{
-					cropped=img.crop(0, 0, w, w);
-				}
-				img.release();
-				img=cropped;
-			}
-
-			File resizedFile=File.createTempFile("SmithereenDownloadedResized", ".webp");
-			int[] outSize={0,0};
-			writeResizedWebpImage(img, 400, 0, 93, resizedFile, outSize);
-			MediaFileMetadata meta=new ImageMetadata(outSize[0], outSize[1], BlurHash.encode(img, 4, 4), null);
-			MediaFileRecord fileRecord=MediaStorage.createMediaFileRecord(MediaFileType.IMAGE_GROUP_LINK_THUMB, resizedFile.length(), -group.id, meta);
-			LocalImage li=new LocalImage();
-			li.fileID=fileRecord.id().id();
-			li.fillIn(fileRecord);
-			MediaFileStorageDriver.getInstance().storeFile(resizedFile, fileRecord.id(), false);
-			return li;
-		}finally{
-			if(tmp.exists())
-				tmp.delete();
-			if(img!=null)
-				img.release();
-		}
-	}
 }

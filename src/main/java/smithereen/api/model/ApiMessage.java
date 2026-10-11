@@ -34,7 +34,6 @@ public class ApiMessage{
 	public ApiMessage(MailMessage msg, ApiCallContext actx, Map<Long, Photo> photos, Map<Integer, Post> posts){
 		id=msg.getIdString();
 		rawID=msg.id;
-		apId=msg.getActivityPubID().toString();
 		from=msg.senderID;
 		to=new ArrayList<>(msg.to);
 		cc=new ArrayList<>(msg.cc);

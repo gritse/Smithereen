@@ -4,11 +4,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Element;
-import org.jsoup.nodes.Node;
-import org.jsoup.nodes.TextNode;
-import org.jsoup.select.Elements;
 
 import java.net.URI;
 import java.sql.ResultSet;
@@ -22,10 +17,8 @@ import java.util.Set;
 
 import smithereen.Config;
 import smithereen.Utils;
-import smithereen.activitypub.ParserContext;
 import smithereen.activitypub.objects.ActivityPubObject;
 import smithereen.activitypub.objects.Actor;
-import smithereen.activitypub.objects.activities.Like;
 import smithereen.model.notifications.Notification;
 import smithereen.model.reports.ReportableContentObject;
 import smithereen.model.reports.ReportableContentObjectID;
@@ -36,31 +29,19 @@ import smithereen.util.JsonArrayBuilder;
 import smithereen.util.JsonObjectBuilder;
 import smithereen.util.UriBuilder;
 
-public sealed class Post extends PostLikeObject implements ActivityPubRepresentable, ReportableContentObject, LikeableContentObject permits ReportedPost{
+public sealed class Post extends PostLikeObject implements ReportableContentObject, LikeableContentObject permits ReportedPost{
 	public int id;
 	public int repostOf;
 	public List<Integer> replyKey=List.of();
 	public Poll poll;
 
-	public boolean isReplyToUnknownPost;
 	public Privacy privacy=Privacy.PUBLIC;
 	public EnumSet<Flag> flags=EnumSet.noneOf(Flag.class);
 	public Action action;
-	public URI mastodonQuoteAuth;
 	public long appID;
-	public URI appApID;
 
 	@Override
 	public URI getActivityPubID(){
-		if(activityPubID!=null)
-			return activityPubID;
-		return UriBuilder.local().path("posts", String.valueOf(id)).build();
-	}
-
-	@Override
-	public URI getActivityPubURL(){
-		if(activityPubURL!=null)
-			return activityPubURL;
 		return UriBuilder.local().path("posts", String.valueOf(id)).build();
 	}
 
@@ -83,7 +64,7 @@ public sealed class Post extends PostLikeObject implements ActivityPubRepresenta
 
 		int pollID=res.getInt("poll_id");
 		if(!res.wasNull()){
-			poll=PostStorage.getPoll(pollID, activityPubID);
+			poll=PostStorage.getPoll(pollID);
 		}
 		privacy=Privacy.values()[res.getInt("privacy")];
 		Utils.deserializeEnumSet(flags, Flag.class, res.getLong("flags"));
@@ -94,9 +75,6 @@ public sealed class Post extends PostLikeObject implements ActivityPubRepresenta
 		String extraStr=res.getString("extra");
 		if(extraStr!=null){
 			JsonObject extra=JsonParser.parseString(extraStr).getAsJsonObject();
-			if(repostOf!=0 && !flags.contains(Flag.MASTODON_STYLE_REPOST) && extra.has("quoteAuth")){
-				mastodonQuoteAuth=URI.create(extra.get("quoteAuth").getAsString());
-			}
 			if(extra.has("app")){
 				appID=extra.get("app").getAsLong();
 			}
@@ -137,11 +115,6 @@ public sealed class Post extends PostLikeObject implements ActivityPubRepresenta
 	@Override
 	public long getObjectID(){
 		return id;
-	}
-
-	@Override
-	public NonCachedRemoteImage.Args getPhotoArgs(int index){
-		return new NonCachedRemoteImage.PostPhotoArgs(id, index);
 	}
 
 	@Override
@@ -190,7 +163,7 @@ public sealed class Post extends PostLikeObject implements ActivityPubRepresenta
 		if(jo.has("attachments")){
 			attachments=new ArrayList<>();
 			for(JsonElement jatt:jo.getAsJsonArray("attachments")){
-				attachments.add(ActivityPubObject.parse(jatt.getAsJsonObject(), ParserContext.LOCAL));
+				attachments.add(ActivityPubObject.parse(jatt.getAsJsonObject()));
 			}
 		}
 		if(jo.has("pollQuestion")){
@@ -212,51 +185,13 @@ public sealed class Post extends PostLikeObject implements ActivityPubRepresenta
 		return new ReportableContentObjectID(ReportableContentObjectType.POST, id);
 	}
 
-	public boolean isMastodonStyleRepost(){
-		return flags.contains(Flag.MASTODON_STYLE_REPOST);
-	}
-
 	public int getIDForInteractions(){
-		// Mastodon-style repost posts can't be interacted with
-		return flags.contains(Flag.MASTODON_STYLE_REPOST) ? repostOf : id;
-	}
-
-	public void setRepostedPost(Post post){
-		repostOf=post.id;
-
-		// Strip the RE: ... part from text
-		// <p>Quote repost test<br><br>RE: <a href="https://misskey.io/notes/86woec5nlm">https://misskey.io/notes/86woec5nlm</a></p>
-		Element root=Jsoup.parseBodyFragment(text).body();
-		// Try to find <span class="quote-inline"> first
-		Element quoteFallbackEl=root.selectFirst(".quote-inline");
-		if(quoteFallbackEl!=null){
-			quoteFallbackEl.remove();
-			text=root.html();
-		}else{
-			// Find and remove the <a>
-			Elements elements=root.getElementsByAttributeValue("href", post.getActivityPubURL().toString());
-			if(!elements.isEmpty()){
-				Element el=elements.getLast(); // Post may contain more than one link to this URL
-				// Find and remove the preceding "RE:"
-				if(el.previousSibling() instanceof TextNode tn && tn.text().trim().equalsIgnoreCase("RE:")){
-					Node possiblyBr=tn.previousSibling();
-					// Remove trailing <br>'s before "RE:"
-					while(possiblyBr instanceof Element el1 && el1.tagName().equalsIgnoreCase("br")){
-						Node brSibling=possiblyBr.previousSibling();
-						possiblyBr.remove();
-						possiblyBr=brSibling;
-					}
-					tn.remove();
-				}
-				el.remove();
-				text=root.html();
-			}
-		}
+		return id;
 	}
 
 	@Override
-	public Like.ObjectType getLikeObjectType(){
-		return Like.ObjectType.POST;
+	public LikeObjectType getLikeObjectType(){
+		return LikeObjectType.POST;
 	}
 
 	@Override
@@ -266,14 +201,8 @@ public sealed class Post extends PostLikeObject implements ActivityPubRepresenta
 
 	public String serializeExtraFields(){
 		JsonObjectBuilder jb=new JsonObjectBuilder();
-		if(mastodonQuoteAuth!=null){
-			jb.add("quoteAuth", mastodonQuoteAuth.toString());
-		}
 		if(appID!=0){
 			jb.add("app", appID);
-		}
-		if(appApID!=null){
-			jb.add("appAP", appApID.toString());
 		}
 		JsonObject o=jb.build();
 		return o.isEmpty() ? null : o.toString();
@@ -301,26 +230,15 @@ public sealed class Post extends PostLikeObject implements ActivityPubRepresenta
 
 	public enum Flag{
 		/**
-		 * This is an `Announce{Note}` repost that doesn't have its own comment thread and can't be interacted with.
-		 * All comments and interactions are delegated to the reposted post.
+		 * Reserved: was used for Mastodon-style reposts when federation existed. Kept so stored flag bits keep their meaning.
 		 */
-		MASTODON_STYLE_REPOST,
+		RESERVED_0,
 		/**
 		 * This is a comment (reply key not empty) on a wall-to-wall (owner id != author id) post.
 		 */
 		TOP_IS_WALL_TO_WALL,
-		/**
-		 * This post has a FEP-044f quote policy that is either public or followers-only, automatic or manual.
-		 * If this flag is set, when this post is reposted, a QuoteRequest activity will be sent to the author.
-		 * Smithereen doesn't actually ever restrict reposting -- rather, it opportunistically obtains quote authorization
-		 * so Smithereen's reposts display on Mastodon as quote posts.
-		 */
-		HAS_QUOTE_POLICY,
-		/**
-		 * Set in addition to HAS_QUOTE_POLICY if quoting is restricted to followers.
-		 * Causes a QuoteRequest to only be sent if the reposter follows the author, as an optimization.
-		 */
-		HAS_FOLLOWERS_QUOTE_POLICY,
+		RESERVED_2,
+		RESERVED_3,
 	}
 
 	public enum Action{

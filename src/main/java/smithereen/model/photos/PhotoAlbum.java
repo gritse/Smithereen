@@ -12,7 +12,6 @@ import java.util.Map;
 import smithereen.Utils;
 import smithereen.activitypub.objects.Actor;
 import smithereen.lang.Lang;
-import smithereen.model.ActivityPubRepresentable;
 import smithereen.model.Group;
 import smithereen.model.ObfuscatedObjectIDType;
 import smithereen.model.OwnedContentObject;
@@ -23,7 +22,7 @@ import smithereen.util.UriBuilder;
 import smithereen.util.XTEA;
 import spark.utils.StringUtils;
 
-public class PhotoAlbum implements ActivityPubRepresentable, OwnedContentObject{
+public class PhotoAlbum implements OwnedContentObject{
 	public long id;
 	public int ownerID;
 	public String title;
@@ -35,10 +34,6 @@ public class PhotoAlbum implements ActivityPubRepresentable, OwnedContentObject{
 	public long coverID;
 	public EnumSet<Flag> flags;
 	public int displayOrder;
-
-	public URI activityPubID;
-	public URI activityPubURL;
-	public URI activityPubComments;
 
 	public static PhotoAlbum fromResultSet(ResultSet res) throws SQLException{
 		PhotoAlbum a=new PhotoAlbum();
@@ -63,15 +58,6 @@ public class PhotoAlbum implements ActivityPubRepresentable, OwnedContentObject{
 		a.coverID=res.getLong("cover_id");
 		a.flags=EnumSet.noneOf(Flag.class);
 		Utils.deserializeEnumSet(a.flags, Flag.class, res.getLong("flags"));
-		String apID=res.getString("ap_id");
-		String apURL=res.getString("ap_url");
-		String apComments=res.getString("ap_comments");
-		if(apID!=null && apURL!=null){
-			a.activityPubID=URI.create(apID);
-			a.activityPubURL=URI.create(apURL);
-			if(apComments!=null)
-				a.activityPubComments=URI.create(apComments);
-		}
 		a.displayOrder=res.getInt("display_order");
 		return a;
 	}
@@ -88,10 +74,7 @@ public class PhotoAlbum implements ActivityPubRepresentable, OwnedContentObject{
 		return flags.contains(Flag.valueOf(flag));
 	}
 
-	@Override
 	public URI getActivityPubID(){
-		if(activityPubID!=null)
-			return activityPubID;
 		return UriBuilder.local().path("albums", getIdString()).build();
 	}
 

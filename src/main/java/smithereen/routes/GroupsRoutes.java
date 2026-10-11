@@ -40,7 +40,6 @@ import smithereen.lang.Lang;
 import smithereen.model.Account;
 import smithereen.model.ActorWithDescription;
 import smithereen.model.CommentViewType;
-import smithereen.model.ForeignGroup;
 import smithereen.model.Group;
 import smithereen.model.ObfuscatedObjectIDType;
 import smithereen.model.PaginatedList;
@@ -347,8 +346,6 @@ public class GroupsRoutes{
 
 		model.with("admins", admins.stream().map(a->Map.of("user", users.get(a.userID), "title", a.title==null ? "" : a.title)).toList());
 
-		if(group instanceof ForeignGroup)
-			model.with("noindex", true);
 
 		jsLangKey(req, "yes", "no", "delete_post", "delete_post_confirm", "delete_reply", "delete_reply_confirm", "remove_friend", "cancel", "delete");
 		Templates.addJsLangForNewPostForm(req);
@@ -377,7 +374,6 @@ public class GroupsRoutes{
 			model.with("metaTags", meta);
 			model.with("moreMetaTags", Map.of("description", descr));
 		}
-		model.with("activityPubURL", group.activityPubID);
 		model.addNavBarItem(l.get(switch(group.type){
 			case GROUP -> switch(group.accessType){
 				case OPEN -> "open_group";
@@ -407,7 +403,6 @@ public class GroupsRoutes{
 		try{
 			Photo photo=switch(group.getAvatarImage()){
 				case LocalImage li when li.photoID!=0 -> ctx.getPhotosController().getPhotoIgnoringPrivacy(li.photoID);
-				case Image img when img.photoApID!=null -> ctx.getObjectLinkResolver().resolveLocally(img.photoApID, Photo.class);
 				case null, default -> null;
 			};
 			if(photo!=null){
@@ -533,8 +528,6 @@ public class GroupsRoutes{
 		model.with("contentTemplate", "user_grid")
 				.with("title", group.name)
 				.with("emptyMessage", lang(req).get(group.isEvent() ? "event_no_members" : "group_no_members"));
-		if(group instanceof ForeignGroup)
-			model.with("noindex", true);
 		if(!isMobile(req)){
 			Map<Integer, Photo> userPhotos=ctx.getPhotosController().getUserProfilePhotos(users.values());
 			model.with("avatarPhotos", userPhotos)
@@ -557,8 +550,6 @@ public class GroupsRoutes{
 		Map<Integer, User> users=ctx.getUsersController().getUsers(admins.stream().map(a->a.userID).toList());
 		model.with("actors", admins.stream().map(a->new ActorWithDescription(users.get(a.userID), a.title)).collect(Collectors.toList()))
 				.with("emptyMessage", lang(req).get(group.isEvent() ? "event_no_admins" : "group_no_admins"));
-		if(group instanceof ForeignGroup)
-			model.with("noindex", true);
 		if(isAjax(req)){
 			return new WebDeltaResponse(resp).box(lang(req).get(group.isEvent() ? "event_organizers" : "group_admins"), model.renderContentBlock(), null, !isMobile(req));
 		}
@@ -675,46 +666,11 @@ public class GroupsRoutes{
 		Group.AdminLevel level=ctx.getGroupsController().getMemberAdminLevel(group, self.user);
 		RenderedTemplateResponse model=new RenderedTemplateResponse("group_edit_blocking", req).with("title", lang(req).get("settings_blocking"));
 		model.with("blockedUsers", ctx.getGroupsController().getBlockedUsers(group, 0, 1000).list);
-		model.with("blockedDomains", ctx.getGroupsController().getBlockedDomains(group));
 		model.with("group", group);
 		model.with("adminLevel", level);
 		jsLangKey(req, "unblock", "yes", "no", "cancel");
 		return model
 				.headerBack(group);
-	}
-
-	public static Object blockDomainForm(Request req, Response resp, Account self, ApplicationContext ctx){
-		Group group=getGroupAndRequireLevel(req, self, Group.AdminLevel.MODERATOR);
-		RenderedTemplateResponse model=new RenderedTemplateResponse("block_domain", req);
-		return wrapForm(req, resp, "block_domain", "/groups/"+group.id+"/blockDomain", lang(req).get("block_a_domain"), "block", model);
-	}
-
-	public static Object blockDomain(Request req, Response resp, Account self, ApplicationContext ctx){
-		Group group=getGroupAndRequireLevel(req, self, Group.AdminLevel.MODERATOR);
-		String domain=req.queryParams("domain");
-		ctx.getGroupsController().blockDomain(group, domain);
-		if(isAjax(req))
-			return new WebDeltaResponse(resp).refresh();
-		resp.redirect(back(req));
-		return "";
-	}
-
-	public static Object confirmUnblockDomain(Request req, Response resp, Account self, ApplicationContext ctx){
-		Group group=getGroupAndRequireLevel(req, self, Group.AdminLevel.MODERATOR);
-		String domain=req.queryParams("domain");
-		Lang l=lang(req);
-		String back=back(req);
-		return new RenderedTemplateResponse("generic_confirm", req).with("message", l.get("confirm_unblock_domain_X", Map.of("domain", domain))).with("formAction", "/groups/"+group.id+"/unblockDomain?domain="+domain+"_redir="+URLEncoder.encode(back)).with("back", back);
-	}
-
-	public static Object unblockDomain(Request req, Response resp, Account self, ApplicationContext ctx){
-		Group group=getGroupAndRequireLevel(req, self, Group.AdminLevel.MODERATOR);
-		String domain=req.queryParams("domain");
-		ctx.getGroupsController().unblockDomain(group, domain);
-		if(isAjax(req))
-			return new WebDeltaResponse(resp).refresh();
-		resp.redirect(back(req));
-		return "";
 	}
 
 	private static User getUserOrThrow(Request req){
@@ -1290,8 +1246,6 @@ public class GroupsRoutes{
 		model.with("links", links)
 				.with("users", ctx.getUsersController().getUsers(needUsers))
 				.with("groups", ctx.getGroupsController().getGroupsByIdAsMap(needGroups));
-		if(group instanceof ForeignGroup)
-			model.with("noindex", true);
 		if(isAjax(req)){
 			return new WebDeltaResponse(resp).box(lang(req).get("group_links"), model.renderContentBlock(), null, true);
 		}

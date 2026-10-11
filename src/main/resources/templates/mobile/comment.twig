@@ -12,10 +12,10 @@
 	{%if not(realPost.deleted)%}
 	{% if users[realPost.authorID].suspended %}
 	<div class="commentAvaWrap" id="postSuspendedAvaWrap{{ realPost.idString }}">
-		<a href="{{ profileURL(realPost.authorID) }}"{{ profileRel(realPost.authorID) }}><span class="ava avaPlaceholder sizeA suspended" style="width: 32px; height: 32px;"></span></a>
+		<a href="{{ profileURL(realPost.authorID) }}"><span class="ava avaPlaceholder sizeA suspended" style="width: 32px; height: 32px;"></span></a>
 	</div>
 	<div class="commentContentWrap" id="postSuspendedContentWrap{{ realPost.idString }}">
-		<div class="authorNameWrap"><a href="{{ profileURL(realPost.authorID) }}" class="authorName"{{ profileRel(realPost.authorID) }}>{{ L('suspended_user') }}</a></div>
+		<div class="authorNameWrap"><a href="{{ profileURL(realPost.authorID) }}" class="authorName">{{ L('suspended_user') }}</a></div>
 		<div class="postContent">
 			{%- if currentUser is not null -%}
 			{{ L('comment_suspended_warning_show', {}, {'show': {'href': 'javascript:void(0)', 'onclick': "ge('postSuspendedAvaWrap#{realPost.idString}').remove();ge('postSuspendedContentWrap#{realPost.idString}').remove();ge('postAvaWrap#{realPost.idString}').show();ge('postContentWrap#{realPost.idString}').show();"} }) }}
@@ -31,10 +31,10 @@
 	{% endif %}
 	{% if currentUser is not null or not users[realPost.authorID].suspended %}
 	<div class="commentAvaWrap"{% if users[realPost.authorID].suspended %} id="postAvaWrap{{ realPost.idString }}" style="display: none"{% endif %}>
-		<a href="{{ profileURL(realPost.authorID) }}"{{ profileRel(realPost.authorID) }}>{{ users[realPost.authorID] | pictureForAvatar('a', 32) }}</a>
+		<a href="{{ profileURL(realPost.authorID) }}">{{ users[realPost.authorID] | pictureForAvatar('a', 32) }}</a>
 	</div>
 	<div class="commentContentWrap"{% if users[realPost.authorID].suspended %} id="postContentWrap{{ realPost.idString }}" style="display: none"{% endif %}>
-		<div class="authorNameWrap"><a href="{{ profileURL(realPost.authorID) }}" class="authorName"{{ profileRel(realPost.authorID) }}>{{ users[realPost.authorID] | name }}</a></div>
+		<div class="authorNameWrap"><a href="{{ profileURL(realPost.authorID) }}" class="authorName">{{ users[realPost.authorID] | name }}</a></div>
 		{% if realPost.hasContentWarning %}
 			<input type="checkbox" id="postCW_{{ realPost.idString }}" class="commentCWCheckbox" style="display: none"/>
 		<div class="postCWWrap">
@@ -68,9 +68,6 @@
 					{% endif %}
 					{% if userPermissions is not null and userPermissions.canReport(realPost) %}
 						{% set _=options.add({'type': 'link', 'label': L('report').toString(), 'href': "/system/reportForm?type=comment&id=#{realPost.idString}", 'ajax': 'box'}) %}
-					{% endif %}
-					{% if not realPost.local %}
-						{% set _=options.add({'type': 'link', 'target': '_blank', 'href': realPost.activityPubURL, 'label': L('open_on_server_X', {'domain': realPost.activityPubURL.host}).toString()}) %}
 					{% endif %}
 
 					<a href="#" onclick="return showOptions(this)" data-options="{{ json(options) }}">{{ L('more_actions') }}</a>

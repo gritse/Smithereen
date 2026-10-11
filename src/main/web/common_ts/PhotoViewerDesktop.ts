@@ -248,13 +248,6 @@ class DesktopPhotoViewer extends BaseMediaViewerLayer{
 			this.imgLoader.hide();
 			this.updateSize();
 		});
-		this.imgEl.addEventListener("error", (ev)=>{
-			if(this.imgEl.currentSrc.indexOf("/system/downloadExternalMedia")!=-1){
-				this.failed=true;
-				if(!this.loading)
-					this.handleFailedLoad();
-			}
-		});
 		this.imgEl.addEventListener("progress", (ev)=>console.log(ev));
 		this.imgEl.addEventListener("click", (ev)=>{
 			if(this.total==1)

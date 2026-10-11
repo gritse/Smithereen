@@ -5,9 +5,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 
-import smithereen.ApplicationContext;
 import smithereen.Config;
-import smithereen.model.ActivityPubRepresentable;
 import smithereen.model.ObfuscatedObjectIDType;
 import smithereen.model.comments.CommentParentObjectID;
 import smithereen.model.comments.CommentableContentObject;
@@ -15,7 +13,7 @@ import smithereen.model.comments.CommentableObjectType;
 import smithereen.storage.DatabaseUtils;
 import smithereen.util.XTEA;
 
-public final class BoardTopic implements ActivityPubRepresentable, CommentableContentObject{
+public final class BoardTopic implements CommentableContentObject{
 	public long id;
 	public int groupID;
 	public String title;
@@ -26,8 +24,6 @@ public final class BoardTopic implements ActivityPubRepresentable, CommentableCo
 	public int lastCommentAuthorID;
 	public int numComments;
 	public boolean isClosed;
-	public URI apID;
-	public URI apURL;
 	public long firstCommentID;
 	public Instant pinnedAt;
 
@@ -45,13 +41,6 @@ public final class BoardTopic implements ActivityPubRepresentable, CommentableCo
 		t.lastCommentAuthorID=res.getInt("last_comment_author_id");
 		t.isClosed=res.getBoolean("is_closed");
 		t.firstCommentID=res.getLong("first_comment_id");
-		String apID=res.getString("ap_id");
-		if(apID!=null){
-			t.apID=URI.create(apID);
-			String apURL=res.getString("ap_url");
-			if(apURL!=null)
-				t.apURL=URI.create(apURL);
-		}
 		return t;
 	}
 
@@ -67,21 +56,7 @@ public final class BoardTopic implements ActivityPubRepresentable, CommentableCo
 
 	@Override
 	public URI getActivityPubID(){
-		if(apID!=null)
-			return apID;
 		return Config.localURI("/topics/"+XTEA.encodeObjectID(id, ObfuscatedObjectIDType.BOARD_TOPIC));
-	}
-
-	@Override
-	public URI getCommentCollectionID(ApplicationContext context){
-		return getActivityPubID();
-	}
-
-	@Override
-	public URI getActivityPubURL(){
-		if(apURL!=null)
-			return apURL;
-		return getActivityPubID();
 	}
 
 	@Override

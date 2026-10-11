@@ -35,9 +35,7 @@ import smithereen.ApplicationContext;
 import smithereen.Config;
 import smithereen.LruCache;
 import smithereen.Utils;
-import smithereen.activitypub.objects.LinkOrObject;
 import smithereen.activitypub.objects.LocalImage;
-import smithereen.activitypub.objects.activities.Join;
 import smithereen.exceptions.BadRequestException;
 import smithereen.exceptions.InternalServerErrorException;
 import smithereen.exceptions.ObjectNotFoundException;
@@ -46,8 +44,6 @@ import smithereen.exceptions.UserActionNotAllowedException;
 import smithereen.exceptions.UserErrorException;
 import smithereen.model.Account;
 import smithereen.model.ActorStatus;
-import smithereen.model.ForeignGroup;
-import smithereen.model.ForeignUser;
 import smithereen.model.Group;
 import smithereen.model.OwnedContentObject;
 import smithereen.model.PaginatedList;
@@ -69,7 +65,6 @@ import smithereen.model.notifications.EventReminder;
 import smithereen.model.notifications.RealtimeNotification;
 import smithereen.model.notifications.UserNotifications;
 import smithereen.storage.DatabaseUtils;
-import smithereen.storage.FederationStorage;
 import smithereen.storage.GroupStorage;
 import smithereen.storage.MediaStorage;
 import smithereen.storage.MediaStorageUtils;
@@ -120,7 +115,6 @@ public class GroupsController{
 				endTime=endTime.truncatedTo(ChronoUnit.MINUTES);
 			int id=GroupStorage.createGroup(name, description==null ? null : TextProcessor.preprocessPostHTML(description, null), description, admin.id, isEvent, startTime, endTime);
 			Group group=Objects.requireNonNull(GroupStorage.getById(id));
-			context.getActivityPubWorker().sendAddToGroupsCollectionActivity(admin, group, false);
 			context.getNewsfeedController().putFriendsFeedEntry(admin, group.id, isEvent ? NewsfeedEntry.Type.CREATE_EVENT : NewsfeedEntry.Type.CREATE_GROUP);
 			return group;
 		}catch(SQLException x){
@@ -168,8 +162,6 @@ public class GroupsController{
 
 	public Group getLocalGroupOrThrow(int id){
 		Group group=getGroupOrThrow(id);
-		if(group instanceof ForeignGroup)
-			throw new ObjectNotFoundException("err_group_not_found");
 		return group;
 	}
 
@@ -361,7 +353,6 @@ public class GroupsController{
 			if(needClearFeed)
 				context.getNewsfeedController().clearGroupsFeedCache();
 
-			context.getActivityPubWorker().sendUpdateGroupActivity(group);
 			if(group.isEvent()){
 				BackgroundTaskRunner.getInstance().submit(()->{
 					try{
@@ -418,33 +409,22 @@ public class GroupsController{
 					}
 				}
 
-				if(tentative && (!group.isEvent() || (group instanceof ForeignGroup fg && !fg.hasCapability(ForeignGroup.Capability.TENTATIVE_MEMBERSHIP))))
+				if(tentative && !group.isEvent())
 					throw new BadRequestException();
 
 				// change certain <-> tentative
 				if(state==Group.MembershipState.MEMBER || state==Group.MembershipState.TENTATIVE_MEMBER){
 					GroupStorage.updateUserEventDecision(group, user.id, tentative);
-					if(!forceAccepted && group instanceof ForeignGroup fg)
-						context.getActivityPubWorker().sendJoinGroupActivity(user, fg, tentative);
 					return;
 				}
 
-				GroupStorage.joinGroup(group, user.id, tentative, forceAccepted || (!(group instanceof ForeignGroup) && autoAccepted));
+				GroupStorage.joinGroup(group, user.id, tentative, forceAccepted || (autoAccepted));
 			}
 			context.getNotificationsController().sendRealtimeCountersUpdates(user);
 
 			if(!forceAccepted){
-				if(group instanceof ForeignGroup fg){
-					// Add{Group} will be sent upon receiving Accept{Follow}
-					context.getActivityPubWorker().sendJoinGroupActivity(user, fg, tentative);
-				}else{
-					if(group.accessType!=Group.AccessType.PRIVATE && autoAccepted){
-						context.getActivityPubWorker().sendAddToGroupsCollectionActivity(user, group, tentative);
-						context.getNewsfeedController().putFriendsFeedEntry(user, group.id, group.isEvent() ? NewsfeedEntry.Type.JOIN_EVENT : NewsfeedEntry.Type.JOIN_GROUP);
-					}
-					if(autoAccepted){
-						context.getActivityPubWorker().sendAddUserToGroupActivity(user, group, tentative);
-					}
+				if(group.accessType!=Group.AccessType.PRIVATE && autoAccepted){
+					context.getNewsfeedController().putFriendsFeedEntry(user, group.id, group.isEvent() ? NewsfeedEntry.Type.JOIN_EVENT : NewsfeedEntry.Type.JOIN_GROUP);
 				}
 			}
 			if(group.isEvent()){
@@ -469,14 +449,7 @@ public class GroupsController{
 				}
 				GroupStorage.leaveGroup(group, user.id, state==Group.MembershipState.TENTATIVE_MEMBER, state!=Group.MembershipState.REQUESTED);
 			}
-			if(group instanceof ForeignGroup fg && !(user instanceof ForeignUser)){
-				context.getActivityPubWorker().sendLeaveGroupActivity(user, fg);
-			}
-			if(!(group instanceof ForeignGroup)){
-				context.getActivityPubWorker().sendRemoveUserFromGroupActivity(user, group, state==Group.MembershipState.TENTATIVE_MEMBER);
-			}
-			if(group.accessType!=Group.AccessType.PRIVATE)
-				context.getActivityPubWorker().sendRemoveFromGroupsCollectionActivity(user, group);
+
 			context.getNewsfeedController().deleteFriendsFeedEntry(user, group.id, group.isEvent() ? NewsfeedEntry.Type.JOIN_EVENT : NewsfeedEntry.Type.JOIN_GROUP);
 			if(group.isEvent()){
 				eventRemindersCache.remove(user.id);
@@ -557,8 +530,6 @@ public class GroupsController{
 
 	public void inviteUserToGroup(@NotNull User self, @NotNull User who, @NotNull Group group){
 		try{
-			if(who instanceof ForeignUser && who.getGroupsURL()==null)
-				throw new UserErrorException("group_invite_unsupported");
 			// This also takes care of checking whether anyone has blocked anyone
 			// Two users can't be friends if one blocked the other
 			if(context.getFriendsController().getFriendshipStatus(self, who)!=FriendshipStatus.FRIENDS)
@@ -582,21 +553,17 @@ public class GroupsController{
 					case MEMBER, TENTATIVE_MEMBER -> throw new BadRequestException(group.isEvent() ? "invite_already_in_event" : "invite_already_in_group");
 					case INVITED -> throw new BadRequestException(group.isEvent() ? "invite_already_invited_event" : "invite_already_invited_group");
 				}
-				inviteID=GroupStorage.putInvitation(group.id, self.id, who.id, group.isEvent(), null);
+				inviteID=GroupStorage.putInvitation(group.id, self.id, who.id, group.isEvent());
 			}
-			if(!(who instanceof ForeignUser)){
-				UserNotifications notifications=NotificationsStorage.getNotificationsFromCache(who.id);
-				if(notifications!=null){
-					if(group.isEvent())
-						notifications.incNewEventInvitationsCount(1);
-					else
-						notifications.incNewGroupInvitationsCount(1);
-				}
-				context.getNotificationsController().sendRealtimeNotifications(who, "groupInvite"+group.id+"_"+self.id, group.isEvent() ? RealtimeNotification.Type.EVENT_INVITE : RealtimeNotification.Type.GROUP_INVITE, group, null, self);
+			UserNotifications notifications=NotificationsStorage.getNotificationsFromCache(who.id);
+			if(notifications!=null){
+				if(group.isEvent())
+					notifications.incNewEventInvitationsCount(1);
+				else
+					notifications.incNewGroupInvitationsCount(1);
 			}
-			if(group instanceof ForeignGroup || who instanceof ForeignUser){
-				context.getActivityPubWorker().sendGroupInvite(inviteID, self, group, who);
-			}
+			context.getNotificationsController().sendRealtimeNotifications(who, "groupInvite"+group.id+"_"+self.id, group.isEvent() ? RealtimeNotification.Type.EVENT_INVITE : RealtimeNotification.Type.GROUP_INVITE, group, null, self);
+
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -614,11 +581,7 @@ public class GroupsController{
 
 	public void declineInvitation(@NotNull User self, @NotNull Group group){
 		try{
-			Pair<Integer, URI> apID=GroupStorage.getInvitationInviterAndApID(self.id, group.id);
 			int localID=GroupStorage.deleteInvitation(self.id, group.id, group.isEvent());
-			if(localID>0 && group instanceof ForeignGroup fg && apID.second()!=null){
-				context.getActivityPubWorker().sendRejectGroupInvite(self, fg, localID, context.getUsersController().getUserOrThrow(apID.first()), apID.second());
-			}
 			context.getNotificationsController().sendRealtimeCountersUpdates(self);
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
@@ -645,12 +608,7 @@ public class GroupsController{
 				}
 				GroupStorage.leaveGroup(group, user.id, state==Group.MembershipState.TENTATIVE_MEMBER, state!=Group.MembershipState.REQUESTED);
 			}
-			if(user instanceof ForeignUser fu){
-				context.getActivityPubWorker().sendRejectFollowGroup(fu, group, state==Group.MembershipState.TENTATIVE_MEMBER);
-			}
-			if(!(group instanceof ForeignGroup)){
-				context.getActivityPubWorker().sendRemoveUserFromGroupActivity(user, group, state==Group.MembershipState.TENTATIVE_MEMBER);
-			}
+
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -683,18 +641,9 @@ public class GroupsController{
 					throw new BadRequestException("No join request from this user");
 				GroupStorage.setMemberAccepted(group, user.id, true);
 			}
-			if(user instanceof ForeignUser fu){
-				Join join=new Join(false);
-				join.object=new LinkOrObject(group.activityPubID);
-				join.actor=new LinkOrObject(user.activityPubID);
-				join.to=List.of(new LinkOrObject(group.activityPubID));
-				context.getActivityPubWorker().sendAcceptFollowActivity(fu, group, join);
-			}else{
-				context.getNotificationsController().sendRealtimeNotifications(user, "groupJoinAccept"+group.id, RealtimeNotification.Type.GROUP_REQUEST_ACCEPTED, null, null, group);
-			}
-			if(!(group instanceof ForeignGroup)){
-				context.getActivityPubWorker().sendAddUserToGroupActivity(user, group, false);
-			}
+			context.getNotificationsController().sendRealtimeNotifications(user, "groupJoinAccept"+group.id, RealtimeNotification.Type.GROUP_REQUEST_ACCEPTED, null, null, group);
+
+
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -712,35 +661,11 @@ public class GroupsController{
 	public void cancelInvitation(@NotNull User self, @NotNull Group group, @NotNull User user){
 		enforceUserAdminLevel(group, self, Group.AdminLevel.MODERATOR);
 		try{
-			Pair<Integer, URI> inviterAndID=GroupStorage.getInvitationInviterAndApID(user.id, group.id);
 			int id=GroupStorage.deleteInvitation(user.id, group.id, group.isEvent());
 			if(id<0)
 				throw new BadRequestException("This user was not invited to this group");
-			if(user instanceof ForeignUser fu){
-				URI apID=inviterAndID.second();
-				if(apID==null){
-					apID=Config.localURI("/activitypub/objects/groupInvites/"+id);
-				}
-				context.getActivityPubWorker().sendUndoGroupInvite(fu, group, id, context.getUsersController().getUserOrThrow(inviterAndID.first()), apID);
-			}else{
-				context.getNotificationsController().sendRealtimeCountersUpdates(user);
-			}
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
+			context.getNotificationsController().sendRealtimeCountersUpdates(user);
 
-	public Map<URI, Integer> getMembersByActivityPubIDs(@NotNull Group group, Collection<URI> query, boolean tentative){
-		try{
-			return GroupStorage.getMembersByActivityPubIDs(query, group.id, tentative);
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	public Map<URI, Integer> getUserGroupsByActivityPubIDs(@NotNull User user, Collection<URI> query){
-		try{
-			return GroupStorage.getUserGroupsByActivityPubIDs(query, user.id);
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -752,7 +677,6 @@ public class GroupsController{
 			GroupStorage.addOrUpdateGroupAdmin(group.id, user.id, title, level);
 			if(level!=null && oldLevel!=level)
 				ModerationStorage.createGroupActionLogEntry(group.id, GroupActionLogAction.CHANGE_MEMBER_ADMIN_LEVEL, self.id, Map.of("user", user.id, "old", oldLevel.toString(), "new", level.toString()));
-			context.getActivityPubWorker().sendUpdateGroupActivity(group);
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -765,7 +689,6 @@ public class GroupsController{
 				throw new UserActionNotAllowedException("Can't demote group owner");
 			GroupStorage.removeGroupAdmin(group.id, user.id);
 			ModerationStorage.createGroupActionLogEntry(group.id, GroupActionLogAction.CHANGE_MEMBER_ADMIN_LEVEL, self.id, Map.of("user", user.id, "old", oldLevel.toString(), "new", Group.AdminLevel.REGULAR.toString()));
-			context.getActivityPubWorker().sendUpdateGroupActivity(group);
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -774,7 +697,6 @@ public class GroupsController{
 	public void setAdminOrder(Group group, User user, int order){
 		try{
 			GroupStorage.setGroupAdminOrder(group.id, user.id, order);
-			context.getActivityPubWorker().sendUpdateGroupActivity(group);
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -788,42 +710,11 @@ public class GroupsController{
 		}
 	}
 
-	public List<String> getBlockedDomains(Group group){
-		try{
-			return GroupStorage.getBlockedDomains(group.id);
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	public void blockDomain(Group group, String domain){
-		try{
-			if(!domain.matches("^([a-zA-Z0-9-]+\\.)+[a-zA-Z0-9-]{2,}$"))
-				throw new UserErrorException("Invalid domain");
-			if(GroupStorage.isDomainBlocked(group.id, domain))
-				throw new UserErrorException("err_domain_already_blocked");
-			GroupStorage.blockDomain(group.id, domain);
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	public void unblockDomain(Group group, String domain){
-		try{
-			if(StringUtils.isNotEmpty(domain))
-				GroupStorage.unblockDomain(group.id, domain);
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
 	public void blockUser(Group group, User user){
 		try{
 			if(GroupStorage.getGroupMemberAdminLevel(group.id, user.id).isAtLeast(Group.AdminLevel.MODERATOR))
 				throw new UserErrorException("Can't block a group manager");
 			GroupStorage.blockUser(group.id, user.id);
-			if(user instanceof ForeignUser fu)
-				context.getActivityPubWorker().sendBlockActivity(group, fu);
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -832,8 +723,6 @@ public class GroupsController{
 	public void unblockUser(Group group, User user){
 		try{
 			GroupStorage.unblockUser(group.id, user.id);
-			if(user instanceof ForeignUser fu)
-				context.getActivityPubWorker().sendUndoBlockActivity(group, fu);
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -901,41 +790,21 @@ public class GroupsController{
 		}
 		try{
 			GroupStorage.updateProfileFields(group);
-			if(group instanceof ForeignGroup){
-				if(prev!=null)
-					FederationStorage.deleteFromApIdIndex(ObjectLinkResolver.ObjectType.GROUP_STATUS, group.id);
-				if(status!=null && status.apId()!=null)
-					FederationStorage.addToApIdIndex(status.apId(), ObjectLinkResolver.ObjectType.GROUP_STATUS, group.id);
-			}
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
-		}
-
-		if(!(group instanceof ForeignGroup)){
-			if(group.status!=null)
-				context.getActivityPubWorker().sendCreateStatusActivity(group, group.status);
-			else
-				context.getActivityPubWorker().sendClearStatusActivity(group, prev);
 		}
 
 		return status;
 	}
 
-	public LocalImage downloadImageForLink(Group group, URI url){
-		try{
-			return MediaStorageUtils.downloadRemoteImageForGroupLink(group, url);
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}catch(IOException x){
-			LOG.debug("Failed to download link image from {}", url, x);
-			return null;
-		}
-	}
-
 	public GroupLinkParseResult parseLink(URI url, User self, Group group){
 		ObjectLinkResolver.ObjectTypeAndID apObject;
+		if(!Config.isLocal(url)){
+			// External links are stored as-is; nothing is ever fetched from other servers
+			return new GroupLinkParseResult(null, url.getHost(), null, null);
+		}
 		try{
-			Object apObj=context.getObjectLinkResolver().resolveNative(url, Object.class, true, true, false, (JsonObject) null, false, true, true);
+			Object apObj=context.getObjectLinkResolver().resolveLocally(url, Object.class);
 			switch(apObj){
 				case OwnedContentObject oco -> context.getPrivacyController().enforceObjectPrivacy(self, oco);
 				case Group g -> context.getPrivacyController().enforceUserAccessToGroupProfile(self, g);
@@ -946,30 +815,6 @@ public class GroupsController{
 			if(apObject==null)
 				throw new UserErrorException("group_link_error");
 			return new GroupLinkParseResult(apObject, null, null, null);
-		}catch(ObjectNotFoundExceptionWithFallback x){
-			if(x.fallback instanceof Document htmlDoc){
-				String title=htmlDoc.title();
-				LocalImage image=null;
-				Element ogTitle=htmlDoc.selectFirst("meta[property=og:title]");
-				Element ogImage=htmlDoc.selectFirst("meta[property=og:image]");
-				if(ogTitle!=null){
-					String ogTitleValue=ogTitle.attr("content");
-					if(StringUtils.isNotEmpty(ogTitleValue))
-						title=ogTitleValue;
-				}
-				String imageURL=null;
-				if(ogImage!=null){
-					String _imageURL=ogImage.absUrl("content");
-					if(StringUtils.isNotEmpty(_imageURL))
-						imageURL=_imageURL;
-				}
-				if(StringUtils.isNotEmpty(imageURL)){
-					image=downloadImageForLink(group, URI.create(imageURL));
-				}
-				return new GroupLinkParseResult(null, title, imageURL, image);
-			}else{
-				throw new UserErrorException("group_link_error", x);
-			}
 		}catch(Exception x){
 			if(url.getHost()!=null && Config.isLocal(url)){ // Explicitly allow any local links
 				return new GroupLinkParseResult(null, url.toString(), null, null);
@@ -986,7 +831,6 @@ public class GroupsController{
 			if(imageID!=0){
 				MediaStorage.createMediaFileReference(imageID, id, MediaFileReferenceType.GROUP_LINK_THUMB, -group.id);
 			}
-			context.getActivityPubWorker().sendUpdateGroupActivity(group);
 			return id;
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
@@ -1021,7 +865,6 @@ public class GroupsController{
 	public void setLinkOrder(Group group, GroupLink link, int order){
 		try{
 			GroupStorage.setLinkOrder(group.id, link.id, order);
-			context.getActivityPubWorker().sendUpdateGroupActivity(group);
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -1030,7 +873,6 @@ public class GroupsController{
 	public void updateLinkTitle(Group group, GroupLink link, String title){
 		try{
 			GroupStorage.updateLinkTitle(group.id, link.id, title);
-			context.getActivityPubWorker().sendUpdateGroupActivity(group);
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -1039,7 +881,6 @@ public class GroupsController{
 	public void deleteLink(Group group, GroupLink link){
 		try{
 			GroupStorage.deleteLink(group.id, link.id);
-			context.getActivityPubWorker().sendUpdateGroupActivity(group);
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -1054,23 +895,13 @@ public class GroupsController{
 	}
 
 	public void deleteLocalGroup(User admin, Group group){
-		if(group instanceof ForeignGroup || (group.banStatus!=GroupBanStatus.SELF_DEACTIVATED && group.banStatus!=GroupBanStatus.SUSPENDED))
+		if((group.banStatus!=GroupBanStatus.SELF_DEACTIVATED && group.banStatus!=GroupBanStatus.SUSPENDED))
 			throw new IllegalArgumentException();
 		try{
-			context.getActivityPubWorker().sendGroupDeleteSelf(group);
 			GroupStorage.deleteGroup(group);
 			context.getNewsfeedController().clearGroupsFeedCache();
 			if(admin!=null)
 				ModerationStorage.createAuditLogEntry(admin.id, AuditLogEntry.Action.DELETE_GROUP, -group.id, 0, null, Map.of("name", group.name));
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	public void deleteForeignGroup(ForeignGroup group){
-		try{
-			GroupStorage.deleteGroup(group);
-			context.getNewsfeedController().clearGroupsFeedCache();
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}

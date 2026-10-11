@@ -33,7 +33,7 @@ public class AdminRolesRoutes{
 			model.with("permissions", List.of(UserRole.Permission.SUPERUSER));
 			model.with("disabledPermissions", EnumSet.of(UserRole.Permission.SUPERUSER));
 		}else{
-			model.with("permissions", Arrays.stream(UserRole.Permission.values()).filter(p->p!=UserRole.Permission.VISIBLE_IN_STAFF && (myRole.permissions().contains(UserRole.Permission.SUPERUSER) || myRole.permissions().contains(p))).toList());
+			model.with("permissions", Arrays.stream(UserRole.Permission.values()).filter(p->p!=UserRole.Permission.VISIBLE_IN_STAFF && p!=UserRole.Permission.MANAGE_FEDERATION && p!=UserRole.Permission.MANAGE_FASPS && (myRole.permissions().contains(UserRole.Permission.SUPERUSER) || myRole.permissions().contains(p))).toList());
 			if(role.id()==myRole.id())
 				model.with("disabledPermissions", EnumSet.allOf(UserRole.Permission.class));
 			else
@@ -87,7 +87,7 @@ public class AdminRolesRoutes{
 		UserRole myRole=info.permissions.role;
 		RenderedTemplateResponse model=new RenderedTemplateResponse("admin_edit_role", req);
 		model.pageTitle(lang(req).get("admin_create_role_title"));
-		model.with("permissions", Arrays.stream(UserRole.Permission.values()).filter(p->p!=UserRole.Permission.VISIBLE_IN_STAFF && (myRole.permissions().contains(UserRole.Permission.SUPERUSER) || myRole.permissions().contains(p))).toList());
+		model.with("permissions", Arrays.stream(UserRole.Permission.values()).filter(p->p!=UserRole.Permission.VISIBLE_IN_STAFF && p!=UserRole.Permission.MANAGE_FEDERATION && p!=UserRole.Permission.MANAGE_FASPS && (myRole.permissions().contains(UserRole.Permission.SUPERUSER) || myRole.permissions().contains(p))).toList());
 		model.with("disabledPermissions", EnumSet.noneOf(UserRole.Permission.class));
 		model.with("numDaysUntilDeletion", UserBanInfo.ACCOUNT_DELETION_DAYS);
 		if(info.permissions.hasPermission(UserRole.Permission.VISIBLE_IN_STAFF))
@@ -113,8 +113,7 @@ public class AdminRolesRoutes{
 		RenderedTemplateResponse model=new RenderedTemplateResponse("admin_roles", req)
 				.pageTitle(lang(req).get("admin_roles"))
 				.with("toolbarTitle", lang(req).get("menu_admin"))
-				.with("roles", roles)
-				.with("unconfirmedFaspRequests", ctx.getFaspController().getUnconfirmedProviderCount());
+				.with("roles", roles);
 		String msg=req.session().attribute("adminRolesMessage");
 		if(StringUtils.isNotEmpty(msg)){
 			req.session().removeAttribute("adminRolesMessage");

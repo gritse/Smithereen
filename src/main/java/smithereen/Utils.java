@@ -68,7 +68,6 @@ import smithereen.exceptions.UserErrorException;
 import smithereen.lang.Lang;
 import smithereen.model.Account;
 import smithereen.model.CaptchaInfo;
-import smithereen.model.ForeignUser;
 import smithereen.model.Group;
 import smithereen.model.SessionInfo;
 import smithereen.model.StatsPoint;
@@ -87,7 +86,6 @@ import smithereen.util.InstantMillisJsonAdapter;
 import smithereen.util.JsonArrayBuilder;
 import smithereen.util.JsonObjectBuilder;
 import smithereen.util.LocaleJsonAdapter;
-import smithereen.util.PublicSuffixList;
 import smithereen.util.TimeZoneJsonAdapter;
 import smithereen.util.UriBuilder;
 import spark.Request;
@@ -231,8 +229,6 @@ public class Utils{
 			msg+="<br/><br/>"+TextProcessor.escapeHTML(msgExtra);
 		if(isAjax(req)){
 			return new WebDeltaResponse(resp).messageBox(l.get("error"), msg, l.get("close")).json();
-		}else if(isActivityPub(req)){
-			return msg;
 		}
 		return new RenderedTemplateResponse("generic_error", req).with("error", msg).with("back", back(req)).with("title", l.get("error")).renderToString();
 	}
@@ -569,14 +565,6 @@ public class Utils{
 		return req.attribute("mobile")!=null;
 	}
 
-	public static boolean isActivityPub(Request req){
-		String accept=req.headers("accept");
-		if(StringUtils.isEmpty(accept))
-			return false;
-		String matched=MimeParse.bestMatch(Set.of("application/activity+json", "application/ld+json", ""), accept);
-		return StringUtils.isNotEmpty(matched);
-	}
-
 	public static boolean isMobileUserAgent(String ua){
 		ua=ua.toLowerCase();
 		return ua.matches("(?i).*((android|bb\\d+|meego).+mobile|avantgo|bada\\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od|ad)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\\.(browser|link)|vodafone|wap|windows ce|xda|xiino).*")
@@ -585,13 +573,9 @@ public class Utils{
 
 	public static void ensureUserNotBlocked(User self, Actor target) throws SQLException{
 		if(target instanceof User user){
-			if(self instanceof ForeignUser && UserStorage.isDomainBlocked(user.id, self.domain))
-				throw new UserActionNotAllowedException();
 			if(UserStorage.isUserBlocked(user.id, self.id))
 				throw new UserActionNotAllowedException();
 		}else if(target instanceof Group group){
-			if(self instanceof ForeignUser && GroupStorage.isDomainBlocked(group.id, self.domain))
-				throw new UserActionNotAllowedException();
 			if(GroupStorage.isUserBlocked(group.id, self.id))
 				throw new UserActionNotAllowedException();
 		}
@@ -1041,12 +1025,6 @@ public class Utils{
 
 	public static String decodeFourCC(int code){
 		return new String(new char[]{(char)((code >> 24) & 0xFF), (char)((code >> 16) & 0xFF), (char)((code >> 8) & 0xFF), (char)(code & 0xFF)});
-	}
-
-	public static boolean uriHostMatches(URI a, URI b){
-		if(a.getHost()==null || b.getHost()==null)
-			return false;
-		return a.getHost().equalsIgnoreCase(b.getHost()) || PublicSuffixList.isSameRegisteredDomain(a.getHost(), b.getHost());
 	}
 
 	public static void addFriendLists(User self, Lang l, ApplicationContext ctx, RenderedTemplateResponse model){

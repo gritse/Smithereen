@@ -38,7 +38,7 @@ public class ApiPhotoAlbum{
 	public ApiPhotoAlbum(PhotoAlbum pa, ApiCallContext actx, Actor owner, Map<Long, Photo> photos){
 		id=pa.getIdString();
 		apId=pa.getActivityPubID().toString();
-		url=pa.getActivityPubURL().toString();
+		url=pa.getActivityPubID().toString();
 		ownerId=pa.getOwnerID();
 		isSystem=pa.systemType!=null;
 		if(pa.systemType==null)

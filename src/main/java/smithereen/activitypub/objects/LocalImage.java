@@ -7,13 +7,9 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.net.URI;
-import java.util.Base64;
 
 import smithereen.Config;
 import smithereen.Utils;
-import smithereen.activitypub.ParserContext;
-import smithereen.activitypub.SerializerContext;
-import smithereen.controllers.UserDataExportWorker;
 import smithereen.model.ObfuscatedObjectIDType;
 import smithereen.model.SizedImage;
 import smithereen.model.media.MediaFileRecord;
@@ -43,13 +39,12 @@ public non-sealed class LocalImage extends Image implements SizedImage{
 	}
 
 	@Override
-	protected ActivityPubObject parseActivityPubObject(JsonObject obj, ParserContext parserContext){
-		super.parseActivityPubObject(obj, parserContext);
+	protected ActivityPubObject parseActivityPubObject(JsonObject obj){
+		super.parseActivityPubObject(obj);
 		if(obj.has("_fileID"))
 			fileID=obj.get("_fileID").getAsLong();
 		if(obj.has("_photoID")){
 			photoID=obj.get("_photoID").getAsLong();
-			photoApID=Config.localURI("/photos/"+XTEA.encodeObjectID(photoID, ObfuscatedObjectIDType.PHOTO));
 		}
 		if(obj.has("_rot")){
 			rotation=Rotation.valueOf(obj.get("_rot").getAsInt());
@@ -62,8 +57,8 @@ public non-sealed class LocalImage extends Image implements SizedImage{
 	}
 
 	@Override
-	public JsonObject asActivityPubObject(JsonObject obj, SerializerContext serializerContext){
-		obj=super.asActivityPubObject(obj, serializerContext);
+	public JsonObject asActivityPubObject(JsonObject obj){
+		obj=super.asActivityPubObject(obj);
 		if(fileRecord==null){
 			LOG.warn("Tried to serialize a LocalImage with fileRecord not set (file ID {})", fileID);
 			return obj;
@@ -94,7 +89,7 @@ public non-sealed class LocalImage extends Image implements SizedImage{
 					.crop(profileCrop.x1(), profileCrop.y1(), profileCrop.getWidth(), profileCrop.getHeight())
 					.build();
 			im.mediaType="image/jpeg";
-			obj.add("image", im.asActivityPubObject(null, serializerContext));
+			obj.add("image", im.asActivityPubObject(null));
 		}else if(cropRegion!=null){
 			int x=Math.round(cropRegion[0]*width);
 			int y=Math.round(cropRegion[1]*height);
@@ -107,17 +102,9 @@ public non-sealed class LocalImage extends Image implements SizedImage{
 					.format(SizedImage.Format.JPEG)
 					.build();
 			im.mediaType="image/jpeg";
-			obj.add("image", im.asActivityPubObject(null, serializerContext));
+			obj.add("image", im.asActivityPubObject(null));
 		}
-		if(serializerContext instanceof UserDataExportWorker.ExportSerializerContext esc){
-			String fileName=Base64.getUrlEncoder().withoutPadding().encodeToString(fileRecord.id().randomID())+"_"+
-					Base64.getUrlEncoder().withoutPadding().encodeToString(Utils.packLong(XTEA.obfuscateObjectID(fileID, ObfuscatedObjectIDType.MEDIA_FILE)))+
-					"."+fileRecord.id().type().getFileExtension();
-			obj.addProperty("url", "media/"+fileName);
-			esc.filesToInclude.add(fileRecord.id());
-		}else{
-			obj.addProperty("url", builder.build().toString());
-		}
+		obj.addProperty("url", builder.build().toString());
 		obj.addProperty("width", croppedWidth);
 		obj.addProperty("height", croppedHeight);
 		if(mediaType==null)

@@ -9,7 +9,7 @@
 			{{ form.textInput('name', L('apps_app_name'), app is null ? '' : app.name, {'required': true, 'maxlength': 50}) }}
 			{{ form.textArea('description', L('apps_app_description'), app is null ? '' : app.description) }}
 			{% if app is not null %}
-			{{ form.labeledText(L('apps_app_id'), app.activityPubID, {'explanation': L('apps_app_id_explanation')}) }}
+			{{ form.labeledText(L('apps_app_id'), app.id, {'explanation': L('apps_app_id_explanation')}) }}
 			{% endif %}
 			{{ form.textArea('redirect_urls', L('apps_redirect_urls'), app is null ? '' : app.allowedRedirectURIs | join("
 "), {'explanation': L('apps_redirect_urls_explanation')}) }}

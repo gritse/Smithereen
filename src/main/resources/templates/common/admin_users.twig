@@ -54,10 +54,6 @@
 		{% endfor %}
 		</div>
 		<div class="filters">
-			<a class="filterItem{{ location is null ? ' selected' : '' }}" href="{{ addQueryParams(urlPath, {'location': null, 'offset': null}) }}" data-ajax>{{ L('admin_user_location_any') }}</a>
-			<a class="filterItem{{ location=='local' ? ' selected' : '' }}" href="{{ addQueryParams(urlPath, {'location': 'local', 'offset': null}) }}" data-ajax>{{ L('admin_user_location_local') }}</a>
-			<a class="filterItem{{ location=='remote' ? ' selected' : '' }}" href="{{ addQueryParams(urlPath, {'location': 'remote', 'offset': null}) }}" data-ajax>{{ L('admin_user_location_remote') }}</a>
-			<hr/>
 			<div class="filterFieldBlock">
 				<label for="emailDomain">{{ L('admin_user_email_domain') }}</label>
 				<input type="text" name="emailDomain" id="emailDomain" value="{{ emailDomain }}" placeholder="gmail.com"/>
@@ -84,7 +80,6 @@
 					<option value="SUSPENDED"{{ banStatus=='SUSPENDED' ? ' selected' : '' }}>{{ L('admin_users_ban_status_suspended') }}</option>
 					<option value="HIDDEN"{{ banStatus=='HIDDEN' ? ' selected' : '' }}>{{ L('admin_users_ban_status_hidden') }}</option>
 					<option value="SELF_DEACTIVATED"{{ banStatus=='SELF_DEACTIVATED' ? ' selected' : '' }}>{{ L('admin_users_ban_status_self_deactivated') }}</option>
-					<option value="REMOTE_SUSPENDED"{{ banStatus=='REMOTE_SUSPENDED' ? ' selected' : '' }}>{{ L('admin_users_ban_status_remote_suspended') }}</option>
 				</select>
 			</div>
 		</div>

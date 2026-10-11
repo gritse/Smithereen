@@ -1,6 +1,5 @@
 package smithereen.model;
 
-import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -13,26 +12,16 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 import smithereen.Config;
 import smithereen.Utils;
-import smithereen.activitypub.ActivityPub;
-import smithereen.activitypub.SerializerContext;
 import smithereen.activitypub.objects.Actor;
-import smithereen.activitypub.objects.Event;
-import smithereen.activitypub.objects.LocalImage;
 import smithereen.activitypub.objects.PropertyValue;
-import smithereen.jsonld.JLD;
-import smithereen.model.groups.GroupAdmin;
 import smithereen.model.groups.GroupBanInfo;
 import smithereen.model.groups.GroupBanStatus;
 import smithereen.model.groups.GroupFeatureState;
-import smithereen.model.groups.GroupLink;
 import smithereen.storage.DatabaseUtils;
 import smithereen.text.TextProcessor;
-import smithereen.util.JsonArrayBuilder;
-import smithereen.util.JsonObjectBuilder;
 import smithereen.util.TranslatableEnum;
 import spark.utils.StringUtils;
 
@@ -68,15 +57,8 @@ public class Group extends Actor{
 	@Nullable
 	public GroupBanInfo banInfo;
 
-	@NotNull
-	public List<GroupAdmin> adminsForActivityPub=List.of();
-
 	public static Group fromResultSet(ResultSet res) throws SQLException{
-		Group g;
-		if(StringUtils.isNotEmpty(res.getString("domain")))
-			g=new ForeignGroup();
-		else
-			g=new Group();
+		Group g=new Group();
 		g.fillFromResultSet(res);
 		return g;
 	}
@@ -94,25 +76,6 @@ public class Group extends Actor{
 	@Override
 	public int getOwnerID(){
 		return -id;
-	}
-
-	@Override
-	public URI getWallURL(){
-		return Config.localURI("/groups/"+id+"/wall");
-	}
-
-	@Override
-	public URI getWallCommentsURL(){
-		return Config.localURI("/groups/"+id+"/wallComments");
-	}
-
-	@Override
-	public URI getPhotoAlbumsURL(){
-		return Config.localURI("/groups/"+id+"/albums");
-	}
-
-	public URI getBoardTopicsURL(){
-		return Config.localURI("/group/"+id+"/topics");
 	}
 
 	@Override
@@ -141,11 +104,6 @@ public class Group extends Actor{
 	}
 
 	@Override
-	protected boolean canFollowOtherActors(){
-		return false;
-	}
-
-	@Override
 	protected void fillFromResultSet(ResultSet res) throws SQLException{
 		super.fillFromResultSet(res);
 		id=res.getInt("id");
@@ -159,13 +117,6 @@ public class Group extends Actor{
 		eventEndTime=DatabaseUtils.getInstant(res, "event_end_time");
 		type=Type.values()[res.getInt("type")];
 		accessType=AccessType.values()[res.getInt("access_type")];
-
-		if(type==Type.EVENT){
-			Event event=new Event();
-			event.startTime=eventStartTime;
-			event.endTime=eventEndTime;
-			attachment=new ArrayList<>(List.of(event));
-		}
 
 		String fields=res.getString("profile_fields");
 		if(fields!=null){
@@ -201,110 +152,8 @@ public class Group extends Actor{
 		}
 	}
 
-	@Override
-	public JsonObject asActivityPubObject(JsonObject obj, SerializerContext serializerContext){
-		obj=super.asActivityPubObject(obj, serializerContext);
-
-		String groupURL=activityPubID.toString();
-		serializerContext.addSmAlias("displayOrder");
-		JsonArray ar=new JsonArray();
-		Map<Integer, User> users=serializerContext.appContext.getUsersController().getUsers(adminsForActivityPub.stream().map(a->a.userID).toList());
-		for(GroupAdmin admin:adminsForActivityPub){
-			JsonObject ja=new JsonObject();
-			ja.addProperty("type", "Person");
-			ja.addProperty("id", users.get(admin.userID).activityPubID.toString());
-			ja.addProperty("displayOrder", admin.displayOrder);
-			if(StringUtils.isNotEmpty(admin.title))
-				ja.addProperty("title", admin.title);
-			ar.add(ja);
-		}
-		obj.add("attributedTo", ar);
-
-		obj.addProperty("members", groupURL+"/members");
-		serializerContext.addType("members", "sm:members", "@id");
-		JsonObject capabilities=new JsonObject();
-
-		if(type==Type.EVENT){
-			obj.addProperty("tentativeMembers", groupURL+"/tentativeMembers");
-			serializerContext.addType("tentativeMembers", "sm:tentativeMembers", "@id");
-			capabilities.addProperty("tentativeMembership", true);
-			serializerContext.addAlias("tentativeMembership", "sm:tentativeMembership");
-		}
-
-		serializerContext.addAlias("accessType", "sm:accessType");
-		obj.addProperty("accessType", accessType.toString().toLowerCase());
-		serializerContext.addAlias("manuallyApprovesFollowers", "as:manuallyApprovesFollowers");
-		obj.addProperty("manuallyApprovesFollowers", accessType!=AccessType.OPEN);
-
-		capabilities.addProperty("acceptsJoins", true);
-		obj.add("capabilities", capabilities);
-		serializerContext.addAlias("capabilities", "litepub:capabilities");
-		serializerContext.addAlias("acceptsJoins", "litepub:acceptsJoins");
-		serializerContext.addAlias("litepub", JLD.LITEPUB);
-		serializerContext.addAlias("vcard", JLD.VCARD);
-
-		JsonObject endpoints=obj.getAsJsonObject("endpoints");
-		if(accessType!=AccessType.OPEN){
-			endpoints.addProperty("actorToken", groupURL+"/actorToken");
-			serializerContext.addAlias("actorToken", "sm:actorToken");
-		}
-
-		serializerContext.addSmIdType("photoAlbums");
-		obj.addProperty("photoAlbums", getPhotoAlbumsURL().toString());
-
-		serializerContext.addSmAlias("featureState");
-		serializerContext.addSmIdType("board");
-		obj.add("featureState", new JsonObjectBuilder()
-				.add("wall", wallState.asActivityPubValue())
-				.add("photoAlbums", photosState.asActivityPubValue())
-				.add("board", boardState.asActivityPubValue())
-				.build());
-
-		serializerContext.addSmIdType("boardTopics");
-		serializerContext.addSmIdType("pinnedBoardTopics");
-		obj.addProperty("boardTopics", groupURL+"/topics");
-		obj.addProperty("pinnedBoardTopics", groupURL+"/pinnedTopics");
-
-		List<GroupLink> links=serializerContext.appContext.getGroupsController().getLinks(this);
-		if(!links.isEmpty()){
-			serializerContext.addSmIdType("links");
-			serializerContext.addSmAlias("displayOrder");
-			JsonArrayBuilder linkArr=new JsonArrayBuilder();
-			for(GroupLink link:links){
-				JsonObjectBuilder linkBuilder=new JsonObjectBuilder()
-						.add("type", "Link")
-						.add("href", link.url.toString())
-						.add("id", Config.localURI("/groups/"+id+"/links/"+link.id).toString())
-						.add("name", link.title)
-						.add("displayOrder", link.displayOrder);
-				if(link.image instanceof LocalImage li){
-					linkBuilder.add("icon", li.asActivityPubObject(new JsonObject(), serializerContext));
-				}
-				if(link.object!=null){
-					linkBuilder.add("mediaType", ActivityPub.CONTENT_TYPE);
-				}
-				linkArr.add(linkBuilder);
-			}
-			obj.add("links", linkArr.build());
-		}
-		if(StringUtils.isNotEmpty(location))
-			obj.addProperty("vcard:Address", location);
-
-		serializerContext.addAlias("toot", JLD.MASTODON);
-		serializerContext.addAlias("suspended", "toot:suspended");
-		obj.addProperty("suspended", banStatus==GroupBanStatus.SUSPENDED);
-
-		return obj;
-	}
-
 	public boolean isEvent(){
 		return type==Type.EVENT;
-	}
-
-	@Override
-	public URI getFollowersURL(){
-		String userURL=activityPubID.toString();
-		return URI.create(userURL+"/members");
 	}
 
 	public enum AdminLevel implements TranslatableEnum<AdminLevel>{

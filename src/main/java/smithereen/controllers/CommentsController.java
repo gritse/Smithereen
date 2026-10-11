@@ -23,19 +23,17 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import smithereen.model.LikeObjectType;
 import smithereen.ApplicationContext;
 import smithereen.Config;
 import smithereen.activitypub.objects.ActivityPubObject;
 import smithereen.activitypub.objects.Actor;
-import smithereen.activitypub.objects.ForeignActor;
 import smithereen.activitypub.objects.LocalImage;
-import smithereen.activitypub.objects.activities.Like;
 import smithereen.exceptions.BadRequestException;
 import smithereen.exceptions.InternalServerErrorException;
 import smithereen.exceptions.ObjectNotFoundException;
 import smithereen.exceptions.UserActionNotAllowedException;
 import smithereen.model.CommentViewType;
-import smithereen.model.ForeignUser;
 import smithereen.model.Group;
 import smithereen.model.ObfuscatedObjectIDType;
 import smithereen.model.OwnerAndAuthor;
@@ -184,11 +182,7 @@ public class CommentsController{
 			}
 
 			if(!skipFederation){
-				if(oaa.owner() instanceof ForeignActor){
-					context.getActivityPubWorker().sendCreateComment(self, comment, parent);
-				}else{
-					context.getActivityPubWorker().sendAddComment(oaa.owner(), comment, parent);
-				}
+
 			}
 
 			return comment;
@@ -306,31 +300,19 @@ public class CommentsController{
 		}
 		CommentableContentObject parent=self instanceof User user ? getCommentParent(user, comment) : getCommentParentIgnoringPrivacy(comment);
 		if(parent instanceof BoardTopic topic && topic.firstCommentID==comment.id)
-			if(self instanceof ForeignUser){
-				context.getBoardController().deleteTopic(topic);
-				return;
-			}else{
-				throw new UserActionNotAllowedException("Can't delete first comment in a board topic");
-			}
+			throw new UserActionNotAllowedException("Can't delete first comment in a board topic");
+
 		try{
 			CommentStorage.deleteComment(comment);
-			if(comment.isLocal() && comment.attachments!=null){
+			if(comment.attachments!=null){
 				MediaStorage.deleteMediaFileReferences(comment.id, MediaFileReferenceType.COMMENT_ATTACHMENT);
 			}
-			LikeStorage.deleteAllLikesForObject(comment.id, Like.ObjectType.COMMENT);
+			LikeStorage.deleteAllLikesForObject(comment.id, LikeObjectType.COMMENT);
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
 
 		context.getNotificationsController().deleteNotificationsForObject(comment);
-
-		OwnerAndAuthor oaa=context.getWallController().getContentAuthorAndOwner(comment);
-		if(self.getOwnerID()==comment.authorID){ // User deleted their own comment, send as Delete
-			if(!(oaa.author() instanceof ForeignUser))
-				context.getActivityPubWorker().sendDeleteComment(oaa.author(), comment, parent);
-		}else if(!(oaa.owner() instanceof ForeignActor)){ // Owner deleted someone else's comment, send as Remove
-			context.getActivityPubWorker().sendRemoveComment(oaa.owner(), comment, parent);
-		}
 	}
 
 	public void deleteCommentsForObject(CommentableContentObject parent){
@@ -338,7 +320,7 @@ public class CommentsController{
 			CommentParentObjectID parentID=parent.getCommentParentID();
 			for(List<Long> commentIDs=CommentStorage.getCommentIDsForDeletion(parentID);!commentIDs.isEmpty();commentIDs=CommentStorage.getCommentIDsForDeletion(parentID)){
 				MediaStorage.deleteMediaFileReferences(commentIDs, MediaFileReferenceType.COMMENT_ATTACHMENT);
-				LikeStorage.deleteAllLikesForObjects(commentIDs, Like.ObjectType.COMMENT);
+				LikeStorage.deleteAllLikesForObjects(commentIDs, LikeObjectType.COMMENT);
 				CommentStorage.deleteComments(commentIDs);
 			}
 			CommentStorage.deleteCommentBookmarks(parentID);
@@ -425,7 +407,6 @@ public class CommentsController{
 			CommentStorage.updateComment(comment.id, text, textSource, sourceFormat, mentionedUsers, attachments, contentWarning);
 
 			comment=getCommentIgnoringPrivacy(comment.id);
-			context.getActivityPubWorker().sendUpdateComment(self, comment, parent);
 
 			return comment;
 		}catch(SQLException x){
@@ -469,89 +450,9 @@ public class CommentsController{
 		}
 	}
 
-	public Set<URI> getPhotoAlbumCommentIDs(PhotoAlbum album, Collection<URI> filter){
-		if(filter.isEmpty())
-			return Set.of();
-		try{
-			Set<URI> foreignIDs=filter.stream().filter(id->!Config.isLocal(id)).collect(Collectors.toSet());
-			Set<Long> localIDs=filter.stream()
-					.filter(Config::isLocal)
-					.map(ObjectLinkResolver::getObjectIdFromLocalURL)
-					.filter(id->id!=null && id.type()==ObjectLinkResolver.ObjectType.COMMENT)
-					.map(ObjectLinkResolver.ObjectTypeAndID::id)
-					.collect(Collectors.toSet());
-			HashSet<URI> res=new HashSet<>();
-			if(!foreignIDs.isEmpty()){
-				res.addAll(CommentStorage.getPhotoAlbumForeignComments(album.id, foreignIDs));
-			}
-			if(!localIDs.isEmpty()){
-				CommentStorage.getPhotoAlbumLocalComments(album.id, localIDs)
-						.stream()
-						.map(id->Config.localURI("/comments/"+XTEA.encodeObjectID(id, ObfuscatedObjectIDType.COMMENT)))
-						.forEach(res::add);
-			}
-			return res;
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	public Set<URI> getObjectCommentIDs(CommentableContentObject obj, Collection<URI> filter){
-		if(filter.isEmpty())
-			return Set.of();
-		try{
-			Set<URI> foreignIDs=filter.stream().filter(id->!Config.isLocal(id)).collect(Collectors.toSet());
-			Set<Long> localIDs=filter.stream()
-					.filter(Config::isLocal)
-					.map(ObjectLinkResolver::getObjectIdFromLocalURL)
-					.filter(id->id!=null && id.type()==ObjectLinkResolver.ObjectType.COMMENT)
-					.map(ObjectLinkResolver.ObjectTypeAndID::id)
-					.collect(Collectors.toSet());
-			HashSet<URI> res=new HashSet<>();
-			if(!foreignIDs.isEmpty()){
-				res.addAll(CommentStorage.getObjectForeignComments(obj.getCommentParentID(), foreignIDs));
-			}
-			if(!localIDs.isEmpty()){
-				CommentStorage.getObjectLocalComments(obj.getCommentParentID(), localIDs)
-						.stream()
-						.map(id->Config.localURI("/comments/"+XTEA.encodeObjectID(id, ObfuscatedObjectIDType.COMMENT)))
-						.forEach(res::add);
-			}
-			return res;
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
 	public PaginatedList<Comment> getCommentReplies(CommentableContentObject parent, Comment comment, int offset, int count){
 		try{
 			return CommentStorage.getCommentReplies(parent.getCommentParentID(), comment!=null ? comment.getReplyKeyForReplies() : null, offset, count);
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	public void putOrUpdateForeignComment(Comment comment){
-		User author=context.getUsersController().getUserOrThrow(comment.authorID);
-		CommentableContentObject parent=getCommentParent(author, comment);
-		boolean isNew=false;
-		if(comment.id==0){
-			enforceCommentCreationPrivacy(author, parent, context.getWallController().getContentAuthorAndOwner(parent));
-			isNew=true;
-		}
-		try{
-			CommentStorage.putOrUpdateForeignComment(comment, true);
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-		if(isNew)
-			context.getNotificationsController().createNotificationsForObject(comment);
-	}
-
-	public long getCommentIDByActivityPubID(URI id){
-		try{
-			long lid=CommentStorage.getCommentIdByActivityPubId(id);
-			return Math.max(lid, 0);
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}

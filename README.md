@@ -1,8 +1,10 @@
 <p align="center"><img src="/img/logo_text.svg" alt="Smithereen"/></p>
 
-<p align="center"><a href="https://smithereen.software">Official website</a> | <a href="https://smithereen.software/docs">API & federation documentation</a> | <a href="https://try.smithereen.software">Demo server</a></p>
+<p align="center"><a href="https://smithereen.software">Official website</a> | <a href="https://smithereen.software/docs">API documentation</a></p>
 
-Federated, ActivityPub-compatible social network with friends, walls, and groups.
+Self-hosted social network with friends, walls, and groups.
+
+This is a fork of [Smithereen](https://github.com/grishka/Smithereen) with ActivityPub federation removed entirely: the server never talks to other servers, so there are no inboxes, signatures, remote object fetching, or media caching of other servers' files. All users, groups and content live on this server only.
 
 If you have any questions or feedback, there's a [Telegram chat](https://t.me/SmithereenProject) you can join.
 
@@ -106,12 +108,12 @@ If you would like to help translate Smithereen into your language, please [do so
 If you would like to add a feature, please ask first before starting to work on it! This project is mostly "open-source but not open-contribution" because I (@grishka) have a rather specific vision of what it should be — an **old-school social network** that one primarily uses to stay up to date on the lives of people they know IRL and get to know these people better. An important part of that vision is to limit people's exposure to out-of-network content (created by those they don't have any connections with) as much as possible. The intended way to explore the network is by going along the social graph or (coming in the future) search for people. In particular, the following features will definitely **not** be added:
 
 - **Hashtags.** The whole idea behind them is to be able to easily see what *people you don't know* post about some topics or global events. They thus serve as an easy gateway to out-of-network content. They encourage the creation of content that is more appealing to the global audience rather than one's followers. Account-scoped hashtags (`#tag@username`) may be added in the future though.
-- **Public feeds** (local and federated). For the same reason, but also so that Smithereen servers don't become communities. They should just be the infrastructure that the network runs on.
+- **Public feeds**. For the same reason, but also so that Smithereen servers don't become communities. They should just be the infrastructure that the network runs on.
 - **Global full-text post search.** Same as hashtags.
 - **Public pages** and **posting on behalf of a group or an event.** Logo accounts are bad. Logos shouldn't say things. Their existence erodes the humanness of the whole experience because you get these "higher beings" that aren't human and don't *feel* human. The intentional lack of easily obtainable logo accounts (no one is stopping one from creating a fake user profile for an organization, of course) serves to encourage authentic human interactions.
-- **Custom emojis.** Many fediverse servers have these, but very few people use them in practice. And when they do, it almost always looks too colorful and distracting. Especially when they're animated.
-- **Non-quote reposts**, like on Mastodon. Smithereen fully supports *displaying* these in order to be compatible with the majority of fediverse software, but the inability to *create* them is intentional. Separate comment threads for each repost reduce user confusion, invite more meaningful conversations and simplify the synchronization of these comments between servers. Combined with Smithereen's privacy settings and the ability of the post author to delete any comments on their posts, this completely eliminates all the abuse potential that, for example, quote tweets on Twitter present.
-- **Animated profile pictures** as well as those with alpha transparency. Many fediverse servers allow these, but again, Smithereen is explicitly for authentic human interactions. So, it is built with the expectation that people will use their own photo, taken with a camera, as their profile picture, just like on Facebook or VKontakte.
+- **Custom emojis.** Very few people use them in practice. And when they do, it almost always looks too colorful and distracting. Especially when they're animated.
+- **Non-quote reposts**, like on Mastodon. Separate comment threads for each repost reduce user confusion and invite more meaningful conversations. Combined with Smithereen's privacy settings and the ability of the post author to delete any comments on their posts, this completely eliminates all the abuse potential that, for example, quote tweets on Twitter present.
+- **Animated profile pictures** as well as those with alpha transparency. Smithereen is explicitly for authentic human interactions. So, it is built with the expectation that people will use their own photo, taken with a camera, as their profile picture, just like on Facebook or VKontakte.
 
 If you disagree, feel free to fork this project, but please change the name if you do.
 
@@ -119,6 +121,3 @@ If you disagree, feel free to fork this project, but please change the name if y
 
 Please [see the API documentation](https://smithereen.software/docs/api).
 
-## Federating with Smithereen
-
-Smithereen supports various features not found in most other ActivityPub server software. [See the federation section in the docs](https://smithereen.software/docs/federation) if you would like to implement these ActivityPub extensions in your project.

@@ -44,7 +44,7 @@ public class ApiComment{
 		ownerId=c.ownerID;
 		fromId=c.authorID;
 		apId=c.getActivityPubID().toString();
-		url=c.getActivityPubURL().toString();
+		url=c.getActivityPubID().toString();
 		date=c.createdAt.getEpochSecond();
 		text=c.text;
 		if(interactions!=null){

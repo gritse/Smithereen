@@ -53,9 +53,6 @@ public class ApiDispatcher{
 		registerMethod("groups.banUser", GroupsMethods::banUser, ClientAppPermission.GROUPS_WRITE);
 		registerMethod("groups.unbanUser", GroupsMethods::unbanUser, ClientAppPermission.GROUPS_WRITE);
 		registerMethod("groups.getBannedUsers", GroupsMethods::getBannedUsers, ClientAppPermission.GROUPS_WRITE);
-		registerMethod("groups.banDomain", GroupsMethods::banDomain, ClientAppPermission.GROUPS_WRITE);
-		registerMethod("groups.unbanDomain", GroupsMethods::unbanDomain, ClientAppPermission.GROUPS_WRITE);
-		registerMethod("groups.getBannedDomains", GroupsMethods::getBannedDomains, ClientAppPermission.GROUPS_WRITE);
 		registerMethod("groups.getInvitedUsers", GroupsMethods::getInvitedUsers, ClientAppPermission.GROUPS_WRITE);
 		registerMethod("groups.getRequests", GroupsMethods::getRequests, ClientAppPermission.GROUPS_WRITE);
 		registerMethod("groups.approveRequest", GroupsMethods::approveRequest, ClientAppPermission.GROUPS_WRITE);
@@ -87,13 +84,11 @@ public class ApiDispatcher{
 		registerMethod("friends.getRequests", FriendsMethods::getRequests, ClientAppPermission.FRIENDS_READ);
 
 		registerMethod("utils.getServerTime", UtilsMethods::getServerTime, false);
-		registerMethod("utils.loadRemoteObject", UtilsMethods::loadRemoteObject, true);
 		registerMethod("utils.resolveScreenName", UtilsMethods::resolveScreenName, false);
 		registerMethod("utils.testCaptcha", UtilsMethods::testCaptcha, true);
 		registerMethod("utils.testValidation", UtilsMethods::testValidation, true);
 
 		registerMethod("server.getInfo", ServerMethods::getInfo, false);
-		registerMethod("server.getRestrictedServers", ServerMethods::getRestrictedServers, false);
 		registerMethod("server.report", ServerMethods::report, true);
 		registerMethod("server.getAnnouncements", ServerMethods::getAnnouncements, true);
 
@@ -183,9 +178,6 @@ public class ApiDispatcher{
 		registerMethod("account.getBannedUsers", AccountMethods::getBannedUsers, ClientAppPermission.ACCOUNT_WRITE);
 		registerMethod("account.banUser", AccountMethods::banUser, ClientAppPermission.ACCOUNT_WRITE);
 		registerMethod("account.unbanUser", AccountMethods::unbanUser, ClientAppPermission.ACCOUNT_WRITE);
-		registerMethod("account.getBannedDomains", AccountMethods::getBannedDomains, ClientAppPermission.ACCOUNT_WRITE);
-		registerMethod("account.banDomain", AccountMethods::banDomain, ClientAppPermission.ACCOUNT_WRITE);
-		registerMethod("account.unbanDomain", AccountMethods::unbanDomain, ClientAppPermission.ACCOUNT_WRITE);
 		registerMethod("account.revokeToken", AccountMethods::revokeToken, true);
 		registerMethod("account.getProfileInfo", AccountMethods::getProfileInfo, ClientAppPermission.ACCOUNT_WRITE);
 		registerMethod("account.saveProfileInfo", AccountMethods::saveProfileInfo, ClientAppPermission.ACCOUNT_WRITE);

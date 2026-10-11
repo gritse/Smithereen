@@ -3,10 +3,10 @@
 {% set randomID=randomString() %}
 {% set interactions=postInteractions[realPost.getIDForInteractions()] %}
 <div class="postLayerHeader">
-	<a href="{{ profileURL(realPost.authorID) }}"{{ profileRel(realPost.authorID) }} class="flL postAuthorAva">{{ users[realPost.authorID] | pictureForAvatar('a') }}</a>
+	<a href="{{ profileURL(realPost.authorID) }}" class="flL postAuthorAva">{{ users[realPost.authorID] | pictureForAvatar('a') }}</a>
 	<a class="closeBtn flR">{{ L('close') }}</a>
 	<div>
-		<div class="postAuthor ellipsize"><a href="{{ profileURL(realPost.authorID) }}"{{ profileRel(realPost.authorID) }} id="postAuthor{{ post.post.id }}_{{ randomID }}">{{ users[realPost.authorID] | name }}</a></div>
+		<div class="postAuthor ellipsize"><a href="{{ profileURL(realPost.authorID) }}" id="postAuthor{{ post.post.id }}_{{ randomID }}">{{ users[realPost.authorID] | name }}</a></div>
 		<div class="time">{{ LD(realPost.createdAt, true) }}</div>
 	</div>
 	<div class="clear"></div>
@@ -49,9 +49,6 @@
 	{% endif %}
 	{% if realPost.ownerID!=realPost.authorID and tab!="wall2wall" and realPost.ownerID>0 %}
 	<a href="/users/{{ realPost.ownerID }}/wall/with/{{ realPost.authorID }}" class="button tertiary">{{ L('wall_to_wall') }}</a>
-	{% endif %}
-	{% if not realPost.local %}
-	<a href="{{ realPost.activityPubURL }}" target="_blank" rel="noopener" class="button tertiary">{{ L('open_on_server_X', {'domain': realPost.activityPubURL.host}) }}</a>
 	{% endif %}
 </div>
 <div class="postLayerCommentsHeader" id="postCommentsSummary{{ post.post.id }}_{{ randomID }}" style="{% if items is empty %}display: none{% endif %}">

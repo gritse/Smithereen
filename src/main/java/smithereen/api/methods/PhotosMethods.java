@@ -158,7 +158,7 @@ public class PhotosMethods{
 				album, actx.getOffset(), actx.getCount(50, 1000), actx.optParamBoolean("rev"));
 		return new ApiPaginatedList<>(photos.total, ApiUtils.getPhotos(ctx, actx, photos.list));
 	}
-	
+
 	public static Object getById(ApplicationContext ctx, ApiCallContext actx){
 		List<Long> ids=actx.requireCommaSeparatedStringList("photo_ids")
 				.stream()

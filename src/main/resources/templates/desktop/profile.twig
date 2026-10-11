@@ -32,42 +32,20 @@
 {% endif %}
 {% endblock %}
 {%block content%}
-{% if movedTo is not null %}
-<div class="marginsAreMessy"></div>
-<div class="settingsMessage">
-	{{ L('profile_moved', {'name': user | name('first')}) }}<br/>
-	{% if movedTo.domain is empty %}
-	<a href="{{ movedTo.profileURL }}"><b>{{ movedTo | name }}</b></a>
-	{% else %}
-	<a href="{{ movedTo.profileURL }}">{{ L('profile_moved_link', {'domain': movedTo.domain, 'name': movedTo | name}) }}</a>
-	{% endif %}
-</div>
-{% elseif user.domain %}
-<div class="marginsAreMessy"></div>
-<div class="settingsMessage">
-	{{L('incomplete_profile')}}<br/>
-	<a href="{{user.url}}" target="_blank">{{L('open_on_server_X', {'domain': user.domain})}}</a>
-</div>
-{%endif%}
 {% if user.banInfo is not null and currentUser is not null and userPermissions.hasPermission('MANAGE_USERS') %}
-{% if user.domain is empty and movedTo is null %}<div class="marginsAreMessy"></div>{% endif %}
+<div class="marginsAreMessy"></div>
 {% set banModerator=users[user.banInfo.moderatorID] %}
 <div class="settingsMessage textByItself">
 	{% if user.banStatus=='FROZEN' %}
 	<p>{{ L('admin_user_state_frozen', {'expirationTime': user.banInfo.expiresAt is null ? L('email_account_frozen_until_first_login') : LD(user.banInfo.expiresAt)}) }}</p>
 	{% elseif user.banStatus=='SUSPENDED' %}
-	{% if user.domain is empty %}
 	<p>{{ L('admin_user_state_suspended', {'deletionTime': LD(accountDeletionTime)}) }}</p>
-	{% else %}
-	<p>{{ L('admin_user_state_suspended_foreign') }}</p>
-	{% endif %}
 	{% elseif user.banStatus=='HIDDEN' %}
 	<p>{{ L('admin_user_state_hidden') }}</p>
 	{% elseif user.banStatus=='SELF_DEACTIVATED' %}
 	<p>{{ L('admin_user_state_self_deactivated', {'gender': user.gender, 'deletionTime': LD(accountDeletionTime)}) }}</p>
 	{% endif %}
 	{% if user.banInfo is not null %}
-	{% if user.banInfo.suspendedOnRemoteServer %}<p>{{ L('admin_user_suspended_remotely') }}</p>{% endif %}
 	<p>{% if banModerator is not null %}<a href="{{ banModerator.profileURL }}">{{ banModerator | name }}</a>, {% endif %}{{ LD(user.banInfo.bannedAt()) }}</p>
 	{% if user.banInfo.message is not empty %}<p>{{ L('admin_user_ban_message') }}: {{ user.banInfo.message }}</p>{% endif %}
 	{% endif %}
@@ -110,7 +88,7 @@
 		<span class="ava avaPlaceholder inProfile"></span>
 		{%endif%}
 		{%endif%}
-		{% if currentUser is not null and currentUser.id!=user.id and not isSelfBlocked and movedTo is null %}
+		{% if currentUser is not null and currentUser.id!=user.id and not isSelfBlocked %}
 		<div class="profileBelowAva">
 			{% if canMessage %}
 			<a href="/my/mail/compose?to={{ user.id }}" class="button withText" onclick="showMailFormBox(this); return false;">{{ L('profile_write_message') }}</a>
@@ -175,8 +153,6 @@
 		{% if user.friendsCount>0 %}
 			{% if friends is not empty %}
 			{% include "profile_module_user_grid" with {'users': friends, 'headerTitle': L('friends'), 'headerHref': "/users/#{user.id}/friends", 'subheaderTitle': L('X_friends', {'count': user.friendsCount})} %}
-			{% else %}
-			{% include "profile_module_centered_text" with {'text': L('remote_friends_incomplete', {'name': user.firstAndGender, 'gender': user.gender, 'server': user.domain}, {'link': {'href': user.url, 'target': '_blank', 'rel': 'nofollow'} }), 'headerTitle': L('friends'), 'headerHref': "/users/#{user.id}/friends", 'subheaderTitle': L('X_friends', {'count': user.friendsCount})} %}
 			{% endif %}
 		{% endif %}
 		{% if onlineFriends is not empty %}
@@ -192,8 +168,6 @@
 				{% set _=followingWithTitles.add({'user': followee, 'title': followee | actorSummary}) %}
 			{% endfor %}
 			{% include "profile_module_user_list" with {'users': followingWithTitles, 'headerTitle': L('following'), 'subheaderTitle': L('X_people', {'count': user.followingCount}), 'headerHref': "/users/#{user.id}/following"} %}
-			{% else %}
-			{% include "profile_module_centered_text" with {'text': L('remote_following_incomplete', {'name': user.firstAndGender, 'gender': user.gender, 'server': user.domain}, {'link': {'href': user.url, 'target': '_blank', 'rel': 'nofollow'} }), 'headerTitle': L('following'), 'subheaderTitle': L('X_people', {'count': user.followingCount}), 'headerHref': "/users/#{user.id}/following"} %}
 			{% endif %}
 		{% endif %}
 		{% if groups is not empty %}
@@ -230,7 +204,7 @@
 			{{ profileSection(_context, L('profile_personal_title'), "/settings/profile/personal", personalFields) }}
 			{{ profileSection(_context, L('profile_interests_title'), "/settings/profile/interests", interestsFields) }}
 		</div>
-		{% include "profile_module_wall" with {'wallOwner': user, 'headerTitle': L('wall'), 'headerHref': "/users/#{user.id}/wall"+(canSeeOthersPosts and user.hasWall ? "" : "/own"), 'additionalHeader': L('X_posts', {'count': totalItems}), 'additionalHeaderId': 'wallPostCount', 'wallPostCount': totalItems} %}
+		{% include "profile_module_wall" with {'wallOwner': user, 'headerTitle': L('wall'), 'headerHref': "/users/#{user.id}/wall"+(canSeeOthersPosts ? "" : "/own"), 'additionalHeader': L('X_posts', {'count': totalItems}), 'additionalHeaderId': 'wallPostCount', 'wallPostCount': totalItems} %}
 	</div>
 </div>
 {% script %}initExpandingProfileColumn(ge("right"), ge("left"), ge("profileLayout"));{% endscript %}

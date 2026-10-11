@@ -7,7 +7,6 @@ import com.google.gson.JsonParser;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.net.URI;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
@@ -19,9 +18,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
-import smithereen.Config;
 import smithereen.Utils;
-import smithereen.activitypub.ParserContext;
 import smithereen.activitypub.objects.ActivityPubObject;
 import smithereen.model.reports.ReportableContentObject;
 import smithereen.model.reports.ReportableContentObjectID;
@@ -34,7 +31,7 @@ import smithereen.util.JsonObjectBuilder;
 import smithereen.util.XTEA;
 import spark.utils.StringUtils;
 
-public sealed class MailMessage implements AttachmentHostContentObject, ActivityPubRepresentable, ReportableContentObject permits ReportedMailMessage{
+public sealed class MailMessage implements AttachmentHostContentObject, ReportableContentObject permits ReportedMailMessage{
 	public long id;
 	public int senderID;
 	public int ownerID;
@@ -47,10 +44,7 @@ public sealed class MailMessage implements AttachmentHostContentObject, Activity
 	public @Nullable Instant updatedAt;
 	public @NotNull Set<Integer> readReceipts=Set.of();
 	public @NotNull Set<Long> relatedMessageIDs=Set.of();
-	public @Nullable URI activityPubID;
 	public @Nullable ReplyInfo replyInfo;
-
-	public transient URI inReplyTo;
 
 	public static MailMessage fromResultSet(ResultSet res) throws SQLException{
 		MailMessage msg=new MailMessage();
@@ -65,7 +59,7 @@ public sealed class MailMessage implements AttachmentHostContentObject, Activity
 		String att=res.getString("attachments");
 		if(att!=null){
 			try{
-				msg.attachments=ActivityPubObject.parseSingleObjectOrArray(JsonParser.parseString(att), ParserContext.LOCAL);
+				msg.attachments=ActivityPubObject.parseSingleObjectOrArray(JsonParser.parseString(att));
 			}catch(Exception ignore){}
 		}
 
@@ -75,9 +69,6 @@ public sealed class MailMessage implements AttachmentHostContentObject, Activity
 		HashSet<Long> relatedIDs=new HashSet<>();
 		Utils.deserializeLongCollection(res.getBytes("related_message_ids"), relatedIDs);
 		msg.relatedMessageIDs=relatedIDs;
-		String apID=res.getString("ap_id");
-		if(apID!=null)
-			msg.activityPubID=URI.create(apID);
 		String replyInfo=res.getString("reply_info");
 		if(StringUtils.isNotEmpty(replyInfo))
 			msg.replyInfo=Utils.gson.fromJson(replyInfo, ReplyInfo.class);
@@ -109,24 +100,12 @@ public sealed class MailMessage implements AttachmentHostContentObject, Activity
 	}
 
 	@Override
-	public NonCachedRemoteImage.Args getPhotoArgs(int index){
-		return new NonCachedRemoteImage.MessagePhotoArgs(id, index);
-	}
-
-	@Override
 	public String getPhotoListID(){
 		return "messages/"+getIdString();
 	}
 
 	public int getFirstRecipientID(){
 		return to.iterator().next();
-	}
-
-	@Override
-	public @NotNull URI getActivityPubID(){
-		if(activityPubID!=null)
-			return activityPubID;
-		return Config.localURI("/activitypub/objects/messages/"+getIdString());
 	}
 
 	public int getTotalRecipientCount(){
@@ -164,7 +143,7 @@ public sealed class MailMessage implements AttachmentHostContentObject, Activity
 		if(jo.has("attachments")){
 			attachments=new ArrayList<>();
 			for(JsonElement jatt:jo.getAsJsonArray("attachments")){
-				attachments.add(ActivityPubObject.parse(jatt.getAsJsonObject(), ParserContext.LOCAL));
+				attachments.add(ActivityPubObject.parse(jatt.getAsJsonObject()));
 			}
 		}
 	}

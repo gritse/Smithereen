@@ -86,7 +86,7 @@ public class ApiPhoto{
 	public ApiPhoto(@NotNull Photo photo, @NotNull ApiCallContext actx, @Nullable Map<Long, UserInteractions> photosInteractions, @Nullable Map<Long, Integer> tagCounts){
 		id=photo.getIdString();
 		apId=photo.getActivityPubID().toString();
-		url=photo.getActivityPubURL().toString();
+		url=photo.getActivityPubID().toString();
 		albumId=XTEA.encodeObjectID(photo.albumID, ObfuscatedObjectIDType.PHOTO_ALBUM);
 		ownerId=photo.ownerID;
 		userId=photo.authorID;

@@ -11,7 +11,6 @@ import java.util.Locale;
 import java.util.Map;
 
 import smithereen.activitypub.objects.LocalImage;
-import smithereen.model.RemoteImage;
 import smithereen.model.SizedImage;
 import smithereen.util.BlurHash;
 import spark.utils.StringUtils;

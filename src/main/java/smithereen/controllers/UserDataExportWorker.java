@@ -10,11 +10,8 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Base64;
 import java.util.BitSet;
 import java.util.HashSet;
 import java.util.List;
@@ -25,31 +22,25 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import smithereen.ApplicationContext;
-import smithereen.Config;
 import smithereen.Utils;
-import smithereen.activitypub.SerializerContext;
-import smithereen.activitypub.objects.ActivityPubLink;
 import smithereen.activitypub.objects.ActivityPubObject;
-import smithereen.activitypub.objects.ActivityPubPhoto;
-import smithereen.activitypub.objects.ActivityPubPhotoAlbum;
-import smithereen.activitypub.objects.CollectionPage;
-import smithereen.activitypub.objects.LinkOrObject;
-import smithereen.activitypub.objects.NoteOrQuestion;
-import smithereen.activitypub.objects.activities.Like;
+import smithereen.activitypub.objects.Actor;
+import smithereen.activitypub.objects.LocalImage;
 import smithereen.exceptions.InternalServerErrorException;
-import smithereen.exceptions.ObjectNotFoundException;
 import smithereen.model.Account;
+import smithereen.model.Group;
 import smithereen.model.LikedObjectID;
 import smithereen.model.MailMessage;
-import smithereen.model.ObfuscatedObjectIDType;
 import smithereen.model.PaginatedList;
+import smithereen.model.Poll;
+import smithereen.model.PollOption;
 import smithereen.model.Post;
+import smithereen.model.PostLikeObject;
 import smithereen.model.User;
 import smithereen.model.UserDataExport;
 import smithereen.model.comments.Comment;
@@ -62,17 +53,16 @@ import smithereen.model.media.UserDataArchiveMetadata;
 import smithereen.model.notifications.RealtimeNotification;
 import smithereen.model.photos.Photo;
 import smithereen.model.photos.PhotoAlbum;
-import smithereen.storage.CommentStorage;
 import smithereen.storage.MediaStorage;
-import smithereen.storage.PhotoStorage;
 import smithereen.storage.PostStorage;
 import smithereen.storage.UserStorage;
 import smithereen.storage.media.MediaFileStorageDriver;
 import smithereen.util.JsonArrayBuilder;
 import smithereen.util.JsonObjectBuilder;
-import smithereen.util.UriBuilder;
-import smithereen.util.XTEA;
 
+/**
+ * Builds a zip archive with all of a user's data as plain JSON files plus the referenced media files.
+ */
 public class UserDataExportWorker{
 	private static final Logger LOG=LoggerFactory.getLogger(UserDataExportWorker.class);
 
@@ -112,8 +102,8 @@ public class UserDataExportWorker{
 			HashSet<MediaFileID> filesToInclude=new HashSet<>();
 			try(ZipOutputStream zos=new ZipOutputStream(new FileOutputStream(archive), StandardCharsets.UTF_8)){
 
-				// Actor itself
-				writeActivityPubObject(user, filesToInclude, zos, "actor");
+				// Profile
+				writeJsonElement(serializeProfile(user, filesToInclude), zos, "profile");
 
 				// Friend lists
 				List<FriendList> friendLists=context.getFriendsController().getFriendLists(user);
@@ -121,49 +111,38 @@ public class UserDataExportWorker{
 						zos, "friendLists");
 
 				// Friends
-				writeLocalObjectRemoteLinkCollections(offset->{
+				writePaginated(offset->{
 					PaginatedList<User> users=context.getFriendsController().getFriends(user, offset, 500, FriendsController.SortOrder.HINTS);
 					Map<Integer, BitSet> lists=context.getFriendsController().getFriendListsForUsers(user, user, users.list.stream().map(u->u.id).toList());
-					List<ActivityPubFriendLink> links=users.list.stream().map(u->{
-						ActivityPubFriendLink fl=new ActivityPubFriendLink();
-						fl.href=u.activityPubID;
+					return new PaginatedList<>(users, users.list.stream().map(u->{
 						BitSet userLists=lists.get(u.id);
-						fl.lists=userLists==null ? List.of() : userLists.stream().map(i->i+1).boxed().toList();
-						return fl;
-					}).toList();
-					return new PaginatedList<>(users, links);
-				}, filesToInclude, zos, user.getFriendsURL(), "friends", true);
+						JsonObject o=serializeActorLink(u);
+						o.add("lists", userLists==null ? new JsonArrayBuilder().build() : userLists.stream().map(i->i+1).boxed().collect(JsonArrayBuilder.COLLECTOR));
+						return o;
+					}).toList());
+				}, zos, "friends");
 
-				// Followers
-				writeLinkCollections(offset->context.getFriendsController().getFollowers(user, offset, 500), filesToInclude, zos, user.getFollowersURL(), "followers", false);
+				// Followers & following
+				writePaginated(offset->mapActors(context.getFriendsController().getFollowers(user, offset, 500)), zos, "followers");
+				writePaginated(offset->mapActors(context.getFriendsController().getFollows(user, offset, 500)), zos, "following");
 
-				// Following
-				writeLinkCollections(offset->context.getFriendsController().getFollows(user, offset, 500), filesToInclude, zos, user.getFollowersURL(), "follows", false);
+				// Groups & events
+				writePaginated(offset->mapActors(context.getGroupsController().getUserGroups(user, user, offset, 500)), zos, "groups");
+				writePaginated(offset->mapActors(context.getGroupsController().getUserEvents(user, GroupsController.EventsType.ALL, offset, 500)), zos, "events");
 
-				// Groups
-				writeLinkCollections(offset->context.getGroupsController().getUserGroups(user, user, offset, 500), filesToInclude, zos, user.getGroupsURL(), "groups", true);
-
-				// Events
-				writeLinkCollections(offset->context.getGroupsController().getUserEvents(user, GroupsController.EventsType.ALL, offset, 500), filesToInclude, zos, user.getGroupsURL(), "events", false);
-
-				// Bookmarked users
-				writeLinkCollections(offset->{
+				// Bookmarks
+				writePaginated(offset->{
 					PaginatedList<Integer> ids=context.getBookmarksController().getBookmarkedUsers(user, offset, 500);
 					Map<Integer, User> users=context.getUsersController().getUsers(ids.list);
-					return new PaginatedList<>(ids, ids.list.stream().map(users::get).filter(Objects::nonNull).toList());
-				}, filesToInclude, zos, null, "bookmarkedUsers", false);
-
-				// Bookmarked groups
-				writeLinkCollections(offset->{
+					return new PaginatedList<>(ids, ids.list.stream().map(users::get).filter(Objects::nonNull).map(this::serializeActorLink).toList());
+				}, zos, "bookmarkedUsers");
+				writePaginated(offset->{
 					PaginatedList<Integer> ids=context.getBookmarksController().getBookmarkedGroups(user, offset, 500);
-					return new PaginatedList<>(ids, context.getGroupsController().getGroupsByIdAsList(ids.list));
-				}, filesToInclude, zos, null, "bookmarkedGroups", false);
+					return new PaginatedList<>(ids, context.getGroupsController().getGroupsByIdAsList(ids.list).stream().map(this::serializeActorLink).toList());
+				}, zos, "bookmarkedGroups");
 
 				// Blocked users
-				writeLinkCollections(offset->context.getPrivacyController().getBlockedUsers(user, offset, 500), filesToInclude, zos, null, "blockedUsers", false);
-
-				// Blocked domains
-				writeJsonElement(context.getPrivacyController().getBlockedDomains(user).stream().collect(JsonArrayBuilder.COLLECTOR), zos, "blockedDomains");
+				writePaginated(offset->mapActors(context.getPrivacyController().getBlockedUsers(user, offset, 500)), zos, "blockedUsers");
 
 				// Word filters
 				writeJsonElement(context.getNewsfeedController().getWordFilters(user, true).stream().map(wf->{
@@ -176,109 +155,62 @@ public class UserDataExportWorker{
 							.build();
 				}).collect(JsonArrayBuilder.COLLECTOR), zos, "wordFilters");
 
-				// Wall
-				writeLocalObjectRemoteLinkCollections(offset->{
+				// Wall posts & comments
+				writePaginated(offset->{
 					PaginatedList<Post> posts=context.getWallController().getWallPosts(user, user, WallController.WallMode.ALL, offset, 100);
-					return new PaginatedList<>(posts, posts.list.stream().map(p->NoteOrQuestion.fromNativePost(p, context)).toList());
-				}, filesToInclude, zos, user.getWallURL(), "wall", false);
-
-				// Wall comments
-				writeLocalObjectRemoteLinkCollections(offset->{
+					return new PaginatedList<>(posts, posts.list.stream().map(p->serializePost(p, filesToInclude)).toList());
+				}, zos, "wall");
+				writePaginated(offset->{
 					try{
 						PaginatedList<Post> posts=PostStorage.getWallComments(user.id, offset, 100);
-						return new PaginatedList<>(posts, posts.list.stream().map(p->{
-							try{
-								return NoteOrQuestion.fromNativePost(p, context);
-							}catch(ObjectNotFoundException x){
-								return null;
-							}
-						}).filter(Objects::nonNull).toList());
+						return new PaginatedList<>(posts, posts.list.stream().map(p->serializePost(p, filesToInclude)).toList());
 					}catch(SQLException x){
 						throw new InternalServerErrorException(x);
 					}
-				}, filesToInclude, zos, user.getWallCommentsURL(), "wallComments", false);
+				}, zos, "wallComments");
 
 				// Private messages
-				writeCollections(offset->{
+				writePaginated(offset->{
 					PaginatedList<MailMessage> msgs=context.getMailController().getInbox(user, offset, 100);
-					return new PaginatedList<>(msgs, msgs.list.stream().map(m->NoteOrQuestion.fromNativeMessage(m, context)).toList());
-				}, LinkOrObject::new, filesToInclude, zos, null, "messagesInbox", false);
-				writeCollections(offset->{
+					return new PaginatedList<>(msgs, msgs.list.stream().map(m->serializeMessage(m, filesToInclude)).toList());
+				}, zos, "messagesInbox");
+				writePaginated(offset->{
 					PaginatedList<MailMessage> msgs=context.getMailController().getOutbox(user, offset, 100);
-					return new PaginatedList<>(msgs, msgs.list.stream().map(m->NoteOrQuestion.fromNativeMessage(m, context)).toList());
-				}, LinkOrObject::new, filesToInclude, zos, null, "messagesOutbox", false);
+					return new PaginatedList<>(msgs, msgs.list.stream().map(m->serializeMessage(m, filesToInclude)).toList());
+				}, zos, "messagesOutbox");
 
 				// Photo albums
-				writeLocalObjectRemoteLinkCollections(offset->{
-					List<PhotoAlbum> albums=context.getPhotosController().getAllAlbumsIgnoringPrivacy(user);
-					for(PhotoAlbum album:albums){
-						writeLocalObjectRemoteLinkCollections(albumOffset->{
-							PaginatedList<Photo> photos=context.getPhotosController().getAlbumPhotos(user, album, albumOffset, 100, false);
-							return new PaginatedList<>(photos, photos.list.stream().map(p->ActivityPubPhoto.fromNativePhoto(p, album, context)).toList());
-						}, filesToInclude, zos, album.getActivityPubID(), "photoAlbum"+album.getIdString()+"_", true);
-						writeLocalObjectRemoteLinkCollections(commentsOffset->{
-							PaginatedList<Comment> comments=context.getCommentsController().getPhotoAlbumComments(album, commentsOffset, 100);
-							return new PaginatedList<>(comments, comments.list.stream().map(p->NoteOrQuestion.fromNativeComment(p, context)).toList());
-						}, filesToInclude, zos, album.activityPubComments==null ? new UriBuilder(album.getActivityPubID()).appendPath("comments").build() : album.activityPubComments,
-								"photoAlbum"+album.getIdString()+"_comments", false);
-					}
-					return new PaginatedList<>(albums.stream().map(pa->ActivityPubPhotoAlbum.fromNativeAlbum(pa, context)).toList(), albums.size(), 0, albums.size());
-				}, filesToInclude, zos, user.getPhotoAlbumsURL(), "photoAlbums", false);
+				List<PhotoAlbum> albums=context.getPhotosController().getAllAlbumsIgnoringPrivacy(user);
+				writeJsonElement(albums.stream().map(this::serializeAlbum).collect(JsonArrayBuilder.COLLECTOR), zos, "photoAlbums");
+				for(PhotoAlbum album:albums){
+					writePaginated(albumOffset->{
+						PaginatedList<Photo> photos=context.getPhotosController().getAlbumPhotos(user, album, albumOffset, 100, false);
+						return new PaginatedList<>(photos, photos.list.stream().map(p->serializePhoto(p, filesToInclude)).toList());
+					}, zos, "photoAlbum_"+album.getIdString());
+					writePaginated(commentsOffset->{
+						PaginatedList<Comment> comments=context.getCommentsController().getPhotoAlbumComments(album, commentsOffset, 100);
+						return new PaginatedList<>(comments, comments.list.stream().map(c->serializeComment(c, filesToInclude)).toList());
+					}, zos, "photoAlbum_"+album.getIdString()+"_comments");
+				}
 
 				// Tagged photos
-				writeLocalObjectRemoteLinkCollections(offset->{
+				writePaginated(offset->{
 					PaginatedList<Photo> photos=context.getPhotosController().getUserTaggedPhotos(user, user, offset, 100, false);
-					Set<Long> needAlbums=photos.list.stream().map(p->p.albumID).collect(Collectors.toSet());
-					Map<Long, PhotoAlbum> albums=context.getPhotosController().getAlbumsIgnoringPrivacy(needAlbums);
-					return new PaginatedList<>(photos, photos.list.stream().map(p->ActivityPubPhoto.fromNativePhoto(p, albums.get(p.albumID), context)).toList());
-				}, filesToInclude, zos, user.getTaggedPhotosURL(), "taggedPhotos", false);
+					return new PaginatedList<>(photos, photos.list.stream().map(p->serializePhoto(p, filesToInclude)).toList());
+				}, zos, "taggedPhotos");
 
 				// Likes
-				writeLinkCollections(offset->{
+				writePaginated(offset->{
 					PaginatedList<LikedObjectID> ids=context.getUserInteractionsController().getLikedObjects(user, offset, 500);
-					Set<Integer> needPosts=ids.list.stream().filter(lid->lid.type()==Like.ObjectType.POST).map(lid->(int)lid.id()).collect(Collectors.toSet());
-					Set<Long> needComments=ids.list.stream().filter(lid->lid.type()==Like.ObjectType.COMMENT).map(LikedObjectID::id).collect(Collectors.toSet());
-					Set<Long> needPhotos=ids.list.stream().filter(lid->lid.type()==Like.ObjectType.PHOTO).map(LikedObjectID::id).collect(Collectors.toSet());
-					try{
-						Map<Integer, URI> postIDs;
-						if(needPosts.isEmpty())
-							postIDs=Map.of();
-						else
-							postIDs=PostStorage.getActivityPubIDsByLocalIDs(needPosts);
-
-						Map<Long, URI> commentIDs;
-						if(needComments.isEmpty())
-							commentIDs=Map.of();
-						else
-							commentIDs=CommentStorage.getCommentActivityPubIDsByLocalIDs(needComments);
-
-						Map<Long, URI> photoIDs;
-						if(needPhotos.isEmpty())
-							photoIDs=Map.of();
-						else
-							photoIDs=PhotoStorage.getPhotoActivityPubIDsByLocalIDs(needPhotos);
-
-						List<ActivityPubLink> links=ids.list.stream().map(lid->{
-							ActivityPubLink l=new ActivityPubLink();
-							l.activityPubID=switch(lid.type()){
-								case POST -> postIDs.get((int)lid.id());
-								case COMMENT -> commentIDs.get(lid.id());
-								case PHOTO -> photoIDs.get(lid.id());
-							};
-							return l;
-						}).filter(l->l.activityPubID!=null).toList();
-						return new PaginatedList<>(ids, links);
-					}catch(SQLException x){
-						throw new InternalServerErrorException(x);
-					}
-				}, filesToInclude, zos, null, "likes", false);
+					return new PaginatedList<>(ids, ids.list.stream().map(lid->new JsonObjectBuilder()
+							.add("type", lid.type().toString().toLowerCase())
+							.add("id", lid.id())
+							.build()).toList());
+				}, zos, "likes");
 
 				for(MediaFileID fid:filesToInclude){
-					String fileName=Base64.getUrlEncoder().withoutPadding().encodeToString(fid.randomID())+"_"+
-							Base64.getUrlEncoder().withoutPadding().encodeToString(Utils.packLong(XTEA.obfuscateObjectID(fid.id(), ObfuscatedObjectIDType.MEDIA_FILE)))+
-							"."+fid.type().getFileExtension();
 					try(InputStream in=MediaFileStorageDriver.getInstance().openStream(fid)){
-						zos.putNextEntry(new ZipEntry("media/"+fileName));
+						zos.putNextEntry(new ZipEntry(getMediaFileName(fid)));
 						Utils.copyBytes(in, zos);
 						zos.closeEntry();
 					}catch(IOException x){
@@ -304,81 +236,203 @@ public class UserDataExportWorker{
 		}
 	}
 
+	private static String getMediaFileName(MediaFileID fid){
+		return "media/"+fid.getEncodedID()+"."+fid.type().getFileExtension();
+	}
+
 	private void writeJsonElement(JsonElement el, ZipOutputStream zos, String name) throws IOException{
 		zos.putNextEntry(new ZipEntry(name+".json"));
 		zos.write(el.toString().getBytes(StandardCharsets.UTF_8));
 		zos.closeEntry();
 	}
 
-	private void writeActivityPubObject(ActivityPubObject obj, Set<MediaFileID> filesToInclude, ZipOutputStream zos, String name) throws IOException{
-		ExportSerializerContext serializerContext=new ExportSerializerContext(context);
-		writeJsonElement(obj.asRootActivityPubObject(serializerContext), zos, name);
-		filesToInclude.addAll(serializerContext.filesToInclude);
-	}
-
-	private <T extends ActivityPubObject> void writeLinkCollections(PaginatedListGetter<T> listGetter, Set<MediaFileID> filesToInclude,
-																	ZipOutputStream zos, URI baseCollectionID, String name, boolean ordered) throws IOException{
-		writeCollections(listGetter, obj->new LinkOrObject(obj.activityPubID), filesToInclude, zos, baseCollectionID, name, ordered);
-	}
-
-	private <T extends ActivityPubObject> void writeLocalObjectRemoteLinkCollections(PaginatedListGetter<T> listGetter, Set<MediaFileID> filesToInclude,
-																					 ZipOutputStream zos, URI baseCollectionID, String name, boolean ordered) throws IOException{
-		writeCollections(listGetter, obj->{
-			if(obj.activityPubID==null || Config.isLocal(obj.activityPubID))
-				return new LinkOrObject(obj);
-			else
-				return new LinkOrObject(obj.activityPubID);
-		}, filesToInclude, zos, baseCollectionID, name, ordered);
-	}
-
-	private <T extends ActivityPubObject> void writeCollections(PaginatedListGetter<T> listGetter, Function<T, LinkOrObject> converter,
-																Set<MediaFileID> filesToInclude, ZipOutputStream zos, URI baseCollectionID, String name, boolean ordered) throws IOException{
-		int offset=0, total, i=0;
+	/**
+	 * Writes a paginated list as a single JSON array file, fetching all pages.
+	 */
+	private void writePaginated(PaginatedListGetter listGetter, ZipOutputStream zos, String name) throws IOException{
+		JsonArrayBuilder items=new JsonArrayBuilder();
+		int offset=0, total;
 		do{
-			PaginatedList<T> list=listGetter.get(offset);
+			PaginatedList<JsonObject> list=listGetter.get(offset);
 			total=list.total;
-			offset+=list.perPage;
-
-			CollectionPage apPage=new CollectionPage(ordered);
-			apPage.partOf=baseCollectionID;
-			apPage.activityPubID=URI.create(name+i+".json");
-			if(offset<total){
-				apPage.next=URI.create(name+(i+1)+".json");
+			offset+=Math.max(list.perPage, 1);
+			for(JsonObject item:list.list){
+				items.add(item);
 			}
-			apPage.totalItems=list.total;
-			apPage.items=new ArrayList<>();
-			for(T item:list.list){
-				apPage.items.add(converter.apply(item));
-			}
-			writeActivityPubObject(apPage, filesToInclude, zos, name+i);
-
-			i++;
+			if(list.list.isEmpty())
+				break;
 		}while(offset<total);
+		writeJsonElement(items.build(), zos, name);
 	}
 
-	private interface PaginatedListGetter<T extends ActivityPubObject>{
-		PaginatedList<T> get(int offset) throws IOException;
+	private PaginatedList<JsonObject> mapActors(PaginatedList<? extends Actor> list){
+		return new PaginatedList<>(list, list.list.stream().map(this::serializeActorLink).toList());
 	}
 
-	public static class ExportSerializerContext extends SerializerContext{
-		public Set<MediaFileID> filesToInclude=new HashSet<>();
-
-		public ExportSerializerContext(ApplicationContext appContext){
-			super(appContext, (String)null);
-		}
+	private JsonObject serializeActorLink(Actor actor){
+		JsonObjectBuilder b=new JsonObjectBuilder()
+				.add("id", actor.getOwnerID())
+				.add("username", actor.username)
+				.add("name", actor.getName())
+				.add("url", actor.getAbsoluteProfileURL());
+		if(actor instanceof Group g)
+			b.add("isEvent", g.isEvent());
+		return b.build();
 	}
 
-	private static class ActivityPubFriendLink extends ActivityPubLink{
-		public List<Integer> lists;
+	private JsonObject serializeProfile(User user, Set<MediaFileID> filesToInclude){
+		JsonObjectBuilder b=new JsonObjectBuilder()
+				.add("id", user.id)
+				.add("username", user.username)
+				.add("url", user.getAbsoluteProfileURL())
+				.add("firstName", user.firstName)
+				.add("lastName", user.lastName)
+				.add("middleName", user.middleName)
+				.add("maidenName", user.maidenName)
+				.add("gender", user.gender==null ? null : user.gender.toString().toLowerCase())
+				.add("birthDate", user.birthDate==null ? null : user.birthDate.toString())
+				.add("about", user.summary)
+				.add("aboutSource", user.aboutSource)
+				.add("profileFields", user.serializeProfileFields())
+				.add("privacySettings", Utils.gson.toJsonTree(user.privacySettings));
+		if(user.status!=null && !user.status.isExpired())
+			b.add("status", user.status.text());
+		if(user.getAvatarImage() instanceof LocalImage li)
+			b.add("avatar", serializeAttachment(li, filesToInclude));
+		return b.build();
+	}
 
-		@Override
-		public JsonObject asActivityPubObject(JsonObject obj, SerializerContext serializerContext){
-			super.asActivityPubObject(obj, serializerContext);
-			if(!lists.isEmpty()){
-				obj.add("lists", lists.stream().collect(JsonArrayBuilder.COLLECTOR));
-				serializerContext.addSmAlias("lists");
+	private JsonObject serializeAttachment(ActivityPubObject att, Set<MediaFileID> filesToInclude){
+		JsonObjectBuilder b=new JsonObjectBuilder()
+				.add("type", att.getType())
+				.add("description", att.name)
+				.add("mediaType", att.mediaType);
+		if(att instanceof LocalImage li){
+			b.add("width", li.width).add("height", li.height);
+			if(li.fileRecord!=null){
+				filesToInclude.add(li.fileRecord.id());
+				b.add("file", getMediaFileName(li.fileRecord.id()));
 			}
-			return obj;
+			if(li.photoID!=0)
+				b.add("photoID", li.photoID);
+		}else if(att.url!=null){
+			b.add("url", att.url.toString());
 		}
+		return b.build();
+	}
+
+	private JsonArrayBuilder serializeAttachments(List<ActivityPubObject> attachments, Set<MediaFileID> filesToInclude){
+		JsonArrayBuilder ab=new JsonArrayBuilder();
+		if(attachments!=null){
+			for(ActivityPubObject att:attachments){
+				ab.add(serializeAttachment(att, filesToInclude));
+			}
+		}
+		return ab;
+	}
+
+	private JsonObjectBuilder serializePostLikeObject(PostLikeObject p, Set<MediaFileID> filesToInclude){
+		JsonObjectBuilder b=new JsonObjectBuilder()
+				.add("authorID", p.authorID)
+				.add("ownerID", p.ownerID)
+				.add("text", p.text)
+				.add("contentWarning", p.contentWarning)
+				.add("createdAt", p.createdAt==null ? 0 : p.createdAt.getEpochSecond())
+				.add("mentionedUserIDs", p.mentionedUserIDs.stream().collect(JsonArrayBuilder.COLLECTOR))
+				.add("attachments", serializeAttachments(p.attachments, filesToInclude));
+		if(p.updatedAt!=null)
+			b.add("updatedAt", p.updatedAt.getEpochSecond());
+		return b;
+	}
+
+	private JsonObject serializePost(Post p, Set<MediaFileID> filesToInclude){
+		JsonObjectBuilder b=serializePostLikeObject(p, filesToInclude)
+				.add("id", p.id)
+				.add("url", p.getInternalURL().toString())
+				.add("replyKey", p.replyKey.stream().collect(JsonArrayBuilder.COLLECTOR))
+				.add("privacy", p.privacy.toString().toLowerCase());
+		if(p.repostOf!=0)
+			b.add("repostOf", p.repostOf);
+		if(p.poll!=null)
+			b.add("poll", serializePoll(p.poll));
+		return b.build();
+	}
+
+	private JsonObject serializePoll(Poll poll){
+		JsonArrayBuilder options=new JsonArrayBuilder();
+		for(PollOption opt:poll.options){
+			options.add(new JsonObjectBuilder().add("id", opt.id).add("text", opt.text).add("votes", opt.numVotes));
+		}
+		JsonObjectBuilder b=new JsonObjectBuilder()
+				.add("question", poll.question)
+				.add("multipleChoice", poll.multipleChoice)
+				.add("anonymous", poll.anonymous)
+				.add("options", options);
+		if(poll.endTime!=null)
+			b.add("endTime", poll.endTime.getEpochSecond());
+		return b.build();
+	}
+
+	private JsonObject serializeComment(Comment c, Set<MediaFileID> filesToInclude){
+		return serializePostLikeObject(c, filesToInclude)
+				.add("id", c.getIDString())
+				.add("url", c.getInternalURL().toString())
+				.add("parentType", c.parentObjectID.type().toString().toLowerCase())
+				.add("parentID", c.parentObjectID.getIdString())
+				.add("replyKey", c.getReplyKeyAsStrings().stream().collect(JsonArrayBuilder.COLLECTOR))
+				.build();
+	}
+
+	private JsonObject serializeMessage(MailMessage m, Set<MediaFileID> filesToInclude){
+		JsonObjectBuilder b=new JsonObjectBuilder()
+				.add("id", m.getIdString())
+				.add("senderID", m.senderID)
+				.add("to", m.to.stream().collect(JsonArrayBuilder.COLLECTOR))
+				.add("cc", m.cc.stream().collect(JsonArrayBuilder.COLLECTOR))
+				.add("subject", m.subject)
+				.add("text", m.text)
+				.add("createdAt", m.createdAt.getEpochSecond())
+				.add("attachments", serializeAttachments(m.attachments, filesToInclude));
+		if(m.updatedAt!=null)
+			b.add("updatedAt", m.updatedAt.getEpochSecond());
+		if(m.replyInfo!=null)
+			b.add("replyInfo", Utils.gson.toJsonTree(m.replyInfo));
+		return b.build();
+	}
+
+	private JsonObject serializeAlbum(PhotoAlbum album){
+		JsonObjectBuilder b=new JsonObjectBuilder()
+				.add("id", album.getIdString())
+				.add("ownerID", album.ownerID)
+				.add("title", album.title)
+				.add("description", album.description)
+				.add("numPhotos", album.numPhotos)
+				.add("createdAt", album.createdAt==null ? 0 : album.createdAt.getEpochSecond())
+				.add("updatedAt", album.updatedAt==null ? 0 : album.updatedAt.getEpochSecond());
+		if(album.systemType!=null)
+			b.add("systemType", album.systemType.toString().toLowerCase());
+		if(album.viewPrivacy!=null)
+			b.add("viewPrivacy", Utils.gson.toJsonTree(album.viewPrivacy));
+		if(album.commentPrivacy!=null)
+			b.add("commentPrivacy", Utils.gson.toJsonTree(album.commentPrivacy));
+		return b.build();
+	}
+
+	private JsonObject serializePhoto(Photo photo, Set<MediaFileID> filesToInclude){
+		JsonObjectBuilder b=new JsonObjectBuilder()
+				.add("id", photo.getIdString())
+				.add("url", photo.getAbsoluteURL())
+				.add("ownerID", photo.ownerID)
+				.add("authorID", photo.authorID)
+				.add("albumID", Utils.encodeLong(smithereen.util.XTEA.obfuscateObjectID(photo.albumID, smithereen.model.ObfuscatedObjectIDType.PHOTO_ALBUM)))
+				.add("description", photo.description)
+				.add("createdAt", photo.createdAt==null ? 0 : photo.createdAt.getEpochSecond());
+		if(photo.image instanceof LocalImage li)
+			b.add("file", serializeAttachment(li, filesToInclude));
+		return b.build();
+	}
+
+	private interface PaginatedListGetter{
+		PaginatedList<JsonObject> get(int offset) throws IOException;
 	}
 }

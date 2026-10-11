@@ -18,7 +18,7 @@ import smithereen.storage.ImgProxy;
 import smithereen.text.TextProcessor;
 import spark.utils.StringUtils;
 
-public sealed interface SizedImage extends BlurHashable permits LocalImage, RemoteImage{
+public sealed interface SizedImage extends BlurHashable permits LocalImage{
 
 	@Nullable
 	@Contract("_, _, _, true, _ -> !null")

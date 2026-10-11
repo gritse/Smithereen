@@ -23,8 +23,6 @@ import smithereen.Mailer;
 import smithereen.exceptions.InternalServerErrorException;
 import smithereen.lang.Lang;
 import smithereen.model.Account;
-import smithereen.model.ForeignGroup;
-import smithereen.model.ForeignUser;
 import smithereen.model.Group;
 import smithereen.model.PaginatedList;
 import smithereen.model.ServerRule;
@@ -59,8 +57,7 @@ public class AdminGeneralRoutes{
 				.with("serverAdminEmail", Config.serverAdminEmail)
 				.with("signupMode", Config.signupMode)
 				.with("signupConfirmEmail", Config.signupConfirmEmail)
-				.with("signupEnableCaptcha", Config.signupFormUseCaptcha)
-				.with("unconfirmedFaspRequests", ctx.getFaspController().getUnconfirmedProviderCount());
+				.with("signupEnableCaptcha", Config.signupFormUseCaptcha);
 		String msg=req.session().attribute("admin.serverInfoMessage");
 		if(StringUtils.isNotEmpty(msg)){
 			req.session().removeAttribute("admin.serverInfoMessage");
@@ -119,7 +116,6 @@ public class AdminGeneralRoutes{
 				.with("smtpUseTLS", Config.smtpUseTLS)
 				.with("userExportCooldown", Config.userExportCooldownDays)
 				.with("userExportRetention", Config.userExportRetentionDays)
-				.with("unconfirmedFaspRequests", ctx.getFaspController().getUnconfirmedProviderCount())
 				.addMessage(req, "admin.emailTestMessage", "adminEmailTestMessage")
 				.addMessage(req, "admin.emailSettingsMessage", "adminEmailSettingsMessage")
 				.addMessage(req, "admin.userExportSettingsMessage", "adminUserExportSettingsMessage");
@@ -433,10 +429,7 @@ public class AdminGeneralRoutes{
 							yield l.get("admin_user_state_frozen", Map.of("expirationTime", expiresAt==null ? l.get("email_account_frozen_until_first_login") : l.formatDate(Instant.ofEpochMilli(((Number)expiresAt).longValue()), timeZoneForRequest(req), false)));
 						}
 						case SUSPENDED -> {
-							if(targetUser instanceof ForeignUser)
-								yield l.get("admin_user_state_suspended_foreign");
-							else
-								yield l.get("admin_user_state_suspended", Map.of("deletionTime", l.formatDate(le.time().plus(UserBanInfo.ACCOUNT_DELETION_DAYS, ChronoUnit.DAYS), timeZoneForRequest(req), false)));
+							yield l.get("admin_user_state_suspended", Map.of("deletionTime", l.formatDate(le.time().plus(UserBanInfo.ACCOUNT_DELETION_DAYS, ChronoUnit.DAYS), timeZoneForRequest(req), false)));
 						}
 						case HIDDEN -> l.get("admin_user_state_hidden");
 						case SELF_DEACTIVATED -> null;
@@ -533,10 +526,7 @@ public class AdminGeneralRoutes{
 					String statusStr=switch(GroupBanStatus.valueOf((String)le.extra().get("status"))){
 						case NONE -> l.get("admin_group_state_no_restrictions");
 						case SUSPENDED -> {
-							if(targetGroup instanceof ForeignGroup)
-								yield l.get("admin_group_state_suspended_foreign");
-							else
-								yield l.get("admin_group_state_suspended", Map.of("deletionTime", l.formatDate(le.time().plus(GroupBanInfo.GROUP_DELETION_DAYS, ChronoUnit.DAYS), timeZoneForRequest(req), false)));
+							yield l.get("admin_group_state_suspended", Map.of("deletionTime", l.formatDate(le.time().plus(GroupBanInfo.GROUP_DELETION_DAYS, ChronoUnit.DAYS), timeZoneForRequest(req), false)));
 						}
 						case HIDDEN -> l.get("admin_group_state_hidden");
 						case SELF_DEACTIVATED -> null;
@@ -551,7 +541,6 @@ public class AdminGeneralRoutes{
 		}).toList();
 		model.pageTitle(lang(req).get("admin_audit_log")).with("toolbarTitle", lang(req).get("menu_admin")).with("users", users).with("groups", groups);
 		model.paginate(new PaginatedList<>(log, viewModels));
-		model.with("unconfirmedFaspRequests", ctx.getFaspController().getUnconfirmedProviderCount());
 		return model;
 	}
 }

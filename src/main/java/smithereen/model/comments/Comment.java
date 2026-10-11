@@ -12,13 +12,10 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Set;
 
+import smithereen.model.LikeObjectType;
 import smithereen.Utils;
-import smithereen.activitypub.ParserContext;
 import smithereen.activitypub.objects.ActivityPubObject;
-import smithereen.activitypub.objects.activities.Like;
-import smithereen.model.ActivityPubRepresentable;
 import smithereen.model.LikeableContentObject;
-import smithereen.model.NonCachedRemoteImage;
 import smithereen.model.ObfuscatedObjectIDType;
 import smithereen.model.PostLikeObject;
 import smithereen.model.notifications.Notification;
@@ -30,7 +27,7 @@ import smithereen.util.JsonObjectBuilder;
 import smithereen.util.UriBuilder;
 import smithereen.util.XTEA;
 
-public sealed class Comment extends PostLikeObject implements ActivityPubRepresentable, CommentReplyParent, LikeableContentObject, ReportableContentObject permits ReportedComment{
+public sealed class Comment extends PostLikeObject implements CommentReplyParent, LikeableContentObject, ReportableContentObject permits ReportedComment{
 	public long id;
 	public CommentParentObjectID parentObjectID;
 	public List<Long> replyKey=List.of();
@@ -70,11 +67,6 @@ public sealed class Comment extends PostLikeObject implements ActivityPubReprese
 	}
 
 	@Override
-	public NonCachedRemoteImage.Args getPhotoArgs(int index){
-		return new NonCachedRemoteImage.CommentArgs(this, index);
-	}
-
-	@Override
 	public String getPhotoListID(){
 		return "comments/"+getIDString();
 	}
@@ -96,16 +88,12 @@ public sealed class Comment extends PostLikeObject implements ActivityPubReprese
 	}
 
 	public URI getActivityPubID(){
-		return activityPubID!=null ? activityPubID : getInternalURL();
-	}
-
-	public URI getActivityPubURL(){
-		return activityPubURL!=null ? activityPubURL : getInternalURL();
+		return getInternalURL();
 	}
 
 	@Override
-	public Like.ObjectType getLikeObjectType(){
-		return Like.ObjectType.COMMENT;
+	public LikeObjectType getLikeObjectType(){
+		return LikeObjectType.COMMENT;
 	}
 
 	@Override
@@ -150,7 +138,7 @@ public sealed class Comment extends PostLikeObject implements ActivityPubReprese
 		if(jo.has("attachments")){
 			attachments=new ArrayList<>();
 			for(JsonElement jatt:jo.getAsJsonArray("attachments")){
-				attachments.add(ActivityPubObject.parse(jatt.getAsJsonObject(), ParserContext.LOCAL));
+				attachments.add(ActivityPubObject.parse(jatt.getAsJsonObject()));
 			}
 		}
 		if(jo.has("cw"))

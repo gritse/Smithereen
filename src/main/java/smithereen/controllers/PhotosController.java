@@ -23,27 +23,20 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import smithereen.model.LikeObjectType;
 import smithereen.ApplicationContext;
 import smithereen.Config;
 import smithereen.LruCache;
 import smithereen.Utils;
-import smithereen.activitypub.ActivityPub;
 import smithereen.activitypub.objects.ActivityPubObject;
-import smithereen.activitypub.objects.ActivityPubPhoto;
-import smithereen.activitypub.objects.ActivityPubTaggedPerson;
 import smithereen.activitypub.objects.Actor;
-import smithereen.activitypub.objects.CollectionQueryResult;
 import smithereen.activitypub.objects.Image;
-import smithereen.activitypub.objects.LinkOrObject;
 import smithereen.activitypub.objects.LocalImage;
-import smithereen.activitypub.objects.activities.Like;
 import smithereen.exceptions.InternalServerErrorException;
 import smithereen.exceptions.ObjectNotFoundException;
 import smithereen.exceptions.UserActionNotAllowedException;
 import smithereen.exceptions.UserErrorException;
 import smithereen.model.Account;
-import smithereen.model.ForeignGroup;
-import smithereen.model.ForeignUser;
 import smithereen.model.Group;
 import smithereen.model.PaginatedList;
 import smithereen.model.Post;
@@ -165,33 +158,6 @@ public class PhotosController{
 		}
 	}
 
-	public List<PhotoAlbum> getAllAlbumsForActivityPub(Actor owner, Request req){
-		try{
-			if(owner instanceof Group group){
-				context.getPrivacyController().enforceGroupContentAccess(req, group);
-				if(group.photosState==GroupFeatureState.DISABLED)
-					throw new UserActionNotAllowedException("Photo albums are disabled in this group");
-			}
-			List<PhotoAlbum> albums=albumListCache.get(owner.getOwnerID());
-			if(albums==null){
-				albums=PhotoStorage.getAllAlbums(owner.getOwnerID());
-				albumListCache.put(owner.getOwnerID(), albums);
-			}
-			if(owner instanceof User user){
-				String domain=ActivityPub.getRequesterDomain(req);
-				albums=albums.stream().filter(a->context.getPrivacyController().checkUserPrivacyForRemoteServer(domain, user, a.viewPrivacy)).toList();
-			}
-			List<PhotoAlbum> systemAlbums=PhotoStorage.getSystemAlbums(owner.getOwnerID());
-			if(!systemAlbums.isEmpty()){
-				albums=new ArrayList<>(albums);
-				albums.addAll(0, systemAlbums);
-			}
-			return albums;
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
 	public PaginatedList<PhotoAlbum> getRandomAlbumsForProfile(Actor owner, User self, int count){
 		List<PhotoAlbum> filteredAlbums=new ArrayList<>(getAllAlbums(owner, self, false, false));
 		Collections.shuffle(filteredAlbums);
@@ -218,12 +184,6 @@ public class PhotosController{
 			if(owner.photosState==GroupFeatureState.DISABLED)
 				throw new UserActionNotAllowedException("err_access_content");
 		}
-		return album;
-	}
-
-	public PhotoAlbum getAlbumForActivityPub(long id, Request req){
-		PhotoAlbum album=getAlbumIgnoringPrivacy(id);
-		context.getPrivacyController().enforceContentPrivacyForActivityPub(req, album);
 		return album;
 	}
 
@@ -304,8 +264,6 @@ public class PhotosController{
 				id=PhotoStorage.createUserAlbum(self.id, Objects.requireNonNull(title), description, Objects.requireNonNull(viewPrivacy), Objects.requireNonNull(commentPrivacy));
 			}
 			albumListCache.remove(self.id);
-			if(!viewPrivacy.isFullyPrivate())
-				context.getActivityPubWorker().sendCreatePhotoAlbum(self, getAlbumIgnoringPrivacy(id));
 			return id;
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
@@ -322,7 +280,6 @@ public class PhotosController{
 				id=PhotoStorage.createGroupAlbum(owner.id, title, description, disableCommenting, restrictUploads);
 			}
 			albumListCache.remove(-owner.id);
-			context.getActivityPubWorker().sendCreatePhotoAlbum(owner, getAlbumIgnoringPrivacy(id));
 			return id;
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
@@ -358,7 +315,6 @@ public class PhotosController{
 				}
 				albumListCache.remove(owner.getOwnerID());
 				PhotoAlbum album=getAlbumIgnoringPrivacy(id);
-				context.getActivityPubWorker().sendCreatePhotoAlbum(owner, album);
 				return album;
 			}catch(SQLException xx){
 				throw new InternalServerErrorException(xx);
@@ -402,15 +358,7 @@ public class PhotosController{
 	public void deleteAlbum(User self, PhotoAlbum album){
 		enforceAlbumManagementPermission(self, album);
 		deletePhotoAlbumInternal(album);
-		if(!(self instanceof ForeignUser)){
-			context.getActivityPubWorker().sendDeletePhotoAlbum(album.ownerID>0 ? self : context.getGroupsController().getGroupOrThrow(-album.ownerID), album);
-		}
-	}
 
-	public void deleteAlbum(ForeignGroup self, PhotoAlbum album){
-		if(album.ownerID!=-self.id)
-			throw new UserActionNotAllowedException();
-		deletePhotoAlbumInternal(album);
 	}
 
 	private void deletePhotoAlbumInternal(PhotoAlbum album){
@@ -466,7 +414,6 @@ public class PhotosController{
 			album.commentPrivacy=commentPrivacy;
 			albumCache.put(album.id, album);
 			context.getNewsfeedController().clearFriendsFeedCache();
-			context.getActivityPubWorker().sendUpdatePhotoAlbum(self, album, prevViewPrivacy);
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -513,15 +460,13 @@ public class PhotosController{
 			album.flags=newFlags;
 			albumCache.put(album.id, album);
 			context.getNewsfeedController().clearGroupsFeedCache();
-			context.getActivityPubWorker().sendUpdatePhotoAlbum(context.getGroupsController().getGroupOrThrow(-album.ownerID), album, null);
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
 	}
 
 	public long createPhoto(User self, @NotNull PhotoAlbum album, long fileID, @Nullable String descriptionSource, @Nullable FormattedTextFormat descriptionFormat){
-		self.ensureLocal();
-		Actor owner;
+				Actor owner;
 		if(album.ownerID>0){
 			if(album.ownerID!=self.id)
 				throw new UserActionNotAllowedException();
@@ -576,17 +521,8 @@ public class PhotosController{
 				}
 			}
 
-			if(album.activityPubID!=null){
-				Photo photo=getPhotoIgnoringPrivacy(id);
-				context.getActivityPubWorker().sendCreateAlbumPhoto(self, photo, album);
-			}else if(album.ownerID<0 || !album.viewPrivacy.isFullyPrivate()){
-				Photo photo=getPhotoIgnoringPrivacy(id);
-				context.getActivityPubWorker().sendAddPhotoToAlbum(owner, photo, album);
-			}
-
 			if(needUpdateCover){
 				album.coverID=id;
-				context.getActivityPubWorker().sendUpdatePhotoAlbum(owner, album, null);
 			}
 			if(numPhotos!=0)
 				album.numPhotos=numPhotos;
@@ -614,15 +550,6 @@ public class PhotosController{
 			deletePhotoInternal(photo, album);
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
-		}
-		if(photo.apID==null){
-			if(photo.ownerID==self.id){ // Deleted by author
-				context.getActivityPubWorker().sendDeleteAlbumPhoto(self, photo, album);
-			}else if(photo.ownerID<0){ // Removed by group moderators
-				context.getActivityPubWorker().sendRemoveAlbumPhoto(context.getGroupsController().getGroupOrThrow(-photo.ownerID), photo, album);
-			}else{
-				throw new IllegalStateException();
-			}
 		}
 		return new PhotoDeletionResult(album.numPhotos==0, album.coverID==oldCoverId ? -1 : album.coverID);
 	}
@@ -687,7 +614,7 @@ public class PhotosController{
 		if(needUpdateCover){
 			album.coverID=newCoverID;
 		}
-		LikeStorage.deleteAllLikesForObject(photo.id, Like.ObjectType.PHOTO);
+		LikeStorage.deleteAllLikesForObject(photo.id, LikeObjectType.PHOTO);
 		context.getCommentsController().deleteCommentsForObject(photo);
 		NotificationsStorage.deleteNotificationsForObject(Notification.ObjectType.PHOTO, photo.id);
 		if(album.ownerID>0){
@@ -753,7 +680,6 @@ public class PhotosController{
 			String parsedDescription=TextProcessor.preprocessPostText(descriptionSource, null, format);
 			PhotoStorage.updatePhotoDescription(photo.id, descriptionSource, parsedDescription, format);
 			photo.description=parsedDescription;
-			context.getActivityPubWorker().sendUpdateAlbumPhoto(self, photo, getAlbum(photo.albumID, self));
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -799,270 +725,6 @@ public class PhotosController{
 		}
 	}
 
-	public long getAlbumIdByActivityPubId(URI activityPubID){
-		try{
-			long id=PhotoStorage.getAlbumIdByActivityPubId(activityPubID);
-			return id==-1 ? 0 : id;
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	public long getPhotoIdByActivityPubId(URI activityPubID){
-		try{
-			long id=PhotoStorage.getPhotoIdByActivityPubId(activityPubID);
-			return id==-1 ? 0 : id;
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	public Map<URI, Long> getPhotoIdsByActivityPubIds(Collection<URI> apIDs){
-		if(apIDs.isEmpty())
-			return Map.of();
-		try{
-			return PhotoStorage.getPhotoIdsByActivityPubIds(apIDs);
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	public void putOrUpdateForeignAlbum(PhotoAlbum album){
-		try{
-			PhotoStorage.putOrUpdateForeignAlbum(album);
-			synchronized(albumCacheLock){
-				albumListCache.remove(album.ownerID);
-			}
-			if(album.ownerID>0)
-				context.getNewsfeedController().clearFriendsFeedCache();
-			else
-				context.getNewsfeedController().clearGroupsFeedCache();
-			album.numPhotos=PhotoStorage.getAlbumSize(album.id);
-			albumCache.put(album.id, album);
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	public void putOrUpdateForeignPhoto(Photo photo, ActivityPubPhoto origObj){
-		putOrUpdateForeignPhotos(List.of(new Pair<>(photo, origObj)));
-	}
-
-	public void putOrUpdateForeignPhotos(List<Pair<Photo, ActivityPubPhoto>> photos){
-		try{
-			record PhotoTagToQuery(long id, long photoID, URI photoApID){}
-			record PendingUserCollectionQuery(ForeignUser user, ArrayList<PhotoTagToQuery> queries){}
-
-			HashMap<URI, PendingUserCollectionQuery> userCollectionQueries=new HashMap<>();
-			for(Pair<Photo, ActivityPubPhoto> p:photos){
-				Photo photo=p.first();
-				ActivityPubPhoto origObj=p.second();
-
-				boolean isNew=photo.id==0;
-				if(!isNew){
-					Photo existing=getPhotoIgnoringPrivacy(photo.id);
-					if(photo.ownerID!=existing.ownerID)
-						throw new UserActionNotAllowedException();
-				}
-				if(photo.ownerID<0){
-					User self=context.getUsersController().getUserOrThrow(photo.authorID);
-					Group group=context.getGroupsController().getGroupOrThrow(-photo.ownerID);
-					if(context.getPrivacyController().isUserBlocked(self, group))
-						throw new UserActionNotAllowedException();
-				}
-
-				PhotoStorage.putOrUpdateForeignPhoto(photo);
-				PhotoAlbum album=getAlbumIgnoringPrivacy(photo.albumID);
-				List<PhotoTag> existingTags;
-				if(isNew){
-					if(!album.flags.contains(PhotoAlbum.Flag.COVER_SET_EXPLICITLY)){
-						boolean needUpdateCover=true;
-						if(album.coverID!=0){
-							try{
-								needUpdateCover=getPhotoIgnoringPrivacy(album.coverID).createdAt.isBefore(photo.createdAt);
-							}catch(ObjectNotFoundException ignore){}
-						}
-						if(needUpdateCover){
-							PhotoStorage.setAlbumCover(photo.albumID, photo.id);
-						}
-					}
-					existingTags=List.of();
-					synchronized(albumCacheLock){
-						albumListCache.remove(photo.ownerID);
-						albumCache.remove(photo.albumID);
-					}
-					if(album.systemType==null){
-						if(photo.ownerID>0){
-							User owner=context.getUsersController().getUserOrThrow(photo.ownerID);
-							context.getNewsfeedController().putFriendsFeedEntry(owner, photo.id, NewsfeedEntry.Type.ADD_PHOTO);
-						}else{
-							Group owner=context.getGroupsController().getGroupOrThrow(-photo.ownerID);
-							context.getNewsfeedController().putGroupsFeedEntry(owner, photo.id, NewsfeedEntry.Type.ADD_PHOTO);
-						}
-					}
-				}else{
-					existingTags=PhotoStorage.getPhotoTags(photo.id);
-				}
-
-				Set<URI> existingTagIDs=existingTags.stream().map(PhotoTag::apID).collect(Collectors.toSet());
-				List<ActivityPubObject> apTags=origObj.tag==null ? List.of() : origObj.tag;
-				HashSet<URI> newTagIDs=new HashSet<>();
-				for(ActivityPubObject apTag: apTags){
-					if(apTag instanceof ActivityPubTaggedPerson tp){
-						if(tp.activityPubID==null)
-							continue;
-						newTagIDs.add(tp.activityPubID);
-					}
-				}
-				List<PhotoTag> tagsToDelete=existingTags.stream().filter(t->!newTagIDs.contains(t.apID())).toList();
-				if(!tagsToDelete.isEmpty()){
-					PhotoStorage.deletePhotoTags(photo.id, tagsToDelete.stream().map(PhotoTag::id).collect(Collectors.toSet()));
-					for(PhotoTag tag:tagsToDelete){
-						if(tag.userID()!=0){
-							if(!tag.approved()){
-								UserNotifications un=NotificationsStorage.getNotificationsFromCache(tag.userID());
-								if(un!=null)
-									un.incNewPhotoTagCount(-1);
-								try{
-									User user=context.getUsersController().getUserOrThrow(tag.userID());
-									context.getNotificationsController().sendRealtimeCountersUpdates(user);
-								}catch(ObjectNotFoundException ignore){}
-							}else{
-								try{
-									User user=context.getUsersController().getUserOrThrow(tag.userID());
-									context.getNewsfeedController().deleteFriendsFeedEntry(user, photo.id, NewsfeedEntry.Type.PHOTO_TAG);
-								}catch(ObjectNotFoundException ignore){}
-							}
-						}
-					}
-				}
-				List<ActivityPubTaggedPerson> tagsToCreate=apTags.stream()
-						.map(t->t instanceof ActivityPubTaggedPerson tp ? tp : null)
-						.filter(t->t!=null && !existingTagIDs.contains(t.activityPubID))
-						.toList();
-				for(ActivityPubTaggedPerson tag:tagsToCreate){
-					if(tag.rect==null || StringUtils.isEmpty(tag.name) || tag.attributedTo==null)
-						continue;
-					User placer;
-					try{
-						placer=context.getObjectLinkResolver().resolveLocally(tag.attributedTo, User.class);
-					}catch(ObjectNotFoundException x){
-						continue;
-					}
-					User user=null;
-					try{
-						if(tag.href!=null && Utils.uriHostMatches(placer.activityPubID, tag.href)){
-							user=context.getObjectLinkResolver().resolve(tag.href, User.class, true, true, false);
-							if(!context.getPrivacyController().checkUserPrivacy(placer, user, UserPrivacySettingKey.PHOTO_TAG))
-								user=null;
-						}
-					}catch(ObjectNotFoundException|IllegalStateException ignore){}
-					boolean actuallyApproved=tag.approved;
-					if(tag.approved){
-						if(user instanceof ForeignUser fu){
-							if(fu.collectionQueryEndpoint!=null && !Utils.uriHostMatches(fu.activityPubID, photo.apID)){
-								actuallyApproved=false;
-							}
-						}else{
-							// Tags for local users always start non-approved
-							actuallyApproved=false;
-						}
-					}
-					long tagID=PhotoStorage.createPhotoTag(photo.id, placer.id, user==null ? 0 : user.id, tag.name, actuallyApproved, tag.rect, tag.activityPubID);
-					if(tag.approved && !actuallyApproved && user instanceof ForeignUser fu && fu.collectionQueryEndpoint!=null && fu.getTaggedPhotosURL()!=null){
-						userCollectionQueries.computeIfAbsent(user.activityPubID, id->new PendingUserCollectionQuery(fu, new ArrayList<>()))
-								.queries.add(new PhotoTagToQuery(tagID, photo.id, photo.getActivityPubID()));
-					}
-					if(user!=null && !(user instanceof ForeignUser)){
-						UserNotifications un=NotificationsStorage.getNotificationsFromCache(user.id);
-						if(un!=null)
-							un.incNewPhotoTagCount(1);
-						context.getNotificationsController().sendRealtimeNotifications(user, "photoTag"+tagID, RealtimeNotification.Type.PHOTO_TAG, photo, null, placer);
-					}
-				}
-				List<ActivityPubTaggedPerson> tagsToMaybeUpdate=apTags.stream()
-						.map(t->t instanceof ActivityPubTaggedPerson tp ? tp : null)
-						.filter(t->t!=null && existingTagIDs.contains(t.activityPubID))
-						.toList();
-				Map<URI, PhotoTag> existingTagsByID=existingTags.stream().collect(Collectors.toMap(PhotoTag::apID, Function.identity()));
-				for(ActivityPubTaggedPerson tag:tagsToMaybeUpdate){
-					PhotoTag existing=existingTagsByID.get(tag.activityPubID);
-					if(!tag.rect.equals(existing.rect())){
-						PhotoStorage.updatePhotoTagsRects(photo.id, Map.of(existing.id(), tag.rect));
-					}
-					if(tag.approved && !existing.approved() && existing.userID()!=0){
-						try{
-							User user=context.getUsersController().getUserOrThrow(existing.userID());
-							if(user instanceof ForeignUser fu){
-								if(!Utils.uriHostMatches(fu.activityPubID, photo.apID) && fu.collectionQueryEndpoint!=null && fu.getTaggedPhotosURL()!=null){
-									userCollectionQueries.computeIfAbsent(user.activityPubID, id->new PendingUserCollectionQuery(fu, new ArrayList<>()))
-											.queries.add(new PhotoTagToQuery(existing.id(), photo.id, photo.getActivityPubID()));
-								}else{
-									PhotoStorage.approvePhotoTag(photo.id, existing.id());
-								}
-							}
-						}catch(ObjectNotFoundException ignore){}
-					}
-				}
-			}
-			for(PendingUserCollectionQuery query:userCollectionQueries.values()){
-				Map<URI, PhotoTagToQuery> queriesByPhotoIDs=query.queries.stream().map(q->new Pair<>(q.photoApID, q)).collect(Collectors.toMap(Pair::first, Pair::second));
-				CollectionQueryResult res=ActivityPub.performCollectionQuery(query.user, query.user.getTaggedPhotosURL(), query.queries.stream().map(PhotoTagToQuery::photoApID).toList());
-				for(LinkOrObject item:res.items){
-					if(item.link!=null && queriesByPhotoIDs.get(item.link) instanceof PhotoTagToQuery(long id, long photoID, URI photoApID)){
-						PhotoStorage.approvePhotoTag(photoID, id);
-					}
-				}
-			}
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	public void deleteRemoteAlbumsNotInSet(Actor owner, Set<Long> ids){
-		owner.ensureRemote();
-		try{
-			List<PhotoAlbum> albums=getAllAlbumsIgnoringPrivacy(owner)
-					.stream()
-					.filter(a->!ids.contains(a.id))
-					.toList();
-			if(!albums.isEmpty()){
-				for(PhotoAlbum album:albums){
-					MediaStorage.deleteMediaFileReferences(PhotoStorage.getLocalPhotoIDsForAlbum(album.id), MediaFileReferenceType.ALBUM_PHOTO);
-					deleteCommentsForAlbum(album.id);
-					PhotoStorage.deleteAlbum(album.id, album.ownerID);
-					albumCache.remove(album.id);
-				}
-				albumListCache.remove(owner.getOwnerID());
-				if(owner instanceof User){
-					context.getNewsfeedController().clearFriendsFeedCache();
-				}
-			}
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	public void deleteRemotePhotosNotInSet(PhotoAlbum album, Set<Long> ids){
-		if(album.activityPubID==null)
-			throw new IllegalArgumentException("Must be remote");
-		try{
-			Set<Long> idsToDelete=PhotoStorage.getAlbumPhotosNotInSet(album.id, ids);
-			if(idsToDelete.isEmpty())
-				return;
-
-			MediaStorage.deleteMediaFileReferences(PhotoStorage.getLocalPhotoIDsIn(idsToDelete), MediaFileReferenceType.ALBUM_PHOTO);
-			PhotoStorage.deletePhotos(album.id, idsToDelete);
-
-			albumListCache.remove(album.ownerID);
-			if(album.ownerID>0){
-				context.getNewsfeedController().clearFriendsFeedCache();
-			}
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
 	public int getPhotoIndexInAlbum(PhotoAlbum album, Photo photo){
 		try{
 			int index=PhotoStorage.getPhotoIndexInAlbum(album.id, photo.id);
@@ -1077,7 +739,7 @@ public class PhotosController{
 	private void deleteCommentsForAlbum(long albumID) throws SQLException{
 		for(Set<Long> commentIDs=CommentStorage.getPhotoAlbumCommentIDsForDeletion(albumID);!commentIDs.isEmpty();commentIDs=CommentStorage.getPhotoAlbumCommentIDsForDeletion(albumID)){
 			MediaStorage.deleteMediaFileReferences(commentIDs, MediaFileReferenceType.COMMENT_ATTACHMENT);
-			LikeStorage.deleteAllLikesForObjects(commentIDs, Like.ObjectType.COMMENT);
+			LikeStorage.deleteAllLikesForObjects(commentIDs, LikeObjectType.COMMENT);
 			CommentStorage.deleteComments(commentIDs);
 		}
 		CommentStorage.deleteCommentBookmarksForPhotoAlbum(albumID);
@@ -1086,17 +748,7 @@ public class PhotosController{
 	public Photo savePhotoToAlbum(User self, Photo photo){
 		if(photo.ownerID==self.id)
 			throw new UserActionNotAllowedException();
-		long fileID;
-		if(photo.apID!=null){
-			try{
-				fileID=MediaStorageUtils.copyRemoteImageToLocalStorage(self, photo.image).fileID;
-			}catch(SQLException | IOException x){
-				throw new InternalServerErrorException(x);
-			}
-		}else{
-			fileID=photo.localFileID;
-		}
-		return saveFileToAlbum(self, fileID);
+		return saveFileToAlbum(self, photo.localFileID);
 	}
 
 	public Photo saveImageToAlbum(User self, SizedImage image){
@@ -1104,11 +756,7 @@ public class PhotosController{
 		if(image instanceof LocalImage li){
 			fileID=li.fileID;
 		}else{
-			try{
-				fileID=MediaStorageUtils.copyRemoteImageToLocalStorage(self, image).fileID;
-			}catch(SQLException | IOException x){
-				throw new InternalServerErrorException(x);
-			}
+			throw new IllegalArgumentException("Only local images can be saved to albums");
 		}
 		return saveFileToAlbum(self, fileID);
 	}
@@ -1141,8 +789,6 @@ public class PhotosController{
 				album.numPhotos++;
 			albumCache.put(album.id, album);
 			Photo newPhoto=getPhotoIgnoringPrivacy(id);
-			context.getActivityPubWorker().sendAddPhotoToAlbum(self, newPhoto, album);
-			context.getActivityPubWorker().sendUpdatePhotoAlbum(self, album, null);
 			return newPhoto;
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
@@ -1179,8 +825,6 @@ public class PhotosController{
 
 	public void setPhotoRotation(User self, Photo photo, SizedImage.Rotation rotation){
 		enforcePhotoManagementPermission(self, photo);
-		if(photo.apID!=null)
-			throw new IllegalArgumentException("Can only rotate local photos");
 		try{
 			if(photo.metadata==null)
 				photo.metadata=new PhotoMetadata();
@@ -1215,7 +859,6 @@ public class PhotosController{
 			if(photo.image instanceof LocalImage li)
 				li.rotation=rotation;
 			PhotoStorage.updatePhotoMetadata(photo.id, photo.metadata);
-			context.getActivityPubWorker().sendUpdateAlbumPhoto(self, photo, getAlbum(photo.albumID, self));
 
 			Actor owner=context.getWallController().getContentAuthorAndOwner(photo).owner();
 			if(owner.getAvatar() instanceof LocalImage li && li.photoID==photo.id){
@@ -1295,11 +938,9 @@ public class PhotosController{
 			if(owner instanceof User user){
 				UserStorage.updateProfilePicture(user, serializedAva);
 				user=UserStorage.getById(user.id);
-				context.getActivityPubWorker().sendUpdateUserActivity(user);
 			}else if(owner instanceof Group group){
 				GroupStorage.updateProfilePicture(group, serializedAva);
 				group=GroupStorage.getById(group.id);
-				context.getActivityPubWorker().sendUpdateGroupActivity(group);
 			}
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
@@ -1312,11 +953,9 @@ public class PhotosController{
 			if(owner instanceof User user){
 				UserStorage.updateProfilePicture(user, null);
 				user=UserStorage.getById(user.id);
-				context.getActivityPubWorker().sendUpdateUserActivity(user);
 			}else if(owner instanceof Group group){
 				GroupStorage.updateProfilePicture(group, null);
 				group=GroupStorage.getById(group.id);
-				context.getActivityPubWorker().sendUpdateGroupActivity(group);
 			}
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
@@ -1351,8 +990,6 @@ public class PhotosController{
 		// maybe reconsider this in the future (VK allows one's friends to add tags to their photos)
 		enforcePhotoManagementPermission(self, photo);
 
-		if(Config.demoMode && user instanceof ForeignUser)
-			throw new UserActionNotAllowedException("err_unavailable_in_demo_mode");
 
 		try{
 			if(user!=null){
@@ -1398,14 +1035,13 @@ public class PhotosController{
 				}
 			}
 			rect=absRect.makeRelative();
-			long id=PhotoStorage.createPhotoTag(photo.id, self.id, user!=null ? user.id : 0, name, user!=null && user.id==self.id, rect, null);
-			if(user!=null && !(user instanceof ForeignUser) && user.id!=self.id){
+			long id=PhotoStorage.createPhotoTag(photo.id, self.id, user!=null ? user.id : 0, name, user!=null && user.id==self.id, rect);
+			if(user!=null && user.id!=self.id){
 				UserNotifications un=NotificationsStorage.getNotificationsFromCache(user.id);
 				if(un!=null)
 					un.incNewPhotoTagCount(1);
 				context.getNotificationsController().sendRealtimeNotifications(user, "photoTag"+id, RealtimeNotification.Type.PHOTO_TAG, photo, null, self);
 			}
-			context.getActivityPubWorker().sendUpdateAlbumPhoto(context.getWallController().getContentAuthorAndOwner(photo).author(), photo, getAlbumIgnoringPrivacy(photo.albumID));
 			if(user!=null && user.id==self.id){
 				context.getNewsfeedController().putFriendsFeedEntry(self, photo.id, NewsfeedEntry.Type.PHOTO_TAG);
 			}
@@ -1456,15 +1092,6 @@ public class PhotosController{
 					context.getNotificationsController().sendRealtimeCountersUpdates(user);
 				}catch(ObjectNotFoundException ignore){}
 			}
-			User placer=context.getUsersController().getUserOrThrow(tag.placerID());
-			if(tag.approved()){
-				// Tell followers that this photo was removed from the tagged photos collection
-				context.getActivityPubWorker().sendDeletePhotoTag(self, photo, getAlbumIgnoringPrivacy(photo.albumID), tag, placer, context.getWallController().getContentAuthorAndOwner(photo).owner());
-			}else{
-				// This photo wasn't in the tagged photos collection, so just tell the owner and placer that we rejected the tag
-				if(photo.apID!=null)
-					context.getActivityPubWorker().sendRejectPhotoTag(self, photo, getAlbumIgnoringPrivacy(photo.albumID), tag, placer, context.getWallController().getContentAuthorAndOwner(photo).owner());
-			}
 			if(tag.userID()!=0 && tag.approved()){
 				try{
 					User user=context.getUsersController().getUserOrThrow(tag.userID());
@@ -1486,32 +1113,6 @@ public class PhotosController{
 			PaginatedList<Long> ids=PhotoStorage.getUserTaggedPhotos(user.id, offset, count, true, reverseOrder);
 			Map<Long, Photo> photos=getPhotosIgnoringPrivacy(ids.list);
 			return new PaginatedList<>(ids, ids.list.stream().map(photos::get).toList());
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	public Set<URI> getUserTaggedPhotosActivityPubIDs(User user, Collection<URI> ids){
-		Map<Long, URI> photoIDs=new HashMap<>();
-		ids.stream()
-				.filter(Config::isLocal)
-				.map(id->new Pair<>(id, ObjectLinkResolver.getObjectIdFromLocalURL(id)))
-				.filter(oi->oi.second()!=null && oi.second().type()==ObjectLinkResolver.ObjectType.PHOTO)
-				.forEach(p->photoIDs.put(p.second().id(), p.first()));
-		Set<URI> foreignPhotoIDs=ids.stream()
-				.filter(u->!Config.isLocal(u))
-				.collect(Collectors.toSet());
-		if(!foreignPhotoIDs.isEmpty()){
-			getPhotoIdsByActivityPubIds(foreignPhotoIDs)
-					.forEach((key, value)->photoIDs.put(value, key));
-		}
-		if(photoIDs.isEmpty())
-			return Set.of();
-		try{
-			return PhotoStorage.getUserTaggedPhotosInSet(user.id, photoIDs.keySet())
-					.stream()
-					.map(photoIDs::get)
-					.collect(Collectors.toSet());
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -1539,36 +1140,7 @@ public class PhotosController{
 			if(un!=null)
 				un.incNewPhotoTagCount(-1);
 			context.getNotificationsController().sendRealtimeCountersUpdates(self);
-			User placer=context.getUsersController().getUserOrThrow(tag.placerID());
-			if(photo.apID!=null)
-				context.getActivityPubWorker().sendApprovePhotoTag(self, photo, getAlbumIgnoringPrivacy(photo.albumID), tag, placer, context.getWallController().getContentAuthorAndOwner(photo).owner());
 			context.getNewsfeedController().putFriendsFeedEntry(self, photo.id, NewsfeedEntry.Type.PHOTO_TAG);
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	public Set<URI> getAlbumPhotosActivityPubIDs(PhotoAlbum album, Collection<URI> ids){
-		Map<Long, URI> photoIDs=new HashMap<>();
-		ids.stream()
-				.filter(Config::isLocal)
-				.map(id->new Pair<>(id, ObjectLinkResolver.getObjectIdFromLocalURL(id)))
-				.filter(oi->oi.second()!=null && oi.second().type()==ObjectLinkResolver.ObjectType.PHOTO)
-				.forEach(p->photoIDs.put(p.second().id(), p.first()));
-		Set<URI> foreignPhotoIDs=ids.stream()
-				.filter(u->!Config.isLocal(u))
-				.collect(Collectors.toSet());
-		if(!foreignPhotoIDs.isEmpty()){
-			getPhotoIdsByActivityPubIds(foreignPhotoIDs)
-					.forEach((key, value)->photoIDs.put(value, key));
-		}
-		if(photoIDs.isEmpty())
-			return Set.of();
-		try{
-			return PhotoStorage.getAlbumPhotosInSet(album.id, photoIDs.keySet())
-					.stream()
-					.map(photoIDs::get)
-					.collect(Collectors.toSet());
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -1579,14 +1151,6 @@ public class PhotosController{
 				.map(u->u.getAvatarImage() instanceof LocalImage li && li.photoID!=0 ? li.photoID : null)
 				.filter(Objects::nonNull)
 				.collect(Collectors.toSet());
-		Set<URI> needForeignPhotos=users.stream()
-				.map(u->u.getAvatarImage() instanceof Image img && !(img instanceof LocalImage) && img.photoApID!=null ? img.photoApID : null)
-				.filter(Objects::nonNull)
-				.collect(Collectors.toSet());
-		if(!needForeignPhotos.isEmpty()){
-			needPhotos=new HashSet<>(needPhotos);
-			needPhotos.addAll(getPhotoIdsByActivityPubIds(needForeignPhotos).values());
-		}
 		if(needPhotos.isEmpty())
 			return Map.of();
 
@@ -1598,14 +1162,6 @@ public class PhotosController{
 				.map(g->g.getAvatarImage() instanceof LocalImage li && li.photoID!=0 ? li.photoID : null)
 				.filter(Objects::nonNull)
 				.collect(Collectors.toSet());
-		Set<URI> needForeignPhotos=groups.stream()
-				.map(g->g.getAvatarImage() instanceof Image img && !(img instanceof LocalImage) && img.photoApID!=null ? img.photoApID : null)
-				.filter(Objects::nonNull)
-				.collect(Collectors.toSet());
-		if(!needForeignPhotos.isEmpty()){
-			needPhotos=new HashSet<>(needPhotos);
-			needPhotos.addAll(getPhotoIdsByActivityPubIds(needForeignPhotos).values());
-		}
 		if(needPhotos.isEmpty())
 			return Map.of();
 

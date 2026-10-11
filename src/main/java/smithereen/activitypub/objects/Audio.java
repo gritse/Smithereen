@@ -4,8 +4,6 @@ import com.google.gson.JsonObject;
 
 import org.jetbrains.annotations.Nullable;
 
-import smithereen.activitypub.ParserContext;
-import smithereen.activitypub.SerializerContext;
 import spark.utils.StringUtils;
 
 public class Audio extends Document{
@@ -22,16 +20,16 @@ public class Audio extends Document{
 	}
 
 	@Override
-	protected ActivityPubObject parseActivityPubObject(JsonObject obj, ParserContext parserContext){
-		super.parseActivityPubObject(obj, parserContext);
+	protected ActivityPubObject parseActivityPubObject(JsonObject obj){
+		super.parseActivityPubObject(obj);
 		artist=optString(obj, "_artist");
 		title=optString(obj, "_title");
 		return this;
 	}
 
 	@Override
-	public JsonObject asActivityPubObject(JsonObject obj, SerializerContext serializerContext){
-		obj=super.asActivityPubObject(obj, serializerContext);
+	public JsonObject asActivityPubObject(JsonObject obj){
+		obj=super.asActivityPubObject(obj);
 		if(StringUtils.isNotBlank(artist)){
 			obj.addProperty("_artist", artist);
 		}

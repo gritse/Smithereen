@@ -13,10 +13,10 @@
 	{%if not(realPost.deleted)%}
 	{% if users[realPost.authorID].suspended %}
 	<div class="postAvaWrap" id="commentSuspendedAvaWrap{{ realPost.idString }}_{{ randomID }}">
-		<a href="{{ profileURL(realPost.authorID) }}"{{ profileRel(realPost.authorID) }}><span class="ava avaPlaceholder sizeA suspended" style="width: 32px; height: 32px;"></span></a>
+		<a href="{{ profileURL(realPost.authorID) }}"><span class="ava avaPlaceholder sizeA suspended" style="width: 32px; height: 32px;"></span></a>
 	</div>
 	<div class="postContentWrap" id="commentSuspendedContentWrap{{ realPost.idString }}_{{ randomID }}">
-		<a href="{{ profileURL(realPost.authorID) }}" class="authorName"{{ profileRel(realPost.authorID) }}>{{ L('suspended_user') }}</a>
+		<a href="{{ profileURL(realPost.authorID) }}" class="authorName">{{ L('suspended_user') }}</a>
 		<div>
 			<div class="postContent">
 				{%- if currentUser is not null -%}
@@ -27,16 +27,13 @@
 			</div>
 			<div class="postInfo">
 				<a href="{{ realPost.internalURL }}" class="postLink">{{ LD(realPost.createdAt) }}</a>
-				{% if not realPost.local %}
-					| <a href="{{ realPost.activityPubURL }}" target="_blank" rel="noopener">{{ L('open_on_server_X', {'domain': realPost.activityPubURL.host}) }}</a>
-				{% endif %}
 			</div>
 		</div>
 	</div>
 	{% endif %}
 	{% if currentUser is not null or not users[realPost.authorID].suspended %}
 	<div class="postAvaWrap"{% if users[realPost.authorID].suspended %} id="commentAvaWrap{{ realPost.idString }}_{{ randomID }}" style="display: none"{% endif %}>
-		<a href="{{ profileURL(realPost.authorID) }}"{{ profileRel(realPost.authorID) }}>{{ users[realPost.authorID] | pictureForAvatar('a', 32) }}</a>
+		<a href="{{ profileURL(realPost.authorID) }}">{{ users[realPost.authorID] | pictureForAvatar('a', 32) }}</a>
 		{% if board and onlines contains realPost.authorID and onlines[realPost.authorID].isOnline %}<div class="onlineText">{{ L('user_online') }}{% if onlines[realPost.authorID].mobile %}<span class="mobileOnlineIcon"></span>{% endif %}</div>{% endif %}
 	</div>
 	<div class="postContentWrap"{% if users[realPost.authorID].suspended %} id="commentContentWrap{{ realPost.idString }}_{{ randomID }}" style="display: none"{% endif %}>
@@ -54,7 +51,7 @@
 			{% endif %}
 		</div>
 		{% endif %}
-		<a href="{{ profileURL(realPost.authorID) }}" class="authorName" id="postAuthor{{ realPost.idString }}"{{ profileRel(realPost.authorID) }}>{{ users[realPost.authorID] | name }}</a>
+		<a href="{{ profileURL(realPost.authorID) }}" class="authorName" id="postAuthor{{ realPost.idString }}">{{ users[realPost.authorID] | name }}</a>
 		{% if replyLevel>maxReplyDepth %}<span class="commentInReply grayText hoverCardContainer" id="inReplyTo{{ realPost.idString }}"> {{ L('comment_in_reply_to_user', {'gender': users[realPost.authorID].gender, 'name': users[post.parentAuthorID] | name('firstAndGender')}, {'parentComment': {'href': profileURL(post.parentAuthorID), 'class': "grayText parentCommentLink hoverCardTrigger", 'data-parent-id': realPost.replyParentID, 'data-parent-type': 'comment'} }) }}</span>{% endif %}<br/>
 		<div id="postInner{{ realPost.idString }}">
 			{% block postInner %}
@@ -88,9 +85,6 @@
 				{% if not hideReplyLink and canComment and currentUser is not null %}
 					| <a href="{{realPost.internalURL}}"
 						 onclick="return showReplyForm('{{realPost.idString}}', '{{ replyFormID is empty ? 'wallPostForm_reply' : replyFormID }}', 'comment', {{ commentViewType!='FLAT' }}, '{{ commentViewType=='TWO_LEVEL' and replyLevel>0 ? realPost.replyKeyAsStrings[0] : '' }}')">{{ L('add_reply') }}</a>
-				{% endif %}
-				{% if not realPost.local %}
-					| <a href="{{ realPost.activityPubURL }}" target="_blank" rel="noopener">{{ L('open_on_server_X', {'domain': realPost.activityPubURL.host}) }}</a>
 				{% endif %}
 				{% endif %}
 			</div>

@@ -40,7 +40,7 @@ import smithereen.util.Passwords;
 import smithereen.util.XTEA;
 
 public class DatabaseSchemaUpdater{
-	public static final int SCHEMA_VERSION=91;
+	public static final int SCHEMA_VERSION=92;
 	private static final Logger LOG=LoggerFactory.getLogger(DatabaseSchemaUpdater.class);
 
 	public static void maybeUpdate() throws SQLException{
@@ -51,11 +51,6 @@ public class DatabaseSchemaUpdater{
 						CREATE FUNCTION `bin_prefix`(p VARBINARY(1024)) RETURNS varbinary(2048) DETERMINISTIC
 						RETURN CONCAT(REPLACE(REPLACE(REPLACE(p, '\\\\', '\\\\\\\\'), '%', '\\\\%'), '_', '\\\\_'), '%');""");
 				createMediaRefCountTriggers(conn);
-				createApIdIndexTriggers(conn);
-				createApIdIndexTriggersForPhotos(conn);
-				createApIdIndexTriggersForComments(conn);
-				createApIdIndexTriggersForBoardTopics(conn);
-				createApIdIndexTriggersForApps(conn);
 				insertDefaultRoles(conn);
 			}
 		}else{
@@ -344,35 +339,6 @@ public class DatabaseSchemaUpdater{
 				// Then add the new column
 				conn.createStatement().execute("ALTER TABLE `users` ADD `endpoints` json DEFAULT NULL");
 				conn.createStatement().execute("ALTER TABLE `groups` ADD `endpoints` json DEFAULT NULL");
-				PreparedStatement stmt=conn.prepareStatement("UPDATE `users` SET `endpoints`=? WHERE `id`=?");
-				try(ResultSet res=conn.createStatement().executeQuery("SELECT `id`,`ap_outbox`,`ap_followers`,`ap_following`,`ap_wall`,`ap_friends`,`ap_groups` FROM `users` WHERE `ap_id` IS NOT NULL")){
-					while(res.next()){
-						int id=res.getInt(1);
-						Actor.EndpointsStorageWrapper ep=new Actor.EndpointsStorageWrapper();
-						ep.outbox=res.getString(2);
-						ep.followers=res.getString(3);
-						ep.following=res.getString(4);
-						ep.wall=res.getString(5);
-						ep.friends=res.getString(6);
-						ep.groups=res.getString(7);
-						stmt.setString(1, Utils.gson.toJson(ep));
-						stmt.setInt(2, id);
-						stmt.execute();
-					}
-				}
-				stmt=conn.prepareStatement("UPDATE `groups` SET `endpoints`=? WHERE `id`=?");
-				try(ResultSet res=conn.createStatement().executeQuery("SELECT `id`,`ap_outbox`,`ap_followers`,`ap_wall` FROM `groups` WHERE `ap_id` IS NOT NULL")){
-					while(res.next()){
-						int id=res.getInt(1);
-						Actor.EndpointsStorageWrapper ep=new Actor.EndpointsStorageWrapper();
-						ep.outbox=res.getString(2);
-						ep.followers=res.getString(3);
-						ep.wall=res.getString(4);
-						stmt.setString(1, Utils.gson.toJson(ep));
-						stmt.setInt(2, id);
-						stmt.execute();
-					}
-				}
 				conn.createStatement().execute("ALTER TABLE `users` DROP `ap_outbox`, DROP `ap_followers`, DROP `ap_following`, DROP `ap_wall`, DROP `ap_friends`, DROP `ap_groups`");
 				conn.createStatement().execute("ALTER TABLE `groups` DROP `ap_outbox`, DROP `ap_followers`, DROP `ap_wall`");
 				conn.createStatement().execute("ALTER TABLE `groups` ADD `access_type` tinyint NOT NULL DEFAULT '0'");
@@ -1264,6 +1230,43 @@ public class DatabaseSchemaUpdater{
 						.executeNoResult();
 				conn.createStatement().execute("ALTER TABLE newsfeed CHANGE author_id `author_id` int unsigned NOT NULL, ADD CONSTRAINT `newsfeed_users_fk` FOREIGN KEY (`author_id`) REFERENCES `users` (`id`) ON DELETE CASCADE");
 				conn.createStatement().execute("ALTER TABLE newsfeed_groups ADD CONSTRAINT `newsfeed_groups_groups_fk` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE CASCADE");
+			}
+			case 92 -> {
+				// Federation removed: drop everything that was only used for ActivityPub.
+				// Remote actors and the content they authored are deleted; local content keeps its local IDs.
+				conn.createStatement().execute("DELETE FROM `wall_posts` WHERE `ap_id` IS NOT NULL");
+				conn.createStatement().execute("DELETE FROM `comments` WHERE `ap_id` IS NOT NULL");
+				conn.createStatement().execute("DELETE FROM `photos` WHERE `ap_id` IS NOT NULL OR `remote_src` IS NOT NULL");
+				conn.createStatement().execute("DELETE FROM `photo_albums` WHERE `ap_id` IS NOT NULL");
+				conn.createStatement().execute("DELETE FROM `board_topics` WHERE `ap_id` IS NOT NULL");
+				conn.createStatement().execute("DELETE FROM `likes` WHERE `ap_id` IS NOT NULL");
+				conn.createStatement().execute("DELETE FROM `users` WHERE `domain`<>''");
+				conn.createStatement().execute("DELETE FROM `groups` WHERE `domain`<>''");
+				conn.createStatement().execute("DELETE FROM `api_applications` WHERE `domain`<>''");
+				conn.createStatement().execute("DELETE FROM `config` WHERE `key` IN ('ServiceActorPrivateKey', 'ServiceActorPublicKey', 'PSList_LastUpdated', 'PSList_Data')");
+				// The ap_id_index triggers must go before the columns and table they reference
+				for(String trigger:new String[]{"add_foreign_apps_to_ap_ids", "add_foreign_comments_to_ap_ids", "add_foreign_groups_to_ap_ids", "add_foreign_messages_to_ap_ids", "add_foreign_photo_albums_to_ap_ids", "add_foreign_photos_to_ap_ids", "add_foreign_posts_to_ap_ids", "add_foreign_topics_to_ap_ids", "add_foreign_users_to_ap_ids", "add_updated_foreign_topics_to_ap_ids", "delete_foreign_apps_from_ap_ids", "delete_foreign_comments_from_ap_ids", "delete_foreign_group_posts_from_ap_ids", "delete_foreign_groups_from_ap_ids", "delete_foreign_photo_albums_from_ap_ids", "delete_foreign_photos_from_ap_ids", "delete_foreign_posts_from_ap_ids", "delete_foreign_topics_from_ap_ids", "delete_foreign_user_posts_from_ap_ids", "delete_foreign_users_from_ap_ids"}){
+					conn.createStatement().execute("DROP TRIGGER IF EXISTS `"+trigger+"`");
+				}
+				conn.createStatement().execute("DROP TABLE IF EXISTS `fasp_debug_callbacks`, `fasp_providers`, `ap_id_index`, `blocks_group_domain`, `blocks_user_domain`, `media_cache`, `servers`");
+				conn.createStatement().execute("ALTER TABLE `users` DROP `domain`, DROP `public_key`, DROP `private_key`, DROP `ap_url`, DROP `ap_inbox`, DROP `ap_shared_inbox`, DROP `ap_id`, DROP `last_updated`, DROP `endpoints`");
+				conn.createStatement().execute("ALTER TABLE `groups` DROP `domain`, DROP `ap_id`, DROP `ap_url`, DROP `ap_inbox`, DROP `ap_shared_inbox`, DROP `public_key`, DROP `private_key`, DROP `last_updated`, DROP `flags`, DROP `endpoints`");
+				conn.createStatement().execute("ALTER TABLE `api_applications` DROP `ap_id`, DROP `domain`, DROP `public_key`, DROP `private_key`, DROP `ap_inbox`, DROP `ap_shared_inbox`, DROP `last_updated`");
+				conn.createStatement().execute("ALTER TABLE `wall_posts` DROP `ap_url`, DROP `ap_id`, DROP `ap_replies`, DROP `federation_state`");
+				conn.createStatement().execute("ALTER TABLE `comments` DROP `ap_url`, DROP `ap_id`, DROP `ap_replies`, DROP `federation_state`");
+				conn.createStatement().execute("ALTER TABLE `board_topics` DROP `ap_url`, DROP `ap_id`");
+				conn.createStatement().execute("ALTER TABLE `group_invites` DROP `ap_id`");
+				conn.createStatement().execute("ALTER TABLE `group_links` DROP `ap_image_url`, DROP `ap_id`, DROP `is_unresolved_ap_object`");
+				conn.createStatement().execute("ALTER TABLE `likes` DROP `ap_id`");
+				conn.createStatement().execute("ALTER TABLE `mail_messages` DROP `ap_id`");
+				conn.createStatement().execute("ALTER TABLE `photo_albums` DROP `ap_id`, DROP `ap_url`, DROP `ap_comments`");
+				conn.createStatement().execute("ALTER TABLE `photo_tags` DROP `ap_id`");
+				conn.createStatement().execute("ALTER TABLE `photos` DROP `remote_src`, DROP `ap_id`");
+				conn.createStatement().execute("ALTER TABLE `poll_options` DROP `ap_id`");
+				conn.createStatement().execute("ALTER TABLE `poll_votes` DROP `ap_id`");
+				conn.createStatement().execute("ALTER TABLE `polls` DROP `ap_id`");
+				conn.createStatement().execute("ALTER TABLE `reports` DROP `server_domain`");
+				conn.createStatement().execute("ALTER TABLE `deleted_user_bans` DROP `domain`");
 			}
 		}
 	}

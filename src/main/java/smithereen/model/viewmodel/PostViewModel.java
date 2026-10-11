@@ -26,8 +26,6 @@ public class PostViewModel extends BasePostViewModel<Post, PostViewModel>{
 	}
 
 	public List<Integer> getReplyKeyForInteractions(){
-		if(post.isMastodonStyleRepost() && repost!=null)
-			return repost.post.post.getReplyKeyForReplies();
 		return post.getReplyKeyForReplies();
 	}
 

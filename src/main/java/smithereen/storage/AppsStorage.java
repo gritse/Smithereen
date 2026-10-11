@@ -24,7 +24,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import smithereen.Utils;
-import smithereen.activitypub.SerializerContext;
 import smithereen.activitypub.objects.Actor;
 import smithereen.activitypub.objects.LocalImage;
 import smithereen.model.apps.AppAuthCode;
@@ -40,70 +39,8 @@ import smithereen.util.NamedMutexCollection;
 
 public class AppsStorage{
 	private static final Logger LOG=LoggerFactory.getLogger(AppsStorage.class);
-	private static NamedMutexCollection foreignAppUpdateLocks=new NamedMutexCollection();
 
 	// region Apps
-
-	public static void putOrUpdateForeignApp(ClientApp app) throws SQLException{
-		String key=app.apID.toString().toLowerCase();
-		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
-			foreignAppUpdateLocks.acquire(key);
-			final long existingAppID=new SQLQueryBuilder(conn)
-					.selectFrom("api_applications")
-					.columns("id")
-					.where("ap_id=?", app.apID.toString())
-					.executeAndGetLong();
-
-			SQLQueryBuilder builder=new SQLQueryBuilder(conn);
-			if(existingAppID==-1){
-				builder.insertIgnoreInto("api_applications");
-			}else{
-				builder.update("api_applications").where("id=?", existingAppID);
-			}
-
-			builder.value("ap_id", app.apID.toString())
-					.value("username", app.username)
-					.value("domain", app.domain)
-					.value("name", app.name)
-					.value("description", app.description)
-					.value("public_key", app.publicKey==null ? null : app.publicKey.getEncoded())
-					.value("type", app.type)
-					.value("logo", app.logo==null ? null : app.logo.asActivityPubObject(new JsonObject(), new SerializerContext(null, (String)null)).toString())
-					.value("developer_id", app.developerID==0 ? null : app.developerID)
-					.value("ap_inbox", app.apInbox==null ? null : app.apInbox.toString())
-					.value("ap_shared_inbox", app.apSharedInbox==null ? null : app.apSharedInbox.toString())
-					.value("extra", app.serializeExtraFields())
-					.valueExpr("last_updated", "CURRENT_TIMESTAMP()");
-
-			if(existingAppID==-1){
-				app.id=builder.executeAndGetIDLong();
-			}else{
-				app.id=existingAppID;
-				builder.executeNoResult();
-			}
-			app.lastUpdated=Instant.now();
-		}catch(SQLIntegrityConstraintViolationException x){
-			// Username conflict
-			try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
-				long oldID=new SQLQueryBuilder(conn)
-						.selectFrom("api_applications")
-						.where("username=? AND domain=? AND ap_id<>?", app.username, app.domain, app.apID.toString())
-						.executeAndGetLong();
-				if(oldID==-1){
-					LOG.warn("Didn't find an existing app with username {}@{} while trying to deduplicate {}", app.username, app.domain, app.apID);
-					throw x;
-				}
-				new SQLQueryBuilder(conn)
-						.update("api_applications")
-						.value("username", null)
-						.where("id=?", oldID)
-						.executeNoResult();
-				putOrUpdateForeignApp(app);
-			}
-		}finally{
-			foreignAppUpdateLocks.release(key);
-		}
-	}
 
 	public static ClientApp getAppByID(long id) throws SQLException{
 		ClientApp app=new SQLQueryBuilder()
@@ -125,25 +62,7 @@ public class AppsStorage{
 		return apps;
 	}
 
-	public static long getAppIdByActivityPubID(URI apID) throws SQLException{
-		long id=new SQLQueryBuilder()
-				.selectFrom("api_applications")
-				.where("ap_id=?", apID.toString())
-				.executeAndGetLong();
-		return id==-1 ? 0 : id;
-	}
-
 	public static long createApp(int userID, String name, String description, LocalImage logo, String extraFields) throws SQLException{
-		byte[] publicKey, privateKey;
-		try{
-			KeyPairGenerator kpg=KeyPairGenerator.getInstance("RSA");
-			kpg.initialize(2048);
-			KeyPair pair=kpg.generateKeyPair();
-			publicKey=pair.getPublic().getEncoded();
-			privateKey=pair.getPrivate().getEncoded();
-		}catch(NoSuchAlgorithmException x){
-			throw new RuntimeException(x);
-		}
 		JsonObject serializedLogo=logo==null ? null : MediaStorageUtils.serializeAttachment(logo);
 		return new SQLQueryBuilder()
 				.insertInto("api_applications")
@@ -151,8 +70,6 @@ public class AppsStorage{
 				.value("description", description)
 				.value("logo", serializedLogo==null ? null : serializedLogo.toString())
 				.value("developer_id", userID)
-				.value("public_key", publicKey)
-				.value("private_key", privateKey)
 				.value("extra", extraFields)
 				.executeAndGetIDLong();
 	}
@@ -198,20 +115,12 @@ public class AppsStorage{
 	}
 
 	public static long getAppIdByUsername(@NotNull String username) throws SQLException{
-		String domain;
-		if(username.contains("@")){
-			String[] parts=username.split("@", 2);
-			username=parts[0];
-			domain=parts[1];
-		}else{
-			domain="";
-		}
 		if(username.length()>Actor.USERNAME_MAX_LENGTH)
 			username=username.substring(0, Actor.USERNAME_MAX_LENGTH);
 		return new SQLQueryBuilder()
 				.selectFrom("api_applications")
 				.columns("id")
-				.where("username=? AND domain=?", username, domain)
+				.where("username=?", username)
 				.executeAndGetLong();
 	}
 
@@ -379,18 +288,6 @@ public class AppsStorage{
 				.deleteFrom("api_app_installs")
 				.where("user_id=? AND app_id=?", userID, appID)
 				.executeNoResult();
-	}
-
-	public static Set<URI> getAppUserInboxes(long appID) throws SQLException{
-		return new SQLQueryBuilder()
-				.selectFrom("api_app_installs")
-				.distinct()
-				.selectExpr("IFNULL(ap_shared_inbox, ap_inbox)")
-				.join("JOIN users ON users.id=user_id")
-				.where("app_id=? AND ap_inbox IS NOT NULL", appID)
-				.executeAsStream(r->r.getString(1))
-				.map(URI::create)
-				.collect(Collectors.toSet());
 	}
 
 	// endregion

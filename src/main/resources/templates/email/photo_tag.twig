@@ -4,7 +4,7 @@
 {% block content %}
 	<h1>{{ L('notification_title_photo_tag') }}</h1>
 	{{ L('notification_content_photo_tag', {'name': actor | name('complete'), 'gender': actor.gender}, {'actor': {'href': actor.absoluteProfileURL} }) }}:
-	<div style="margin-top: 5px"><a href="{{ photo.activityPubURL.toString() }}">{{ photo.image | pictureForPhoto('s') }}</a></div>
+	<div style="margin-top: 5px"><a href="{{ photo.absoluteURL }}">{{ photo.image | pictureForPhoto('s') }}</a></div>
 	<div class="centeredMainBlock">
 		<a class="button" href="https://{{ domain }}/photos/newTags">{{ L('email_go_to_photo_tags') }}</a>
 	</div>

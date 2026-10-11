@@ -44,9 +44,6 @@
 	{% if currentUser is not null and realPost.ownerID==currentUser.id and realPost.authorID==currentUser.id %}
 		<li><a href="{{ realPost.internalURL }}/{{ isPinned ? 'unpin' : 'pin' }}?csrf={{ csrf }}" id="postPinButton{{ realPost.id }}" data-ajax class="ajaxReplaceWithLoader">{{ L(isPinned ? 'wall_unpin_post' : 'wall_pin_post') }}</a></li>
 	{% endif %}
-	{%if not(realPost.local)%}
-		<li><a href="{{ realPost.activityPubURL }}" target="_blank">{{ L('open_on_server_X', {'domain': realPost.activityPubURL.host}) }}</a></li>
-	{%endif%}
 	{%if realPost.replyLevel>0%}
 		<li><a href="/posts/{{ realPost.replyKey[0] }}">Top-level</a></li>
 	{%endif%}
@@ -80,7 +77,7 @@
 {% endscript %}
 {%endblock%}
 {% block additionalLinks %}
-{% if post.post.local and post.post.privacy=='PUBLIC' %}
+{% if post.post.privacy=='PUBLIC' %}
 <link rel="alternate" type="application/json+oembed" href="https://{{ serverDomain }}/system/oembed?url={{ "https://#{serverDomain}/posts/#{post.post.id}" | urlencode }}"/>
 {% endif %}
 {% endblock %}

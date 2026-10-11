@@ -78,7 +78,7 @@ public class ExtendedHttpClientBuilder implements HttpClient.Builder{
 		realBuilder.authenticator(authenticator);
 		return this;
 	}
-	
+
 	public ExtendedHttpClientBuilder allowLocalNetworks(boolean allow){
 		allowLocalNetworks=allow;
 		return this;

@@ -57,10 +57,10 @@
 	{% endif -%}
 	>
 		<div class="postAvaWrap">
-			<a href="{{ profileURL(realPost.authorID) }}"{{ profileRel(realPost.authorID) }}>{{ users[realPost.authorID] | pictureForAvatar('a') }}</a>
+			<a href="{{ profileURL(realPost.authorID) }}">{{ users[realPost.authorID] | pictureForAvatar('a') }}</a>
 		</div>
 		<div class="postContentWrap">
-			<a href="{{ profileURL(realPost.authorID) }}" class="authorName"{{ profileRel(realPost.authorID) }}>{{ users[realPost.authorID] | name }}</a>
+			<a href="{{ profileURL(realPost.authorID) }}" class="authorName">{{ users[realPost.authorID] | name }}</a>
 			{%- if realPost.privacy is not null and realPost.privacy!='PUBLIC' -%}
 			<span class="privatePostLockIcon" data-tooltip="{{ L(realPost.privacy.langKey, {'name': users[realPost.authorID].firstAndGender}) }}"></span>
 			{%- endif %}

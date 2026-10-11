@@ -18,11 +18,11 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import smithereen.model.LikeObjectType;
 import smithereen.ApplicationContext;
 import smithereen.Config;
 import smithereen.activitypub.objects.Actor;
 import smithereen.activitypub.objects.LocalImage;
-import smithereen.activitypub.objects.activities.Like;
 import smithereen.controllers.FriendsController;
 import smithereen.controllers.PhotosController;
 import smithereen.exceptions.BadRequestException;
@@ -41,7 +41,6 @@ import smithereen.model.OwnerAndAuthor;
 import smithereen.model.PaginatedList;
 import smithereen.model.Post;
 import smithereen.model.PrivacySetting;
-import smithereen.model.RemoteImage;
 import smithereen.model.SessionInfo;
 import smithereen.model.SizedImage;
 import smithereen.model.User;
@@ -434,10 +433,8 @@ public class PhotosRoutes{
 			allowedActions.add(PhotoViewerPhotoInfo.AllowedAction.DELETE);
 			allowedActions.add(PhotoViewerPhotoInfo.AllowedAction.EDIT_DESCRIPTION);
 			allowedActions.add(PhotoViewerPhotoInfo.AllowedAction.ROTATE);
-			if(photo.apID==null){
-				allowedActions.add(PhotoViewerPhotoInfo.AllowedAction.ADD_TAGS);
-				allowedActions.add(PhotoViewerPhotoInfo.AllowedAction.MANAGE_TAGS);
-			}
+			allowedActions.add(PhotoViewerPhotoInfo.AllowedAction.ADD_TAGS);
+			allowedActions.add(PhotoViewerPhotoInfo.AllowedAction.MANAGE_TAGS);
 		}
 		if(ctx.getPhotosController().canManageAlbum(self, album) && album.systemType==null){
 			allowedActions.add(PhotoViewerPhotoInfo.AllowedAction.SET_AS_COVER);
@@ -511,7 +508,7 @@ public class PhotosRoutes{
 		origURL=Objects.toString(photo.image.getOriginalURI(), null);
 		return new PhotoViewerPhotoInfo(encodeLong(XTEA.obfuscateObjectID(photo.id, ObfuscatedObjectIDType.PHOTO)), author!=null ? author.getProfileURL() : "/id"+photo.authorID,
 				author!=null ? author.getCompleteName() : "DELETED", encodeLong(XTEA.obfuscateObjectID(album.id, ObfuscatedObjectIDType.PHOTO_ALBUM)), album.getLocalizedTitle(lang(req), self!=null ? self.user : null, owner),
-				html, topHTML, allowedActions, photo.image.getURLsForPhotoViewer(), pvInteractions, origURL, photo.getURL(), photo.apID==null ? null : photo.getActivityPubURL().toString(), null);
+				html, topHTML, allowedActions, photo.image.getURLsForPhotoViewer(), pvInteractions, origURL, photo.getURL(), null, null);
 	}
 
 	private static List<PhotoViewerPhotoInfo> makePhotoInfosForPhotoList(Request req, List<Photo> photos, ApplicationContext ctx, Account self, Map<Long, PhotoAlbum> albums){
@@ -566,15 +563,6 @@ public class PhotosRoutes{
 				.map(a->a instanceof PhotoAttachment pa && pa.photoID!=0 ? pa.photoID : null)
 				.filter(Objects::nonNull)
 				.collect(Collectors.toSet());
-		Set<URI> needRemotePhotos=attachments.stream()
-				.map(a->a instanceof PhotoAttachment pa && pa.image instanceof RemoteImage ri && ri.photoActivityPubID!=null ? ri.photoActivityPubID : null)
-				.filter(Objects::nonNull)
-				.collect(Collectors.toSet());
-		Map<URI, Long> remotePhotoIDs=needRemotePhotos.isEmpty() ? Map.of() : ctx.getPhotosController().getPhotoIdsByActivityPubIds(needRemotePhotos);
-		if(!remotePhotoIDs.isEmpty()){
-			needPhotos=new HashSet<>(needPhotos);
-			needPhotos.addAll(remotePhotoIDs.values());
-		}
 		Map<Long, Photo> actualPhotos=ctx.getPhotosController().getPhotosIgnoringPrivacy(needPhotos);
 		Map<Long, PhotoAlbum> albums=ctx.getPhotosController().getAlbums(actualPhotos.values().stream().map(p->p.albumID).collect(Collectors.toSet()), self!=null ? self.user : null);
 		Map<Long, PhotoViewerPhotoInfo> photoInfos;
@@ -588,8 +576,6 @@ public class PhotosRoutes{
 				long photoID;
 				if(pa.photoID!=0)
 					photoID=pa.photoID;
-				else if(pa.image instanceof RemoteImage ri && ri.photoActivityPubID!=null)
-					photoID=remotePhotoIDs.getOrDefault(ri.photoActivityPubID, 0L);
 				else
 					photoID=0;
 
@@ -603,7 +589,7 @@ public class PhotosRoutes{
 		}
 		return new PaginatedList<>(photos, photos.size());
 	}
-	
+
 	public static Object ajaxViewerInfo(Request req, Response resp){
 		Account selfAccount=sessionInfo(req) instanceof SessionInfo si ? si.account : null;
 		User self=selfAccount!=null ? selfAccount.user : null;
@@ -701,7 +687,7 @@ public class PhotosRoutes{
 			case "liked" -> {
 				if(self==null)
 					throw new UserActionNotAllowedException();
-				PaginatedList<Long> photoIDs=ctx.getUserInteractionsController().getLikedObjects(self, Like.ObjectType.PHOTO, offset(req), 10);
+				PaginatedList<Long> photoIDs=ctx.getUserInteractionsController().getLikedObjects(self, LikeObjectType.PHOTO, offset(req), 10);
 				Map<Long, Photo> photoObjects=ctx.getPhotosController().getPhotosIgnoringPrivacy(photoIDs.list);
 				Map<Long, PhotoAlbum> albums=ctx.getPhotosController().getAlbumsIgnoringPrivacy(photoObjects.values().stream().map(p->p.albumID).collect(Collectors.toSet()));
 				total=photoIDs.total;
@@ -1086,7 +1072,7 @@ public class PhotosRoutes{
 		}
 		return r;
 	}
-	
+
 	public static Object attachPhotosBox(Request req, Response resp, Account self, ApplicationContext ctx){
 		if(!isAjax(req))
 			return "";
@@ -1299,7 +1285,7 @@ public class PhotosRoutes{
 		ctx.getPhotosController().deletePhotoTag(self.user, photo, tagID);
 		return new WebDeltaResponse(resp).remove("pvTag_"+photo.getIdString()+"_"+tagID, "pvConfirmTag_"+photo.getIdString(), "photoNewTag"+photo.getIdString());
 	}
-	
+
 	public static Object newTags(Request req, Response resp, Account self, ApplicationContext ctx){
 		int offset=offset(req);
 		PaginatedList<Photo> photos=ctx.getPhotosController().getUserUnapprovedTaggedPhotos(self.user, offset, 100);

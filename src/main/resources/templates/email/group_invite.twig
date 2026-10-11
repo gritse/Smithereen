@@ -35,12 +35,6 @@
 					</tr>
 					{% endif %}
 					{% endif %}
-					{% if group.domain is not empty %}
-					<tr>
-						<td class="grayText">{{ L('server') }}:</td>
-						<td>{{ group.domain }}</td>
-					</tr>
-					{% endif %}
 					<tr>
 						<td></td>
 						<td style="padding-top: 10px"><a class="button" href="https://{{ domain }}/my/{{ group.event ? 'events' : 'groups' }}/invites">{{ L(group.event ? 'email_go_to_event_invites' : 'email_go_to_group_invites') }}</a></td>

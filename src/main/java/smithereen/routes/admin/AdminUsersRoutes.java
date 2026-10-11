@@ -21,7 +21,6 @@ import smithereen.exceptions.ObjectNotFoundException;
 import smithereen.exceptions.UserErrorException;
 import smithereen.lang.Lang;
 import smithereen.model.Account;
-import smithereen.model.ForeignUser;
 import smithereen.model.Group;
 import smithereen.model.OtherSession;
 import smithereen.model.PaginatedList;
@@ -57,17 +56,12 @@ public class AdminUsersRoutes{
 		RenderedTemplateResponse model=new RenderedTemplateResponse("admin_users", req);
 		Lang l=lang(req);
 		String q=req.queryParams("q");
-		Boolean localOnly=switch(req.queryParams("location")){
-			case "local" -> true;
-			case "remote" -> false;
-			case null, default -> null;
-		};
 		String emailDomain=req.queryParams("emailDomain");
 		String lastIP=req.queryParams("lastIP");
 		int role=safeParseInt(req.queryParams("role"));
 		String banStatusParam=req.queryParams("banStatus");
 		UserBanStatus banStatus=enumValueOpt(banStatusParam, UserBanStatus.class);
-		PaginatedList<AdminUserViewModel> items=ctx.getModerationController().getAllUsers(offset(req), 100, q, localOnly, emailDomain, lastIP, role, banStatus, "REMOTE_SUSPENDED".equals(banStatusParam));
+		PaginatedList<AdminUserViewModel> items=ctx.getModerationController().getAllUsers(offset(req), 100, q, emailDomain, lastIP, role, banStatus);
 		model.paginate(items);
 		model.with("users", ctx.getUsersController().getUsers(items.list.stream().map(AdminUserViewModel::userID).collect(Collectors.toSet())));
 		model.with("accounts", ctx.getModerationController().getAccounts(items.list.stream().map(AdminUserViewModel::accountID).filter(i->i>0).collect(Collectors.toSet())));
@@ -76,13 +70,12 @@ public class AdminUsersRoutes{
 		model.with("rolesMap", Config.userRoles);
 		String baseURL=getRequestPathAndQuery(req);
 		model.with("urlPath", baseURL)
-				.with("location", req.queryParams("location"))
 				.with("emailDomain", emailDomain)
 				.with("lastIP", lastIP)
 				.with("roleID", role)
 				.with("banStatus", banStatusParam)
 				.with("query", q)
-				.with("hasFilters", StringUtils.isNotEmpty(q) || localOnly!=null || StringUtils.isNotEmpty(emailDomain) || StringUtils.isNotEmpty(lastIP) || role>0);
+				.with("hasFilters", StringUtils.isNotEmpty(q) || StringUtils.isNotEmpty(emailDomain) || StringUtils.isNotEmpty(lastIP) || role>0);
 		jsLangKey(req, "cancel", "yes", "no");
 		String msg=req.session().attribute("adminSettingsUsersMessage");
 		if(msg!=null){
@@ -169,28 +162,25 @@ public class AdminUsersRoutes{
 		RenderedTemplateResponse model=new RenderedTemplateResponse("admin_users_info", req);
 		model.with("user", user);
 		Account account;
-		if(!(user instanceof ForeignUser)){
-			account=ctx.getUsersController().getAccountForUser(user);
-			model.with("account", account);
-			if(account.roleID>0){
-				UserRole role=Config.userRoles.get(account.roleID);
-				String roleKey=role.getLangKey();
-				model.with("roleTitle", StringUtils.isNotEmpty(roleKey) ? lang(req).get(roleKey) : role.name());
-			}
-			if(account.inviterAccountID>0){
-				try{
-					model.with("inviter", ctx.getUsersController().getAccountOrThrow(account.inviterAccountID).user);
-				}catch(ObjectNotFoundException ignore){}
-			}
-			List<OtherSession> sessions=ctx.getUsersController().getAccountSessions(account, 0, 10000);
-			Set<Long> needApps=sessions.stream().map(OtherSession::appID).filter(id->id!=0).collect(Collectors.toSet());
-			model.with("sessions", sessions)
-					.with("apps", ctx.getAppsController().getAppsByIDs(needApps));
-		}else{
-			account=null;
+		account=ctx.getUsersController().getAccountForUser(user);
+		model.with("account", account);
+		if(account.roleID>0){
+			UserRole role=Config.userRoles.get(account.roleID);
+			String roleKey=role.getLangKey();
+			model.with("roleTitle", StringUtils.isNotEmpty(roleKey) ? lang(req).get(roleKey) : role.name());
 		}
+		if(account.inviterAccountID>0){
+			try{
+				model.with("inviter", ctx.getUsersController().getAccountOrThrow(account.inviterAccountID).user);
+			}catch(ObjectNotFoundException ignore){}
+		}
+		List<OtherSession> sessions=ctx.getUsersController().getAccountSessions(account, 0, 10000);
+		Set<Long> needApps=sessions.stream().map(OtherSession::appID).filter(id->id!=0).collect(Collectors.toSet());
+		model.with("sessions", sessions)
+				.with("apps", ctx.getAppsController().getAppsByIDs(needApps));
+
 		if(user.banInfo!=null){
-			if(user.domain==null && (user.banStatus==UserBanStatus.SUSPENDED || user.banStatus==UserBanStatus.SELF_DEACTIVATED)){
+			if((user.banStatus==UserBanStatus.SUSPENDED || user.banStatus==UserBanStatus.SELF_DEACTIVATED)){
 				model.with("accountDeletionTime", user.banInfo.bannedAt().plus(UserBanInfo.ACCOUNT_DELETION_DAYS, ChronoUnit.DAYS));
 			}
 			if(user.banInfo.moderatorID()!=0){
@@ -285,7 +275,7 @@ public class AdminUsersRoutes{
 					case "forcePasswordChange" -> user.banInfo!=null && user.banInfo.requirePasswordChange();
 					default -> throw new IllegalStateException("Unexpected value: " + s);
 				}, null, Map.of("user", user, "hideNone", report!=null, "deleteReportContent", deleteReportContent, "numDaysUntilDeletion", UserBanInfo.ACCOUNT_DELETION_DAYS));
-		if(user.domain==null && form instanceof WebDeltaResponse wdr){
+		if(form instanceof WebDeltaResponse wdr){
 			wdr.runScript("""
 					function userBanForm_updateFieldVisibility(){
 						var message=ge("formRow_message");
@@ -357,7 +347,7 @@ public class AdminUsersRoutes{
 			else
 				info=null;
 		}
-		ctx.getModerationController().setUserBanStatus(self.user, user, user instanceof ForeignUser ? null : ctx.getUsersController().getAccountForUser(user), status, info);
+		ctx.getModerationController().setUserBanStatus(self.user, user, false ? null : ctx.getUsersController().getAccountForUser(user), status, info);
 		if(report!=null){
 			if(deleteReportContent){
 				ctx.getModerationController().deleteViolationReportContent(report, Objects.requireNonNull(sessionInfo(req)), false);
@@ -372,7 +362,7 @@ public class AdminUsersRoutes{
 
 	public static Object deleteAccountImmediatelyForm(Request req, Response resp, Account self, ApplicationContext ctx){
 		User user=ctx.getUsersController().getUserOrThrow(safeParseInt(req.params(":id")));
-		if(user instanceof ForeignUser || (user.banStatus!=UserBanStatus.SELF_DEACTIVATED && user.banStatus!=UserBanStatus.SUSPENDED))
+		if((user.banStatus!=UserBanStatus.SELF_DEACTIVATED && user.banStatus!=UserBanStatus.SUSPENDED))
 			throw new BadRequestException();
 		RenderedTemplateResponse model=new RenderedTemplateResponse("admin_delete_user_form", req)
 				.with("user", user)
@@ -382,7 +372,7 @@ public class AdminUsersRoutes{
 
 	public static Object deleteAccountImmediately(Request req, Response resp, Account self, ApplicationContext ctx){
 		User user=ctx.getUsersController().getUserOrThrow(safeParseInt(req.params(":id")));
-		if(user instanceof ForeignUser || (user.banStatus!=UserBanStatus.SELF_DEACTIVATED && user.banStatus!=UserBanStatus.SUSPENDED))
+		if((user.banStatus!=UserBanStatus.SELF_DEACTIVATED && user.banStatus!=UserBanStatus.SUSPENDED))
 			throw new BadRequestException();
 		String usernameCheck=user.username+"@"+Config.domain;
 		if(!usernameCheck.equalsIgnoreCase(req.queryParams("username"))){
@@ -564,26 +554,4 @@ public class AdminUsersRoutes{
 		return "";
 	}
 
-	public static Object syncProfile(Request req, Response resp, Account self, ApplicationContext ctx){
-		User user=ctx.getUsersController().getUserOrThrow(safeParseInt(req.params(":id")));
-		user.ensureRemote();
-		ctx.getObjectLinkResolver().resolve(user.activityPubID, ForeignUser.class, true, true, true);
-		return new WebDeltaResponse(resp).refresh();
-	}
-
-	public static Object syncContentCollections(Request req, Response resp, Account self, ApplicationContext ctx){
-		User user=ctx.getUsersController().getUserOrThrow(safeParseInt(req.params(":id")));
-		user.ensureRemote();
-		ctx.getActivityPubWorker().fetchActorContentCollections(user);
-		Lang l=lang(req);
-		return new WebDeltaResponse(resp).messageBox(l.get("sync_content"), l.get("sync_started"), l.get("ok"));
-	}
-
-	public static Object syncRelationshipsCollections(Request req, Response resp, Account self, ApplicationContext ctx){
-		User user=ctx.getUsersController().getUserOrThrow(safeParseInt(req.params(":id")));
-		user.ensureRemote();
-		ctx.getActivityPubWorker().fetchActorRelationshipCollections(user);
-		Lang l=lang(req);
-		return new WebDeltaResponse(resp).messageBox(l.get("sync_friends_and_groups"), l.get("sync_started"), l.get("ok"));
-	}
 }

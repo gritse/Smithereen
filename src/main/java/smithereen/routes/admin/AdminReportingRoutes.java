@@ -21,8 +21,6 @@ import smithereen.exceptions.BadRequestException;
 import smithereen.exceptions.ObjectNotFoundException;
 import smithereen.lang.Lang;
 import smithereen.model.Account;
-import smithereen.model.ForeignGroup;
-import smithereen.model.ForeignUser;
 import smithereen.model.Group;
 import smithereen.model.MailMessage;
 import smithereen.model.PaginatedList;
@@ -168,10 +166,7 @@ public class AdminReportingRoutes{
 							case NONE -> l.get("admin_user_state_no_restrictions");
 							case FROZEN -> l.get("admin_user_state_frozen", Map.of("expirationTime", a.extra().has("expiresAt") ? l.formatDate(Instant.ofEpochMilli(a.extra().get("expiresAt").getAsLong()), timeZoneForRequest(req), false) : l.get("email_account_frozen_until_first_login")));
 							case SUSPENDED -> {
-								if(targetUser instanceof ForeignUser)
-									yield l.get("admin_user_state_suspended_foreign");
-								else
-									yield l.get("admin_user_state_suspended", Map.of("deletionTime", l.formatDate(a.time().plus(UserBanInfo.ACCOUNT_DELETION_DAYS, ChronoUnit.DAYS), timeZoneForRequest(req), false)));
+								yield l.get("admin_user_state_suspended", Map.of("deletionTime", l.formatDate(a.time().plus(UserBanInfo.ACCOUNT_DELETION_DAYS, ChronoUnit.DAYS), timeZoneForRequest(req), false)));
 							}
 							case HIDDEN -> l.get("admin_user_state_hidden");
 							case SELF_DEACTIVATED -> null;
@@ -181,10 +176,7 @@ public class AdminReportingRoutes{
 						statusStr=switch(GroupBanStatus.valueOf(a.extra().get("status").getAsString())){
 							case NONE -> l.get("admin_group_state_no_restrictions");
 							case SUSPENDED -> {
-								if(targetGroup instanceof ForeignGroup)
-									yield l.get("admin_group_state_suspended_foreign");
-								else
-									yield l.get("admin_group_state_suspended", Map.of("deletionTime", l.formatDate(a.time().plus(GroupBanInfo.GROUP_DELETION_DAYS, ChronoUnit.DAYS), timeZoneForRequest(req), false)));
+								yield l.get("admin_group_state_suspended", Map.of("deletionTime", l.formatDate(a.time().plus(GroupBanInfo.GROUP_DELETION_DAYS, ChronoUnit.DAYS), timeZoneForRequest(req), false)));
 							}
 							case HIDDEN -> l.get("admin_group_state_hidden");
 							case SELF_DEACTIVATED -> null;
@@ -278,7 +270,6 @@ public class AdminReportingRoutes{
 		model.with("canBanTarget", target!=null);
 		model.with("actions", actionViewModels);
 		model.with("content", contentForTemplate);
-		model.with("isLocalTarget", target!=null && StringUtils.isEmpty(target.domain));
 		model.with("toolbarTitle", l.get("menu_reports"));
 		if(report.rules!=null && !report.rules.isEmpty()){
 			model.with("rules", ctx.getModerationController().getServerRulesByIDs(report.rules));
@@ -479,7 +470,6 @@ public class AdminReportingRoutes{
 
 		RenderedTemplateResponse model=new RenderedTemplateResponse("report_form", req);
 		model.with("actorForAvatar", user)
-				.with("otherServerDomain", user instanceof ForeignUser fu ? fu.domain : null)
 				.with("serverRules", ctx.getModerationController().getServerRules());
 		return wrapForm(req, resp, "report_form", "/settings/admin/createReport?type="+type+"&ids="+ids+"&uid="+user.id, l.get("admin_create_report_title"), "create", model);
 	}
@@ -512,7 +502,6 @@ public class AdminReportingRoutes{
 		User user=ctx.getUsersController().getUserOrThrow(safeParseInt(req.queryParams("uid")));
 		String comment=req.queryParamOrDefault("reportText", "");
 		ViolationReport.Reason reason=enumValue(req.queryParams("reason"), ViolationReport.Reason.class);
-		boolean forward="on".equals(req.queryParams("forward"));
 		Set<Integer> rules;
 		if(reason==ViolationReport.Reason.SERVER_RULES){
 			QueryParamsMap rulesMap=req.queryMap("rules");
@@ -537,7 +526,7 @@ public class AdminReportingRoutes{
 
 		List<ReportableContentObject> content=getReportableObjects(req, user, ctx);
 
-		int reportID=ctx.getModerationController().createViolationReport(self.user, user, content, reason, rules, comment, forward);
+		int reportID=ctx.getModerationController().createViolationReport(self.user, user, content, reason, rules, comment);
 		return ajaxAwareRedirect(req, resp, "/settings/admin/reports/"+reportID);
 	}
 
@@ -569,7 +558,7 @@ public class AdminReportingRoutes{
 		ArrayList<String> errors=new ArrayList<>();
 		for(URI uri:urls){
 			try{
-				ReportableContentObject obj=ctx.getObjectLinkResolver().resolveNative(uri, ReportableContentObject.class, true, true, false, user, true);
+				ReportableContentObject obj=ctx.getObjectLinkResolver().resolveLocally(uri, ReportableContentObject.class);
 				int authorID=switch(obj){
 					case Post p -> p.authorID;
 					case Comment c -> c.authorID;

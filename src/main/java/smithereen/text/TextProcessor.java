@@ -34,7 +34,6 @@ import java.util.regex.Pattern;
 import cz.jirutka.unidecode.Unidecode;
 import smithereen.Config;
 import smithereen.Utils;
-import smithereen.model.ForeignUser;
 import smithereen.model.User;
 import smithereen.storage.UserStorage;
 import smithereen.util.TopLevelDomainList;
@@ -451,9 +450,6 @@ public class TextProcessor{
 						User user=UserStorage.getById(uid);
 						if(user!=null){
 							el.attr("href", "/"+user.getFullUsername());
-							if(user instanceof ForeignUser){
-								el.attr("rel", "nofollow");
-							}
 							el.addClass("u-url");
 							el.addClass("hoverCardTrigger");
 							Element parent=el.parent();
@@ -483,43 +479,6 @@ public class TextProcessor{
 
 		// Limit <blockquote>s to 5 levels of nesting
 		doc.select("blockquote blockquote blockquote blockquote blockquote blockquote").unwrap();
-
-		return doc.body().html();
-	}
-
-	public static String postprocessPostHTMLForActivityPub(String text){
-		Document doc=Jsoup.parseBodyFragment(text);
-		doc.outputSettings().prettyPrint(false).indentAmount(0);
-
-		for(Element el:doc.getElementsByTag("a")){
-			el.removeAttr("data-user-id");
-		}
-
-		return doc.body().html();
-	}
-
-	public static String preprocessRemotePostMentions(String text, Map<Integer, User> users){
-		Document doc=Jsoup.parseBodyFragment(text);
-
-		for(Element link:doc.select("a.mention")){
-			URI href=URI.create(link.attr("href"));
-			boolean found=false;
-			for(User user:users.values()){
-				if(user.id==0)
-					continue;
-				if(href.equals(user.url) || href.equals(user.activityPubID)){
-					link.attr("data-user-id", String.valueOf(user.id));
-					found=true;
-					break;
-				}
-			}
-			if(!found){
-				link.removeClass("mention");
-			}
-			Element parent=link.parent();
-			if(parent!=null && parent.tagName().equalsIgnoreCase("span"))
-				parent.unwrap();
-		}
 
 		return doc.body().html();
 	}

@@ -4,8 +4,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
+import smithereen.model.LikeObjectType;
 import smithereen.ApplicationContext;
-import smithereen.activitypub.objects.activities.Like;
 import smithereen.api.ApiCallContext;
 import smithereen.api.model.ApiPaginatedList;
 import smithereen.api.model.ApiPaginatedListWithActors;
@@ -52,7 +52,7 @@ public class FaveMethods{
 	}
 
 	public static Object getPhotos(ApplicationContext ctx, ApiCallContext actx){
-		PaginatedList<Long> ids=ctx.getUserInteractionsController().getLikedObjects(actx.self.user, Like.ObjectType.PHOTO, actx.getOffset(), actx.getCount(50, 1000));
+		PaginatedList<Long> ids=ctx.getUserInteractionsController().getLikedObjects(actx.self.user, LikeObjectType.PHOTO, actx.getOffset(), actx.getCount(50, 1000));
 		Map<Long, Photo> photoObjects=ctx.getPhotosController().getPhotosIgnoringPrivacy(ids.list);
 		List<Photo> photos=ids.list.stream().map(photoObjects::get).toList();
 		return new ApiPaginatedList<>(ids.total, ApiUtils.getPhotos(ctx, actx, photos));

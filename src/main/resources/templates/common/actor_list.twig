@@ -4,7 +4,7 @@
 <div class="userList">
 {% for actor in actors %}
 	<div>
-		<a href="{{ actor.actor.profileURL }}"{{ profileRel(actor.actor) }}>{{ actor.actor | pictureForAvatar('a') }}</a>
+		<a href="{{ actor.actor.profileURL }}">{{ actor.actor | pictureForAvatar('a') }}</a>
 	</div>
 	<div class="info">
 		<b><a href="{{ actor.actor.profileURL }}">{{ actor.actor.type=="Person" ? actor.actor | name('complete') : actor.actor.name }}</a></b>

@@ -4,9 +4,6 @@ import com.google.gson.JsonObject;
 
 import org.jetbrains.annotations.Nullable;
 
-import smithereen.activitypub.ParserContext;
-import smithereen.activitypub.SerializerContext;
-import smithereen.jsonld.JLD;
 import smithereen.model.BlurHashable;
 import spark.utils.StringUtils;
 
@@ -24,8 +21,8 @@ public class Document extends ActivityPubObject implements BlurHashable{
 	}
 
 	@Override
-	protected ActivityPubObject parseActivityPubObject(JsonObject obj, ParserContext parserContext){
-		super.parseActivityPubObject(obj, parserContext);
+	protected ActivityPubObject parseActivityPubObject(JsonObject obj){
+		super.parseActivityPubObject(obj);
 		setBlurHash(optString(obj, "blurhash"));
 		width=optInt(obj, "width");
 		height=optInt(obj, "height");
@@ -44,13 +41,11 @@ public class Document extends ActivityPubObject implements BlurHashable{
 	}
 
 	@Override
-	public JsonObject asActivityPubObject(JsonObject obj, SerializerContext serializerContext){
-		obj=super.asActivityPubObject(obj, serializerContext);
+	public JsonObject asActivityPubObject(JsonObject obj){
+		obj=super.asActivityPubObject(obj);
 		String blurHash=getBlurHash();
 		if(StringUtils.isNotEmpty(blurHash)){
 			obj.addProperty("blurhash", blurHash);
-			serializerContext.addAlias("toot", JLD.MASTODON);
-			serializerContext.addAlias("blurhash", "toot:blurhash");
 		}
 		if(width>0)
 			obj.addProperty("width", width);

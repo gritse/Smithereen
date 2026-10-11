@@ -383,7 +383,7 @@ public class NewsfeedMethods{
 
 		return new CommentsFeed(feed.total, items, ApiUtils.getUsers(needUsers, ctx, actx), ApiUtils.getGroups(needGroups, ctx, actx));
 	}
-	
+
 	public static Object getBanned(ApplicationContext ctx, ApiCallContext actx){
 		PaginatedList<User> users=ctx.getFriendsController().getAllMutedUsers(actx.self.user, actx.getOffset(), actx.getCount(100, 1000));
 		return new ApiPaginatedList<>(users.total, ApiUtils.getUsers(users.list, ctx, actx));

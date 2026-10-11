@@ -54,10 +54,10 @@
 <table width="100%" class="friendsRow noBorderSpacing" id="frow{{friend.id}}">
 	<tr valign="top">
 		<td width="50">
-			<a href="{{friend.profileURL}}"{{ profileRel(friend) }}>{{friend | pictureForAvatar('a')}}</a>
+			<a href="{{friend.profileURL}}">{{friend | pictureForAvatar('a')}}</a>
 		</td>
 		<td class="info"{% if cursomActions is empty %} valign="middle"{% endif %}>
-			<b><a href="{{friend.profileURL}}"{{ profileRel(friend) }}>{{ friend | name }}</a></b>
+			<b><a href="{{friend.profileURL}}">{{ friend | name }}</a></b>
 			{% if customActions is not empty %}
 			<div id="frowActions{{ friend.id }}">
 				<ul class="actionList">
@@ -89,20 +89,5 @@
 {% endfor %}
 {% endblock %}
 {% include "pagination_endless" %}
-{% if owner.domain is not empty and tab!='online' and query is empty %}
-{% if tab=='friends' %}
-{% set realTotal=owner.friendsCount %}
-{% set key='remote_friends_incomplete' %}
-{% elseif tab=='followers' %}
-{% set realTotal=owner.followersCount %}
-{% set key='remote_followers_incomplete' %}
-{% elseif tab=='following' %}
-{% set realTotal=owner.followingCount %}
-{% set key='remote_following_incomplete' %}
-{% endif %}
-{% if totalItems<realTotal %}
-<div class="bottomSummaryWrap"><div class="bottomSummary">{{ L(key, {'name': owner.firstAndGender, 'gender': owner.gender, 'server': owner.domain}, {'link': {'href': owner.url, 'target': '_blank', 'rel': 'nofollow'} }) }}</div></div>
-{% endif %}
-{% endif %}
 </div>
 {%endblock%}

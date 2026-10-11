@@ -12,7 +12,6 @@ import smithereen.Config;
 import smithereen.exceptions.UserErrorException;
 import smithereen.lang.Lang;
 import smithereen.model.Account;
-import smithereen.model.ActivityPubRepresentable;
 import smithereen.model.LikeableContentObject;
 import smithereen.model.ObfuscatedObjectIDType;
 import smithereen.model.PaginatedList;
@@ -199,41 +198,12 @@ public class UserInteractionsRoutes{
 
 	public static Object like(Request req, Response resp, LikeableContentObject obj){
 		ApplicationContext ctx=context(req);
-		if(requireAccount(req, null) && verifyCSRF(req, resp)){
+		if(!requireAccount(req, resp))
+			return "";
+		if(verifyCSRF(req, resp)){
 			return setLiked(req, resp, sessionInfo(req).account, ctx, obj, true);
 		}
-		if(!(obj instanceof ActivityPubRepresentable apr))
-			throw new UserErrorException("not implemented yet");
-
-		Lang l=lang(req);
-		String url=apr.getActivityPubURL().toString();
-		String title=switch(obj){
-			case Post post -> l.get(post.getReplyLevel()>0 ? "remote_like_comment_title" : "remote_like_post_title");
-			case Photo photo -> l.get("remote_like_photo_title");
-			case Comment comment -> l.get("remote_like_comment_title");
-		};
-		return remoteInteraction(req, resp, url, title, null, !(obj instanceof Post));
-	}
-
-	static Object remoteInteraction(Request req, Response resp, String url, String title, Post postToEmbed, boolean hideWorksWith){
-		RenderedTemplateResponse model=RenderedTemplateResponse.ofAjaxLayer("remote_interaction", req);
-		model.with("contentURL", url).with("serverSignupMode", Config.signupMode).with("hideWorksWith", hideWorksWith);
-		model.pageTitle(title);
-		if(!isMobile(req) && postToEmbed!=null && postToEmbed.isLocal())
-			model.with("postToEmbed", postToEmbed);
-		if(isAjax(req)){
-			if(isMobile(req)){
-				return new WebDeltaResponse(resp)
-						.box(title, model.renderToString(), null, false)
-						.runScript("restoreRemoteInteractionDomain();");
-			}else{
-				return new WebDeltaResponse(resp)
-						.layer(model.renderToString(), null)
-						.runScript("restoreRemoteInteractionDomain();");
-			}
-		}else{
-			return model;
-		}
+		return "";
 	}
 
 	public static class LikePopoverResponse{

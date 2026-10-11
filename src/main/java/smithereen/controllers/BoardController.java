@@ -19,17 +19,11 @@ import java.util.Set;
 import smithereen.ApplicationContext;
 import smithereen.Config;
 import smithereen.LruCache;
-import smithereen.activitypub.objects.ActivityPubBoardTopic;
-import smithereen.activitypub.objects.LocalActivityPubBoardTopic;
-import smithereen.activitypub.objects.NoteOrQuestion;
 import smithereen.exceptions.BadRequestException;
-import smithereen.exceptions.FederationException;
 import smithereen.exceptions.InternalServerErrorException;
 import smithereen.exceptions.ObjectNotFoundException;
 import smithereen.exceptions.UserActionNotAllowedException;
 import smithereen.exceptions.UserErrorException;
-import smithereen.model.ForeignGroup;
-import smithereen.model.ForeignUser;
 import smithereen.model.Group;
 import smithereen.model.PaginatedList;
 import smithereen.model.User;
@@ -156,7 +150,7 @@ public class BoardController{
 		try{
 			if(textSource.trim().isEmpty() && attachmentIDs.isEmpty())
 				throw new BadRequestException("Empty comment");
-			long id=BoardStorage.createTopic(group.id, title, self.id, null, null);
+			long id=BoardStorage.createTopic(group.id, title, self.id);
 			BoardTopic topic=BoardStorage.getTopic(id);
 
 			Comment comment=context.getCommentsController().createComment(self, topic, null, textSource, sourceFormat, contentWarning, attachmentIDs, attachAltTexts, true);
@@ -167,21 +161,7 @@ public class BoardController{
 			context.getNewsfeedController().putFriendsFeedEntry(self, id, NewsfeedEntry.Type.BOARD_TOPIC);
 			context.getNewsfeedController().putGroupsFeedEntry(group, id, NewsfeedEntry.Type.BOARD_TOPIC);
 
-			if(group instanceof ForeignGroup fg){
-				LOG.debug("Creating topic remotely in {} on behalf of {}", fg.activityPubID, self.activityPubID);
-				try{
-					context.getActivityPubWorker().sendCreateBoardTopicRequest(self, fg, topic, comment);
-				}catch(FederationException x){
-					LOG.debug("Failed to create topic. Deleting the local one", x);
-					BoardStorage.deleteTopic(topic.id);
-					context.getCommentsController().deleteCommentsForObject(topic);
-					throw new UserErrorException(x.getMessage(), x);
-				}
-				topicCache.remove(id);
-				topic=getTopicIgnoringPrivacy(id); // To make sure all fields are set after Accept{TopicCreationRequest}
-			}else{
-				context.getActivityPubWorker().sendCreateBoardTopic(group, topic, comment);
-			}
+
 
 			topicCache.put(id, topic);
 			if(StringUtils.isNotEmpty(guid)){
@@ -191,62 +171,6 @@ public class BoardController{
 				}
 			}
 			return topic;
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	public BoardTopic createTopicWithExistingFirstComment(ForeignUser self, Group group, String title, NoteOrQuestion comment){
-		enforceTopicCreationPermission(self, group);
-		try{
-			long id=BoardStorage.createTopic(group.id, title, self.id, null, null);
-			BoardTopic topic=BoardStorage.getTopic(id);
-
-			ActivityPubBoardTopic target=new LocalActivityPubBoardTopic(topic);
-			target.activityPubID=topic.getActivityPubID();
-			target.attributedTo=group.activityPubID;
-			comment.target=target;
-			Comment nativeComment=comment.asNativeComment(context);
-			context.getCommentsController().putOrUpdateForeignComment(nativeComment);
-			BoardStorage.setTopicFirstCommentID(id, nativeComment.id);
-			topic.firstCommentID=nativeComment.id;
-			topic.numComments=1;
-
-			context.getNewsfeedController().putFriendsFeedEntry(self, id, NewsfeedEntry.Type.BOARD_TOPIC);
-			context.getNewsfeedController().putGroupsFeedEntry(group, id, NewsfeedEntry.Type.BOARD_TOPIC);
-
-			return topic;
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	public long getTopicIDByActivityPubID(URI apID){
-		if(Config.isLocal(apID)){
-			ObjectLinkResolver.ObjectTypeAndID tid=ObjectLinkResolver.getObjectIdFromLocalURL(apID);
-			if(tid!=null && tid.type()==ObjectLinkResolver.ObjectType.BOARD_TOPIC)
-				return tid.id();
-			return -1;
-		}
-		try{
-			return BoardStorage.getTopicIDByActivityPubID(apID);
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	public long putForeignTopic(BoardTopic topic, NoteOrQuestion firstComment){
-		if(topic.id>0)
-			throw new IllegalArgumentException("This topic is already stored locally");
-		try{
-			topic.id=BoardStorage.putForeignTopic(topic);
-			Comment comment=firstComment.asNativeComment(context);
-			context.getCommentsController().putOrUpdateForeignComment(comment);
-			if(!comment.parentObjectID.equals(topic.getCommentParentID()))
-				throw new FederationException("Comment doesn't belong to this topic");
-			BoardStorage.setTopicFirstCommentID(topic.id, comment.id);
-			topicCache.put(topic.id, topic);
-			return topic.id;
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -263,15 +187,7 @@ public class BoardController{
 	}
 
 	void deleteTopicWithFederation(Group group, BoardTopic topic){
-		if(group instanceof ForeignGroup){
-			Comment firstComment=context.getCommentsController().getCommentIgnoringPrivacy(topic.firstCommentID);
-			User author=context.getUsersController().getUserOrThrow(firstComment.authorID);
-			if(!(author instanceof ForeignUser)){
-				context.getActivityPubWorker().sendDeleteComment(author, firstComment, topic);
-			}
-		}else{
-			context.getActivityPubWorker().sendDeleteBoardTopic(group, topic);
-		}
+
 		deleteTopic(topic);
 	}
 
@@ -298,18 +214,7 @@ public class BoardController{
 		String oldTitle=topic.title;
 		renameTopic(topic, title);
 		topic.title=title;
-		if(group instanceof ForeignGroup fg){
-			try{
-				context.getActivityPubWorker().sendRenameBoardTopicRequest(self, fg, topic, title);
-			}catch(FederationException x){
-				LOG.debug("Failed to rename topic {}, reverting", topic.id, x);
-				renameTopic(topic, oldTitle);
-				topic.title=oldTitle;
-				throw new UserErrorException(x.getMessage(), x);
-			}
-		}else{
-			context.getActivityPubWorker().sendUpdateBoardTopic(group, topic);
-		}
+
 	}
 
 	void renameTopic(BoardTopic topic, String title){
@@ -326,8 +231,6 @@ public class BoardController{
 		context.getGroupsController().enforceUserAdminLevel(group, self, Group.AdminLevel.MODERATOR);
 		setTopicClosed(topic, closed);
 		topic.isClosed=closed;
-		if(!(group instanceof ForeignGroup))
-			context.getActivityPubWorker().sendUpdateBoardTopic(group, topic);
 	}
 
 	void setTopicClosed(BoardTopic topic, boolean closed){
@@ -345,8 +248,6 @@ public class BoardController{
 		setTopicPinned(topic, pinned);
 		topic.isPinned=pinned;
 		topic.pinnedAt=pinned ? Instant.now() : null;
-		if(!(group instanceof ForeignGroup))
-			context.getActivityPubWorker().sendUpdateBoardTopic(group, topic);
 	}
 
 	void setTopicPinned(BoardTopic topic, boolean pinned){
@@ -365,15 +266,6 @@ public class BoardController{
 			throw new InternalServerErrorException(x);
 		}
 		topicCache.put(topic.id, topic);
-	}
-
-	public void setTopicActivityPubID(BoardTopic topic, URI apID, URI apURL){
-		try{
-			BoardStorage.setTopicActivityPubID(topic.id, apID, apURL);
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-		topicCache.remove(topic.id);
 	}
 
 	public Map<Long, Comment> getFirstOrLastComments(Collection<Long> topicIDs, boolean first, boolean needAttachments){

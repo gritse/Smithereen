@@ -13,7 +13,6 @@ import java.util.Set;
 import smithereen.activitypub.objects.PropertyValue;
 import smithereen.api.ApiCallContext;
 import smithereen.lang.Inflector;
-import smithereen.model.ForeignUser;
 import smithereen.model.SizedImage;
 import smithereen.model.User;
 import smithereen.model.UserPresence;
@@ -120,8 +119,6 @@ public class ApiUser{
 		};
 		apId=user.activityPubID.toString();
 
-		if(fields.contains(Field.DOMAIN) && user instanceof ForeignUser fu)
-			domain=fu.domain;
 		if(fields.contains(Field.SCREEN_NAME))
 			screenName=user.username;
 		if(fields.contains(Field.STATUS) && user.status!=null && !user.status.isExpired())
@@ -312,9 +309,7 @@ public class ApiUser{
 		if(fields.contains(Field.IS_NO_INDEX))
 			isNoIndex=!user.isIndexable();
 		if(fields.contains(Field.WALL_DEFAULT)){
-			if(!user.hasWall()){
-				wallDefault="owner";
-			}else{
+			{
 				boolean canSeeAll;
 				if(allowedPrivacySettings!=null)
 					canSeeAll=allowedPrivacySettings.get(id).contains(UserPrivacySettingKey.WALL_OTHERS_POSTS);

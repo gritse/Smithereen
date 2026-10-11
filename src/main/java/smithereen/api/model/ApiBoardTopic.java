@@ -23,7 +23,7 @@ public class ApiBoardTopic{
 		id=topic.getIdString();
 		groupId=topic.groupID;
 		apId=topic.getActivityPubID().toString();
-		url=topic.getActivityPubURL().toString();
+		url=topic.getActivityPubID().toString();
 		title=topic.title;
 		created=topic.createdAt.getEpochSecond();
 		createdBy=topic.authorID;

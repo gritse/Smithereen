@@ -81,17 +81,6 @@ public class AppsController{
 
 	// region Apps
 
-	public void putOrUpdateForeignApp(ClientApp app){
-		if(app.apID==null)
-			throw new IllegalArgumentException("App must have an AP ID");
-		try{
-			AppsStorage.putOrUpdateForeignApp(app);
-			appsCache.put(app.id, app);
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
 	public ClientApp getAppByID(long id){
 		ClientApp app=appsCache.get(id);
 		if(app!=null)
@@ -102,14 +91,6 @@ public class AppsController{
 				throw new ObjectNotFoundException();
 			appsCache.put(app.id, app);
 			return app;
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	public long getAppIdByActivityPubID(URI apID){
-		try{
-			return AppsStorage.getAppIdByActivityPubID(apID);
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -174,9 +155,6 @@ public class AppsController{
 			if(!Objects.equals(logoID, existingLogoID) && logo!=null)
 				MediaStorage.createMediaFileReference(logo.fileID, app.id, MediaFileReferenceType.APP_LOGO, app.developerID);
 			appsCache.remove(app.id);
-			Set<URI> inboxes=AppsStorage.getAppUserInboxes(app.id);
-			if(!inboxes.isEmpty())
-				context.getActivityPubWorker().sendUpdateAppToUsers(app, inboxes);
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -224,8 +202,6 @@ public class AppsController{
 				return;
 			AppsStorage.deleteAccessGrant(account.id, app.id);
 			removeAppUser(account.user, app);
-			if(!app.isLocal())
-				context.getActivityPubWorker().sendRemoveAppToAppServer(account.user, app);
 			List<byte[]> tokens=AppsStorage.getUserAppAccessTokens(account.id, app.id);
 			if(tokens.isEmpty())
 				return;
@@ -244,9 +220,7 @@ public class AppsController{
 	public AppAccessToken createAccessToken(Account account, ClientApp app, EnumSet<ClientAppPermission> permissions, Request req){
 		try{
 			AppsStorage.createOrUpdateAccessGrant(account.id, app.id, permissions);
-			if(addAppUser(account.user, app) && !app.isLocal()){
-				context.getActivityPubWorker().sendAddAppToAppServer(account.user, app);
-			}
+			addAppUser(account.user, app);
 			Instant expiresAt=permissions.contains(ClientAppPermission.OFFLINE) || permissions.contains(ClientAppPermission.PASSWORD_GRANT_USED) ? null : Instant.now().plus(1, ChronoUnit.HOURS);
 			byte[] id=new byte[64];
 			srand.nextBytes(id);

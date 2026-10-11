@@ -10,10 +10,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import smithereen.model.LikeObjectType;
 import smithereen.Config;
-import smithereen.activitypub.objects.LinkOrObject;
-import smithereen.activitypub.objects.activities.Like;
-import smithereen.model.ForeignUser;
 import smithereen.model.LikedObjectID;
 import smithereen.model.PaginatedList;
 import smithereen.model.User;
@@ -24,24 +22,23 @@ import smithereen.storage.sql.SQLQueryBuilder;
 
 public class LikeStorage{
 
-	public static int setObjectLiked(int userID, long objectID, Like.ObjectType objectType, boolean liked, URI apID) throws SQLException{
+	public static int setObjectLiked(int userID, long objectID, LikeObjectType objectType, boolean liked) throws SQLException{
 		if(liked)
-			return putLike(userID, objectID, objectType, apID);
+			return putLike(userID, objectID, objectType);
 		else
 			return deleteLike(userID, objectID, objectType);
 	}
 
-	public static int putLike(int userID, long objectID, Like.ObjectType type, URI apID) throws SQLException{
+	public static int putLike(int userID, long objectID, LikeObjectType type) throws SQLException{
 		return new SQLQueryBuilder()
 				.insertIgnoreInto("likes")
 				.value("user_id", userID)
 				.value("object_id", objectID)
 				.value("object_type", type)
-				.value("ap_id", Objects.toString(apID, null))
 				.executeAndGetID();
 	}
 
-	private static int deleteLike(int userID, long objectID, Like.ObjectType type) throws SQLException{
+	private static int deleteLike(int userID, long objectID, LikeObjectType type) throws SQLException{
 		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
 			int id=new SQLQueryBuilder(conn)
 					.selectFrom("likes")
@@ -58,14 +55,14 @@ public class LikeStorage{
 		}
 	}
 
-	public static void deleteAllLikesForObject(long objectID, Like.ObjectType type) throws SQLException{
+	public static void deleteAllLikesForObject(long objectID, LikeObjectType type) throws SQLException{
 		new SQLQueryBuilder()
 				.deleteFrom("likes")
 				.where("object_id=? AND object_type=?", objectID, type)
 				.executeNoResult();
 	}
 
-	public static void deleteAllLikesForObjects(Collection<Long> objectIDs, Like.ObjectType type) throws SQLException{
+	public static void deleteAllLikesForObjects(Collection<Long> objectIDs, LikeObjectType type) throws SQLException{
 		new SQLQueryBuilder()
 				.deleteFrom("likes")
 				.whereIn("object_id", objectIDs)
@@ -73,37 +70,7 @@ public class LikeStorage{
 				.executeNoResult();
 	}
 
-	public static PaginatedList<Like> getLikes(long objectID, URI objectApID, Like.ObjectType type, int offset, int count) throws SQLException{
-		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
-			PreparedStatement stmt=SQLQueryBuilder.prepareStatement(conn, "SELECT likes.id AS like_id, user_id, likes.ap_id AS like_ap_id, users.ap_id AS user_ap_id FROM likes JOIN users ON users.id=likes.user_id WHERE object_id=? AND object_type=? ORDER BY likes.id ASC LIMIT ?,?",
-					objectID, type, offset, count);
-			ArrayList<Like> likes=new ArrayList<>();
-			LinkOrObject objApID=new LinkOrObject(objectApID);
-			try(ResultSet res=stmt.executeQuery()){
-				while(res.next()){
-					Like like=new Like();
-					String userID=res.getString("user_ap_id");
-					like.actor=new LinkOrObject(userID==null ? Config.localURI("/users/"+res.getInt("user_id")) : URI.create(userID));
-					if(userID==null){
-						like.activityPubID=Config.localURI("/activitypub/objects/likes/"+res.getInt("like_id"));
-					}else{
-						String id=res.getString("like_ap_id");
-						like.activityPubID=id==null ? null : URI.create(id);
-					}
-					like.object=objApID;
-					likes.add(like);
-				}
-			}
-			int total=new SQLQueryBuilder(conn)
-					.selectFrom("likes")
-					.count()
-					.where("object_id=? AND object_type=?", objectID, type.ordinal())
-					.executeAndGetInt();
-			return new PaginatedList<>(likes, total);
-		}
-	}
-
-	public static PaginatedList<Integer> getLikes(long objectID, Like.ObjectType objectType, int selfID, int offset, int count) throws SQLException{
+	public static PaginatedList<Integer> getLikes(long objectID, LikeObjectType objectType, int selfID, int offset, int count) throws SQLException{
 		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
 			int total=new SQLQueryBuilder(conn)
 					.selectFrom("likes")
@@ -126,7 +93,7 @@ public class LikeStorage{
 		}
 	}
 
-	public static PaginatedList<Integer> getFriendsLikes(long objectID, Like.ObjectType objectType, int selfID, int offset, int count) throws SQLException{
+	public static PaginatedList<Integer> getFriendsLikes(long objectID, LikeObjectType objectType, int selfID, int offset, int count) throws SQLException{
 		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
 			int total=new SQLQueryBuilder(conn)
 					.selectFrom("likes")
@@ -151,7 +118,7 @@ public class LikeStorage{
 		}
 	}
 
-	public static int getLikeCount(long objectID, Like.ObjectType objectType) throws SQLException{
+	public static int getLikeCount(long objectID, LikeObjectType objectType) throws SQLException{
 		return new SQLQueryBuilder()
 				.selectFrom("likes")
 				.count()
@@ -159,7 +126,7 @@ public class LikeStorage{
 				.executeAndGetInt();
 	}
 
-	public static boolean isLiked(long objectID, Like.ObjectType objectType, int userID) throws SQLException{
+	public static boolean isLiked(long objectID, LikeObjectType objectType, int userID) throws SQLException{
 		return new SQLQueryBuilder()
 				.selectFrom("likes")
 				.count()
@@ -167,28 +134,7 @@ public class LikeStorage{
 				.executeAndGetInt()==1;
 	}
 
-	public static Like getByID(int id) throws SQLException{
-		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
-			PreparedStatement stmt=conn.prepareStatement("SELECT user_id, object_id, object_type FROM likes WHERE id=?");
-			stmt.setInt(1, id);
-			try(ResultSet res=stmt.executeQuery()){
-				if(res.next()){
-					int userID=res.getInt(1);
-					User user=UserStorage.getById(userID);
-					if(user instanceof ForeignUser)
-						return null;
-					Like like=new Like();
-					like.activityPubID=Config.localURI("/activitypub/objects/likes/"+id);
-					like.object=new LinkOrObject(Config.localURI("/posts/"+res.getInt(2)));
-					like.actor=new LinkOrObject(Config.localURI("/users/"+userID));
-					return like;
-				}
-				return null;
-			}
-		}
-	}
-
-	public static PaginatedList<Long> getLikedObjectIDs(int ownerID, Like.ObjectType type, int offset, int count) throws SQLException{
+	public static PaginatedList<Long> getLikedObjectIDs(int ownerID, LikeObjectType type, int offset, int count) throws SQLException{
 		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
 			int total=new SQLQueryBuilder(conn)
 					.selectFrom("likes")
@@ -225,7 +171,7 @@ public class LikeStorage{
 					.where("user_id=?", ownerID)
 					.orderBy("id DESC")
 					.limit(count, offset)
-					.executeAsStream(res->new LikedObjectID(smithereen.activitypub.objects.activities.Like.ObjectType.values()[res.getInt("object_type")], res.getLong("object_id")))
+					.executeAsStream(res->new LikedObjectID(LikeObjectType.values()[res.getInt("object_type")], res.getLong("object_id")))
 					.toList();
 			return new PaginatedList<>(ids, total, offset, count);
 		}
@@ -244,7 +190,7 @@ public class LikeStorage{
 		}
 	}
 
-	public static void fillLikesInInteractions(Map<Long, UserInteractions> interactions, Like.ObjectType type, int selfID) throws SQLException{
+	public static void fillLikesInInteractions(Map<Long, UserInteractions> interactions, LikeObjectType type, int selfID) throws SQLException{
 		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
 			ResultSet res=new SQLQueryBuilder(conn)
 					.selectFrom("likes")

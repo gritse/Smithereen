@@ -31,7 +31,6 @@ import smithereen.exceptions.BadRequestException;
 import smithereen.exceptions.InternalServerErrorException;
 import smithereen.exceptions.ObjectNotFoundException;
 import smithereen.exceptions.UserActionNotAllowedException;
-import smithereen.model.ForeignUser;
 import smithereen.model.MailMessage;
 import smithereen.model.MessagesPrivacyGrant;
 import smithereen.model.PaginatedList;
@@ -148,17 +147,13 @@ public class MailController{
 			localOwners.add(self.id);
 			boolean hasForeignRecipients=false;
 			for(User user:to){
-				if(user instanceof ForeignUser){
-					hasForeignRecipients=true;
-					continue;
-				}
 				localOwners.add(user.id);
 				UserNotifications un=NotificationsStorage.getNotificationsFromCache(user.id);
 				if(un!=null)
 					un.incUnreadMailCount(1);
 			}
 			HashMap<Integer, Long> allMessageIDs=new HashMap<>();
-			long id=MailStorage.createMessage(text, Objects.requireNonNullElse(subject, ""), attachments, self.id, to.stream().map(u->u.id).collect(Collectors.toSet()), null, localOwners, null, replyInfos, allMessageIDs);
+			long id=MailStorage.createMessage(text, Objects.requireNonNullElse(subject, ""), attachments, self.id, to.stream().map(u->u.id).collect(Collectors.toSet()), null, localOwners, replyInfos, allMessageIDs);
 
 			if(StringUtils.isNotEmpty(guid)){
 				synchronized(guids){
@@ -178,15 +173,13 @@ public class MailController{
 				if(grant!=null && grant.isValid()){
 					MailStorage.consumePrivacyGrant(user.id, self.id);
 				}
-				if(!(user instanceof ForeignUser)){
-					MailMessage msg=MailStorage.getMessage(user.id, allMessageIDs.get(user.id), false);
-					context.getNotificationsController().sendRealtimeNotifications(user, "msg"+msg.getIdString(), RealtimeNotification.Type.MAIL_MESSAGE, msg, null, self);
-				}
+				MailMessage msg=MailStorage.getMessage(user.id, allMessageIDs.get(user.id), false);
+				context.getNotificationsController().sendRealtimeNotifications(user, "msg"+msg.getIdString(), RealtimeNotification.Type.MAIL_MESSAGE, msg, null, self);
+
 				context.getFriendsController().incrementHintsRank(self, user, 5);
 			}
 			if(hasForeignRecipients){
 				MailMessage msg=MailStorage.getMessage(self.id, id, false);
-				context.getActivityPubWorker().sendDirectMessage(self, msg);
 			}
 			BackgroundTaskRunner.getInstance().submit(()->{
 				Set<User> usersToGrant=to.stream()
@@ -218,22 +211,17 @@ public class MailController{
 		try{
 			HashSet<Long> ids=new HashSet<>(message.relatedMessageIDs);
 			// User's own copy
-			if(!(self instanceof ForeignUser)){
-				MailStorage.addMessageReadReceipt(self.id, Set.of(message.id), self.id);
-				UserNotifications un=NotificationsStorage.getNotificationsFromCache(self.id);
-				if(un!=null)
-					un.incUnreadMailCount(-1);
-				context.getNotificationsController().sendRealtimeCountersUpdates(self);
-			}else{
-				ids.add(message.id);
-			}
+			MailStorage.addMessageReadReceipt(self.id, Set.of(message.id), self.id);
+			UserNotifications un=NotificationsStorage.getNotificationsFromCache(self.id);
+			if(un!=null)
+				un.incUnreadMailCount(-1);
+			context.getNotificationsController().sendRealtimeCountersUpdates(self);
+
 			// Sender's copy
 			if(!ids.isEmpty()){
 				MailStorage.addMessageReadReceipt(message.senderID, ids, self.id);
 			}
-			if(!(self instanceof ForeignUser)){
-				context.getActivityPubWorker().sendReadMessageActivity(self, message);
-			}
+
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -284,14 +272,10 @@ public class MailController{
 					}
 				}
 			}
-			MailStorage.actuallyDeleteMessages(idsToDelete, message.activityPubID);
-			if(!(self instanceof ForeignUser) && deleteRelated && message.senderID==self.id){
-				context.getActivityPubWorker().sendDeleteMessageActivity(self, message);
-			}
+			MailStorage.actuallyDeleteMessages(idsToDelete);
 			Map<Integer, User> users=context.getUsersController().getUsers(affectedUsers);
 			for(User user:users.values()){
-				if(!(user instanceof ForeignUser))
-					context.getNotificationsController().sendRealtimeCountersUpdates(user);
+				context.getNotificationsController().sendRealtimeCountersUpdates(user);
 			}
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
@@ -317,7 +301,7 @@ public class MailController{
 			List<MailMessage> messages=MailStorage.getRecentlyDeletedMessages(Instant.now().minus(10, ChronoUnit.MINUTES));
 			if(messages.isEmpty())
 				return;
-			MailStorage.actuallyDeleteMessages(messages);
+			MailStorage.actuallyDeleteMessagesByObjects(messages);
 			for(MailMessage message:messages){
 				if(message.attachments!=null && !message.attachments.isEmpty()){
 					MediaStorage.deleteMediaFileReferences(message.id, MediaFileReferenceType.MAIL_ATTACHMENT);
@@ -325,84 +309,6 @@ public class MailController{
 			}
 		}catch(SQLException x){
 			LOG.warn("Failed to permanently delete restorable messages", x);
-		}
-	}
-
-	public void putForeignMessage(MailMessage msg){
-		try{
-			HashSet<Integer> needUsers=new HashSet<>();
-			needUsers.add(msg.senderID);
-			needUsers.addAll(msg.to);
-			needUsers.addAll(msg.cc);
-			Map<Integer, User> users=context.getUsersController().getUsers(needUsers);
-			User sender=users.remove(msg.senderID);
-			Map<Integer, MailMessage.ReplyInfo> replyInfos;
-			if(msg.inReplyTo==null){
-				replyInfos=Map.of();
-			}else{
-				replyInfos=new HashMap<>();
-
-				// Reply to a local message?
-				Matcher localMatcher=AP_ID_PATTERN.matcher(msg.inReplyTo.getPath());
-				if(localMatcher.find()){
-					long id=Utils.decodeLong(localMatcher.group(1));
-					List<MailMessage> _parent=MailStorage.getMessages(Set.of(id));
-					if(!_parent.isEmpty()){
-						MailMessage parent=_parent.get(0);
-						replyInfos.put(parent.ownerID, new MailMessage.ReplyInfo(MailMessage.ParentObjectType.MESSAGE, parent.id));
-						if(!parent.relatedMessageIDs.isEmpty()){
-							for(MailMessage related:MailStorage.getMessages(parent.relatedMessageIDs)){
-								replyInfos.put(related.ownerID, new MailMessage.ReplyInfo(MailMessage.ParentObjectType.MESSAGE, related.id));
-							}
-						}
-					}
-				}else{
-					// Reply to a remote message?
-					List<MailMessage> parentMessages=MailStorage.getMessages(msg.inReplyTo);
-					if(!parentMessages.isEmpty()){
-						for(MailMessage parent:parentMessages){
-							replyInfos.put(parent.ownerID, new MailMessage.ReplyInfo(MailMessage.ParentObjectType.MESSAGE, parent.id));
-						}
-					}else{
-						// Reply to an object of another type?
-						try{
-							Object parent=context.getObjectLinkResolver().resolveNative(msg.inReplyTo, Object.class, true, true, false, (Actor)null, false);
-							if(parent instanceof Post post){
-								for(int id:needUsers){
-									replyInfos.put(id, new MailMessage.ReplyInfo(MailMessage.ParentObjectType.POST, post.id));
-								}
-							}
-						}catch(ObjectNotFoundException ignore){} // Also thrown by NoteOrQuestion -> Post conversion when parent post is not loaded. TODO: maybe load reply threads here
-					}
-				}
-			}
-			Set<Integer> localOwners=users.values().stream()
-					.filter(u->!(u instanceof ForeignUser))
-					.filter(u->context.getPrivacyController().checkUserPrivacy(sender, u, UserPrivacySettingKey.PRIVATE_MESSAGES))
-					.map(u->u.id)
-					.collect(Collectors.toSet());
-			if(localOwners.isEmpty())
-				throw new UserActionNotAllowedException();
-			Map<Integer, Long> msgIDs=new HashMap<>();
-			MailStorage.createMessage(msg.text, msg.subject, msg.getSerializedAttachments(), msg.senderID, msg.to, msg.cc, localOwners, msg.activityPubID, replyInfos, msgIDs);
-			for(int id:localOwners){
-				MessagesPrivacyGrant grant=MailStorage.getPrivacyGrant(id, msg.senderID);
-				if(grant!=null && grant.isValid())
-					MailStorage.consumePrivacyGrant(id, msg.senderID);
-
-				if(!context.getPrivacyController().checkUserPrivacy(users.get(id), sender, sender.getPrivacySetting(UserPrivacySettingKey.PRIVATE_MESSAGES))){
-					MailStorage.createOrRenewPrivacyGrant(msg.senderID, id, 10);
-				}
-
-				UserNotifications un=NotificationsStorage.getNotificationsFromCache(id);
-				if(un!=null)
-					un.incUnreadMailCount(1);
-
-				MailMessage lmsg=MailStorage.getMessage(id, msgIDs.get(id), false);
-				context.getNotificationsController().sendRealtimeNotifications(users.get(id), "msg"+lmsg.getIdString(), RealtimeNotification.Type.MAIL_MESSAGE, lmsg, null, sender);
-			}
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
 		}
 	}
 

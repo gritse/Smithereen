@@ -16,74 +16,31 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
-import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import smithereen.ApplicationContext;
 import smithereen.Config;
 import smithereen.Utils;
-import smithereen.activitypub.ParserContext;
-import smithereen.activitypub.SerializerContext;
-import smithereen.activitypub.objects.activities.Accept;
-import smithereen.activitypub.objects.activities.Add;
-import smithereen.activitypub.objects.activities.Announce;
-import smithereen.activitypub.objects.activities.Block;
-import smithereen.activitypub.objects.activities.Create;
-import smithereen.activitypub.objects.activities.Delete;
-import smithereen.activitypub.objects.activities.Flag;
-import smithereen.activitypub.objects.activities.Follow;
-import smithereen.activitypub.objects.activities.Invite;
-import smithereen.activitypub.objects.activities.Join;
-import smithereen.activitypub.objects.activities.Like;
-import smithereen.activitypub.objects.activities.Move;
-import smithereen.activitypub.objects.activities.Offer;
-import smithereen.activitypub.objects.activities.QuoteRequest;
-import smithereen.activitypub.objects.activities.Read;
-import smithereen.activitypub.objects.activities.Reject;
-import smithereen.activitypub.objects.activities.Remove;
-import smithereen.activitypub.objects.activities.TopicCreationRequest;
-import smithereen.activitypub.objects.activities.TopicRenameRequest;
-import smithereen.activitypub.objects.activities.Undo;
-import smithereen.activitypub.objects.activities.Update;
-import smithereen.model.ForeignGroup;
-import smithereen.model.ForeignUser;
 import smithereen.util.JsonArrayBuilder;
-import smithereen.util.PublicSuffixList;
 import smithereen.util.UriBuilder;
-import spark.utils.StringUtils;
 
+/**
+ * Base class for JSON-serializable content objects: attachments (images, documents, audio, video),
+ * profile fields and actors (users, groups). Objects are only ever parsed from JSON written by this
+ * server itself (e.g. the attachments column), never from the network.
+ */
 public abstract class ActivityPubObject{
 	protected static final Logger LOG=LoggerFactory.getLogger(ActivityPubObject.class);
 
-	/*attachment | attributedTo | audience | content | context | name | endTime | generator | icon | image | inReplyTo | location | preview | published | replies | startTime | summary | tag | updated | url | to | bto | cc | bcc | mediaType | duration*/
-
 	public List<ActivityPubObject> attachment;
-	public URI attributedTo;
-	public URI audience;
 	public String content;
-	public URI context;
 	public @Nullable String name;
-	public Instant endTime;
-	public LinkOrObject generator;
 	public List<Image> image;
 	public List<Image> icon;
-	public URI inReplyTo;
-	public LinkOrObject location;
-	public LinkOrObject preview;
 	public Instant published;
-	public LinkOrObject replies;
-	public Instant startTime;
 	public @Nullable String summary;
-	public List<ActivityPubObject> tag;
-	public Instant updated;
 	public URI url;
-	public List<LinkOrObject> to;
-	public List<LinkOrObject> bto;
-	public List<LinkOrObject> cc;
-	public List<LinkOrObject> bcc;
 	public String mediaType;
 
 	/**
@@ -91,27 +48,18 @@ public abstract class ActivityPubObject{
 	 */
 	public long duration;
 
+	/**
+	 * Canonical local URI of this object (for actors and other addressable objects), null for attachments.
+	 */
 	public URI activityPubID;
+
+	public URI getActivityPubID(){
+		return activityPubID;
+	}
 
 	public abstract String getType();
 
-	public JsonObject asRootActivityPubObject(ApplicationContext appContext, String requesterDomain){
-		SerializerContext serializerContext=new SerializerContext(appContext, requesterDomain);
-		return asRootActivityPubObject(serializerContext);
-	}
-
-	public JsonObject asRootActivityPubObject(ApplicationContext appContext, Supplier<String> requesterDomainSupplier){
-		SerializerContext serializerContext=new SerializerContext(appContext, requesterDomainSupplier);
-		return asRootActivityPubObject(serializerContext);
-	}
-
-	public JsonObject asRootActivityPubObject(SerializerContext serializerContext){
-		JsonObject obj=asActivityPubObject(new JsonObject(), serializerContext);
-		obj.add("@context", serializerContext.getJLDContext());
-		return obj;
-	}
-
-	public JsonObject asActivityPubObject(JsonObject obj, SerializerContext serializerContext){
+	public JsonObject asActivityPubObject(JsonObject obj){
 		if(obj==null)
 			obj=new JsonObject();
 
@@ -119,53 +67,21 @@ public abstract class ActivityPubObject{
 		if(activityPubID!=null)
 			obj.addProperty("id", activityPubID.toString());
 		if(attachment!=null && !attachment.isEmpty())
-			obj.add("attachment", serializeObjectArray(attachment, serializerContext));
-		if(attributedTo!=null)
-			obj.addProperty("attributedTo", attributedTo.toString());
-		if(audience!=null)
-			obj.addProperty("audience", audience.toString());
+			obj.add("attachment", serializeObjectArray(attachment));
 		if(content!=null)
 			obj.addProperty("content", content);
-		if(context!=null)
-			obj.addProperty("context", context.toString());
 		if(name!=null)
 			obj.addProperty("name", name);
-		if(endTime!=null)
-			obj.addProperty("endTime", Utils.formatDateAsISO(endTime));
-		if(generator!=null)
-			obj.add("generator", generator.serialize(serializerContext));
 		if(image!=null && !image.isEmpty())
-			obj.add("image", serializeObjectArrayCompact(image, serializerContext));
+			obj.add("image", serializeObjectArrayCompact(image));
 		if(icon!=null && !icon.isEmpty())
-			obj.add("icon", serializeObjectArrayCompact(icon, serializerContext));
-		if(inReplyTo!=null)
-			obj.addProperty("inReplyTo", inReplyTo.toString());
-		if(location!=null)
-			obj.add("location", location.serialize(serializerContext));
-		if(preview!=null)
-			obj.add("preview", preview.serialize(serializerContext));
+			obj.add("icon", serializeObjectArrayCompact(icon));
 		if(published!=null)
 			obj.addProperty("published", Utils.formatDateAsISO(published));
-		if(replies!=null)
-			obj.add("replies", replies.serialize(serializerContext));
-		if(startTime!=null)
-			obj.addProperty("startTime", Utils.formatDateAsISO(startTime));
 		if(summary!=null)
 			obj.addProperty("summary", summary);
-		if(tag!=null && !tag.isEmpty())
-			obj.add("tag", serializeObjectArray(tag, serializerContext));
-		if(updated!=null)
-			obj.addProperty("updated", Utils.formatDateAsISO(updated));
 		if(url!=null)
 			obj.addProperty("url", url.toString());
-		if(to!=null)
-			obj.add("to", serializeLinkOrObjectArray(to, serializerContext));
-		if(bto!=null)
-			obj.add("bto", serializeLinkOrObjectArray(bto, serializerContext));
-		if(cc!=null)
-			obj.add("cc", serializeLinkOrObjectArray(cc, serializerContext));
-		if(bcc!=null)
-			obj.add("bcc", serializeLinkOrObjectArray(bcc, serializerContext));
 		if(mediaType!=null)
 			obj.addProperty("mediaType", mediaType);
 		if(duration!=0)
@@ -174,19 +90,19 @@ public abstract class ActivityPubObject{
 		return obj;
 	}
 
-	public static <T extends ActivityPubObject> List<T> parseSingleObjectOrArray(JsonElement o, ParserContext parserContext){
+	public static <T extends ActivityPubObject> List<T> parseSingleObjectOrArray(JsonElement o){
 		if(o==null)
 			return null;
 		try{
 			if(o.isJsonObject()){
-				T item=(T)parse(o.getAsJsonObject(), parserContext);
+				T item=(T)parse(o.getAsJsonObject());
 				if(item==null)
 					return null;
 				return (List<T>) Collections.singletonList(item);
 			}else if(o.isJsonArray()){
 				ArrayList<T> res=new ArrayList<>();
 				for(JsonElement el:o.getAsJsonArray()){
-					T item=(T) parse(el.getAsJsonObject(), parserContext);
+					T item=(T) parse(el.getAsJsonObject());
 					if(item!=null)
 						res.add(item);
 				}
@@ -196,37 +112,17 @@ public abstract class ActivityPubObject{
 		return null;
 	}
 
-	protected <T extends ActivityPubObject> T parseSingleObject(JsonObject o, ParserContext parserContext){
-		if(o==null)
-			return null;
-		try{
-			return (T)parse(o, parserContext);
-		}catch(ClassCastException x){
-			return null;
-		}
-	}
-
 	protected static URI tryParseURL(String url){
 		if(url==null || url.isEmpty())
 			return null;
 		try{
 			URI uri=UriBuilder.parseAndEncode(url);
-			if("https".equals(uri.getScheme()) || "as".equals(uri.getScheme())){
+			if("https".equals(uri.getScheme())){
 				return uri;
 			}else if("http".equals(uri.getScheme())){
 				if(Config.useHTTP)
 					return uri;
 				return new UriBuilder(uri).scheme("https").build();
-			}
-			if("bear".equals(uri.getScheme())){
-				Map<String, String> params=UriBuilder.parseQueryString(uri.getRawQuery());
-				String token=params.get("t");
-				String _url=params.get("u");
-				if(StringUtils.isNotEmpty(token) && StringUtils.isNotEmpty(_url)){
-					URI actualURL=UriBuilder.parseAndEncode(_url);
-					if("https".equals(actualURL.getScheme()) || "http".equals(actualURL.getScheme()))
-						return uri;
-				}
 			}
 			return null;
 		}catch(URISyntaxException x){
@@ -238,38 +134,6 @@ public abstract class ActivityPubObject{
 		if(date==null)
 			return null;
 		return Utils.parseISODate(date);
-	}
-
-	protected LinkOrObject tryParseLinkOrObject(JsonElement o, ParserContext parserContext){
-		if(o==null)
-			return null;
-		if(o.isJsonPrimitive() && o.getAsJsonPrimitive().isString()){
-			URI url=tryParseURL(o.getAsString());
-			if(url!=null)
-				return new LinkOrObject(url);
-		}else if(o.isJsonObject()){
-			ActivityPubObject obj=parse(o.getAsJsonObject(), parserContext);
-			if(obj!=null)
-				return new LinkOrObject(obj);
-		}
-		return null;
-	}
-
-	protected List<LinkOrObject> tryParseArrayOfLinksOrObjects(JsonElement o, ParserContext parserContext){
-		if(o==null)
-			return null;
-		if(o.isJsonArray()){
-			JsonArray ar=o.getAsJsonArray();
-			ArrayList<LinkOrObject> res=new ArrayList<>();
-			for(JsonElement el:ar){
-				LinkOrObject lo=tryParseLinkOrObject(el, parserContext);
-				if(lo!=null)
-					res.add(lo);
-			}
-			return res.isEmpty() ? null : res;
-		}
-		LinkOrObject lo=tryParseLinkOrObject(o, parserContext);
-		return lo!=null ? Collections.singletonList(lo) : null;
 	}
 
 	protected long tryParseDuration(String duration){
@@ -298,24 +162,16 @@ public abstract class ActivityPubObject{
 		return result;
 	}
 
-	public static JsonArray serializeObjectArray(List<? extends ActivityPubObject> ar, SerializerContext serializerContext){
+	public static JsonArray serializeObjectArray(List<? extends ActivityPubObject> ar){
 		JsonArray res=new JsonArray();
 		for(ActivityPubObject obj:ar){
-			res.add(obj.asActivityPubObject(new JsonObject(), serializerContext));
+			res.add(obj.asActivityPubObject(new JsonObject()));
 		}
 		return res;
 	}
 
-	public static JsonElement serializeObjectArrayCompact(List<? extends ActivityPubObject> ar, SerializerContext serializerContext){
-		return ar.size()==1 ? ar.get(0).asActivityPubObject(null, serializerContext) : serializeObjectArray(ar, serializerContext);
-	}
-
-	protected JsonArray serializeLinkOrObjectArray(List<LinkOrObject> ar, SerializerContext serializerContext){
-		JsonArray res=new JsonArray();
-		for(LinkOrObject l:ar){
-			res.add(l.serialize(serializerContext));
-		}
-		return res;
+	public static JsonElement serializeObjectArrayCompact(List<? extends ActivityPubObject> ar){
+		return ar.size()==1 ? ar.get(0).asActivityPubObject(null) : serializeObjectArray(ar);
 	}
 
 	protected String serializeDuration(long d){
@@ -396,66 +252,19 @@ public abstract class ActivityPubObject{
 		return new JsonArrayBuilder().add(el).build();
 	}
 
-	protected ActivityPubObject parseActivityPubObject(JsonObject obj, ParserContext parserContext){
+	protected ActivityPubObject parseActivityPubObject(JsonObject obj){
 		activityPubID=tryParseURL(optString(obj, "id"));
-		attachment=parseSingleObjectOrArray(obj.get("attachment"), parserContext);
-		attributedTo=tryParseURL(optString(obj, "attributedTo"));
-		audience=tryParseURL(optString(obj, "audience"));
-		if(obj.get("contentMap") instanceof JsonObject contentMap && contentMap.size()>0){
-			content=optString(contentMap, contentMap.keySet().iterator().next());
-		}else{
-			content=optString(obj, "content");
-		}
-		if(obj.get("nameMap") instanceof JsonObject nameMap && nameMap.size()>0){
-			name=optString(nameMap, nameMap.keySet().iterator().next());
-		}else{
-			name=optString(obj, "name");
-		}
-		endTime=tryParseDate(optString(obj, "endTime"));
-		generator=tryParseLinkOrObject(obj.get("generator"), parserContext);
-		image=parseSingleObjectOrArray(obj.get("image"), parserContext);
-		icon=parseSingleObjectOrArray(obj.get("icon"), parserContext);
-		inReplyTo=tryParseURL(optString(obj, "inReplyTo"));
-		location=tryParseLinkOrObject(obj.get("location"), parserContext);
-		preview=tryParseLinkOrObject(obj.get("preview"), parserContext);
+		attachment=parseSingleObjectOrArray(obj.get("attachment"));
+		content=optString(obj, "content");
+		name=optString(obj, "name");
+		image=parseSingleObjectOrArray(obj.get("image"));
+		icon=parseSingleObjectOrArray(obj.get("icon"));
 		published=tryParseDate(optString(obj, "published"));
-		replies=tryParseLinkOrObject(obj.get("replies"), parserContext);
-		startTime=tryParseDate(optString(obj, "startTime"));
 		summary=optString(obj, "summary");
-		tag=parseSingleObjectOrArray(obj.get("tag"), parserContext);
-		updated=tryParseDate(optString(obj, "updated"));
 		url=tryParseURL(optString(obj, "url"));
-		to=tryParseArrayOfLinksOrObjects(obj.get("to"), parserContext);
-		bto=tryParseArrayOfLinksOrObjects(obj.get("bto"), parserContext);
-		cc=tryParseArrayOfLinksOrObjects(obj.get("cc"), parserContext);
-		bcc=tryParseArrayOfLinksOrObjects(obj.get("bcc"), parserContext);
 		mediaType=optString(obj, "mediaType");
 		duration=tryParseDuration(optString(obj, "duration"));
 		return this;
-	}
-
-	//abstract String getType();
-
-	public void validate(@Nullable URI parentID, String propertyName){
-
-	}
-
-	protected void ensureHostMatchesID(URI uri, String property){
-		if(activityPubID!=null)
-			ensureHostMatchesID(uri, activityPubID, property);
-	}
-
-	protected void ensureHostMatchesID(URI uri, URI base, String property){
-		if(uri!=null){
-			URI actualURI=uri;
-			if("bear".equals(uri.getScheme()))
-				actualURI=URI.create(UriBuilder.parseQueryString(uri.getRawQuery()).get("u"));
-			if(!base.getHost().equalsIgnoreCase(actualURI.getHost())){
-				if(!PublicSuffixList.isSameRegisteredDomain(base.getHost(), actualURI.getHost())){
-					throw new IllegalArgumentException("URI in property '"+property+"' "+uri+" must be within the same registered domain as the object ID "+activityPubID);
-				}
-			}
-		}
 	}
 
 	@Override
@@ -469,35 +278,15 @@ public abstract class ActivityPubObject{
 			sb.append(", attachment=");
 			sb.append(attachment);
 		}
-		if(attributedTo!=null){
-			sb.append(", attributedTo=");
-			sb.append(attributedTo);
-		}
-		if(audience!=null){
-			sb.append(", audience=");
-			sb.append(audience);
-		}
 		if(content!=null){
 			sb.append(", content='");
 			sb.append(content);
 			sb.append('\'');
 		}
-		if(context!=null){
-			sb.append(", context=");
-			sb.append(context);
-		}
 		if(name!=null){
 			sb.append(", name='");
 			sb.append(name);
 			sb.append('\'');
-		}
-		if(endTime!=null){
-			sb.append(", endTime=");
-			sb.append(endTime);
-		}
-		if(generator!=null){
-			sb.append(", generator=");
-			sb.append(generator);
 		}
 		if(image!=null){
 			sb.append(", image=");
@@ -507,62 +296,18 @@ public abstract class ActivityPubObject{
 			sb.append(", icon=");
 			sb.append(icon);
 		}
-		if(inReplyTo!=null){
-			sb.append(", inReplyTo=");
-			sb.append(inReplyTo);
-		}
-		if(location!=null){
-			sb.append(", location=");
-			sb.append(location);
-		}
-		if(preview!=null){
-			sb.append(", preview=");
-			sb.append(preview);
-		}
 		if(published!=null){
 			sb.append(", published=");
 			sb.append(published);
-		}
-		if(replies!=null){
-			sb.append(", replies=");
-			sb.append(replies);
-		}
-		if(startTime!=null){
-			sb.append(", startTime=");
-			sb.append(startTime);
 		}
 		if(summary!=null){
 			sb.append(", summary='");
 			sb.append(summary);
 			sb.append('\'');
 		}
-		if(tag!=null){
-			sb.append(", tag=");
-			sb.append(tag);
-		}
-		if(updated!=null){
-			sb.append(", updated=");
-			sb.append(updated);
-		}
 		if(url!=null){
 			sb.append(", url=");
 			sb.append(url);
-		}
-		if(to!=null){
-			sb.append(", to=");
-			sb.append(to);
-		}
-		if(bto!=null){
-			sb.append(", bto=");
-			sb.append(bto);
-		}
-		if(cc!=null){
-			sb.append(", cc=");
-			sb.append(cc);
-		}
-		if(bcc!=null){
-			sb.append(", bcc=");
-			sb.append(bcc);
 		}
 		if(mediaType!=null){
 			sb.append(", mediaType='");
@@ -577,82 +322,27 @@ public abstract class ActivityPubObject{
 		return sb.toString();
 	}
 
+	/**
+	 * Parse a stored object. Only the types this server writes itself are recognized.
+	 */
 	public static ActivityPubObject parse(JsonObject obj){
-		return parse(obj, ParserContext.FOREIGN);
-	}
-
-	public static ActivityPubObject parse(JsonObject obj, ParserContext parserContext){
 		if(obj==null)
 			return null;
 		String type=Objects.requireNonNull(obj.get("type"), "type must not be null").getAsString();
 		ActivityPubObject res=switch(type){
-			// Actors
-			case "Person" -> new ForeignUser();
-			case "Service" -> obj.has("id") && obj.has("publicKey") ? new ForeignUser(false) : new Service();
-			case "Group", "Organization" -> new ForeignGroup();
-			case "Application" -> new ActivityPubApplication();
-
-			// Objects
-			case "Note", "Article", "Page" -> new Note();
-			case "Question" -> new Question();
 			case "Image" -> new Image();
-			case "_LocalImage" -> parserContext.isLocal ? new LocalImage() : null;
+			case "_LocalImage" -> new LocalImage();
 			case "Document" -> new Document();
 			case "Video" -> new Video();
 			case "Audio" -> new Audio();
-			case "Tombstone" -> switch(optString(obj, "formerType")){
-				case "Note", "Question" -> new NoteTombstone();
-				case null, default -> new Tombstone();
-			};
-			case "Mention" -> new Mention();
-			case "Relationship" -> new Relationship();
 			case "PropertyValue" -> new PropertyValue();
-			case "Event" -> new Event();
-			case "Photo" -> new ActivityPubPhoto();
-			case "TaggedPerson" -> new ActivityPubTaggedPerson();
-			case "QuoteAuthorization" -> new QuoteAuthorization();
-			case "ActorStatus" -> new ActivityPubActorStatus();
-
-			// Collections
-			case "Collection" -> new ActivityPubCollection(false);
-			case "OrderedCollection" -> new ActivityPubCollection(true);
-			case "CollectionPage" -> new CollectionPage(false);
-			case "OrderedCollectionPage" -> new CollectionPage(true);
-			case "CollectionQueryResult" -> new CollectionQueryResult();
-			case "PhotoAlbum" -> new ActivityPubPhotoAlbum();
-			case "BoardTopic" -> new ActivityPubBoardTopic();
-
-			// Activities
-			case "Accept" -> new Accept();
-			case "Add" -> new Add();
-			case "Announce" -> new Announce();
-			case "Create" -> new Create();
-			case "Delete" -> new Delete();
-			case "Follow" -> new Follow();
-			case "Join" -> new Join(false);
-			case "TentativeJoin" -> new Join(true);
-			case "Like" -> new Like();
-			case "Undo" -> new Undo();
-			case "Update" -> new Update();
-			case "Reject" -> new Reject();
-			case "Offer" -> new Offer();
-			case "Block" -> new Block();
-			case "Invite" -> new Invite();
-			case "Remove" -> new Remove();
-			case "Flag" -> new Flag();
-			case "Read" -> new Read();
-			case "Move" -> new Move();
-			case "QuoteRequest" -> new QuoteRequest();
-			case "TopicCreationRequest" -> new TopicCreationRequest();
-			case "TopicRenameRequest" -> new TopicRenameRequest();
-
 			default -> {
 				LOG.debug("Unknown object type {}", type);
 				yield null;
 			}
 		};
 		if(res!=null)
-			return res.parseActivityPubObject(obj, parserContext);
+			return res.parseActivityPubObject(obj);
 		return null;
 	}
 }

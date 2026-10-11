@@ -33,9 +33,6 @@ import smithereen.activitypub.objects.Actor;
 import smithereen.activitypub.objects.LocalImage;
 import smithereen.controllers.WallController;
 import smithereen.exceptions.ObjectNotFoundException;
-import smithereen.model.FederationState;
-import smithereen.model.ForeignGroup;
-import smithereen.model.ForeignUser;
 import smithereen.model.Group;
 import smithereen.model.PaginatedList;
 import smithereen.model.Poll;
@@ -138,177 +135,6 @@ public class PostStorage{
 				.executeNoResult();
 	}
 
-	private static int putForeignPoll(DatabaseConnection conn, int ownerID, URI activityPubID, Poll poll) throws SQLException{
-		PreparedStatement stmt=new SQLQueryBuilder(conn)
-				.insertInto("polls")
-				.value("ap_id", activityPubID.toString())
-				.value("owner_id", ownerID)
-				.value("question", poll.question)
-				.value("is_anonymous", poll.anonymous)
-				.value("end_time", poll.endTime)
-				.value("is_multi_choice", poll.multipleChoice)
-				.value("num_voted_users",poll.numVoters)
-				.createStatement(Statement.RETURN_GENERATED_KEYS);
-		int pollID=DatabaseUtils.insertAndGetID(stmt);
-		boolean hasIDs=false;
-		for(PollOption opt:poll.options){
-			if(opt.activityPubID!=null)
-				hasIDs=true;
-			else if(hasIDs)
-				throw new IllegalStateException("all options must either have or not have IDs");
-			opt.id=new SQLQueryBuilder(conn)
-					.insertInto("poll_options")
-					.value("poll_id", pollID)
-					.value("ap_id", Objects.toString(opt.activityPubID, null))
-					.value("text", opt.text)
-					.value("num_votes", opt.numVotes)
-					.executeAndGetID();
-		}
-		return pollID;
-	}
-
-	public static PreparedStatement updateForeignWallPostStatement(@NotNull DatabaseConnection conn, @NotNull Post post) throws SQLException{
-		return new SQLQueryBuilder(conn)
-				.update("wall_posts")
-				.where("ap_id=?", post.getActivityPubID().toString())
-				.value("text", post.text)
-				.value("attachments", post.serializeAttachments())
-				.value("content_warning", post.contentWarning)
-				.value("mentions", Utils.serializeIntList(post.mentionedUserIDs))
-				.value("poll_id", post.poll!=null ? post.poll.id : null)
-				.value("extra", post.serializeExtraFields())
-				.value("flags", Utils.serializeEnumSet(post.flags))
-				.createStatement();
-	}
-
-	public static boolean putForeignWallPost(Post post) throws SQLException{
-		if(post.isReplyToUnknownPost){
-			throw new IllegalArgumentException("This post needs its parent thread to be fetched first");
-		}
-		String key=post.getActivityPubID().toString().toLowerCase();
-		foreignPostUpdateLocks.acquire(key);
-		Post existing=getPostByID(post.getActivityPubID());
-		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
-			DatabaseUtils.doWithTransaction(conn, ()->{
-				PreparedStatement stmt;
-				if(existing==null){
-					if(post.poll!=null){
-						post.poll.id=putForeignPoll(conn, post.ownerID, post.getActivityPubID(), post.poll);
-					}
-
-					stmt=new SQLQueryBuilder(conn)
-							.insertInto("wall_posts")
-							.value("author_id", post.authorID)
-							.value("owner_user_id", post.ownerID>0 ? post.ownerID : null)
-							.value("owner_group_id", post.ownerID<0 ? -post.ownerID : null)
-							.value("text", post.text)
-							.value("attachments", post.serializeAttachments())
-							.value("content_warning", post.contentWarning)
-							.value("ap_url", post.activityPubURL.toString())
-							.value("ap_id", post.getActivityPubID().toString())
-							.value("reply_key", Utils.serializeIntList(post.replyKey))
-							.value("created_at", post.createdAt)
-							.value("updated_at", post.updatedAt)
-							.value("mentions", Utils.serializeIntList(post.mentionedUserIDs))
-							.value("ap_replies", Objects.toString(post.activityPubReplies, null))
-							.value("poll_id", post.poll!=null ? post.poll.id : null)
-							.value("privacy", post.privacy)
-							.value("repost_of", post.repostOf!=0 ? post.repostOf : null)
-							.value("flags", Utils.serializeEnumSet(post.flags))
-							.value("action", post.action)
-							.value("extra", post.serializeExtraFields())
-							.createStatement(Statement.RETURN_GENERATED_KEYS);
-				}else{
-					if(post.poll!=null && Objects.equals(post.poll, existing.poll)){ // poll is unchanged, update vote counts
-						stmt=new SQLQueryBuilder(conn)
-								.update("polls")
-								.value("num_voted_users", post.poll.numVoters)
-								.where("id=?", existing.poll.id)
-								.createStatement();
-						stmt.execute();
-						post.poll.id=existing.poll.id;
-
-						if(post.poll.options.get(0).activityPubID!=null){ // Match options using IDs
-							HashMap<URI, PollOption> optMap=new HashMap<>(post.poll.options.size());
-							for(PollOption opt: existing.poll.options){
-								optMap.put(opt.activityPubID, opt);
-							}
-							for(PollOption opt: post.poll.options){
-								PollOption existingOpt=optMap.get(opt.activityPubID);
-								if(existingOpt==null)
-									throw new IllegalStateException("option with id "+opt.activityPubID+" not found in existing poll");
-								opt.id=existingOpt.id;
-								if(opt.numVotes!=existingOpt.numVotes){
-									SQLQueryBuilder.prepareStatement(conn, "UPDATE poll_options SET num_votes=? WHERE id=? AND poll_id=?", opt.numVotes, opt.id, post.poll.id).execute();
-								}
-							}
-						}else{ // Match options using titles
-							HashMap<String, PollOption> optMap=new HashMap<>(post.poll.options.size());
-							for(PollOption opt: existing.poll.options){
-								optMap.put(opt.text, opt);
-							}
-							for(PollOption opt: post.poll.options){
-								PollOption existingOpt=optMap.get(opt.text);
-								if(existingOpt==null)
-									throw new IllegalStateException("option with name '"+opt.text+"' not found in existing poll");
-								opt.id=existingOpt.id;
-								if(opt.numVotes!=existingOpt.numVotes){
-									SQLQueryBuilder.prepareStatement(conn, "UPDATE poll_options SET num_votes=? WHERE id=? AND poll_id=?", opt.numVotes, opt.id, post.poll.id).execute();
-								}
-							}
-						}
-					}else if(post.poll!=null && existing.poll!=null){ // poll changed, delete it and recreate again
-						// deletes votes and options because of ON DELETE CASCADE
-						new SQLQueryBuilder(conn)
-								.deleteFrom("polls")
-								.where("id=?", existing.poll.id)
-								.executeNoResult();
-						post.poll.id=putForeignPoll(conn, post.ownerID, post.getActivityPubID(), post.poll);
-					}else if(post.poll!=null){ // poll was added
-						post.poll.id=putForeignPoll(conn, post.ownerID, post.getActivityPubID(), post.poll);
-					}else if(existing.poll!=null){ // poll was removed
-						new SQLQueryBuilder(conn)
-								.deleteFrom("polls")
-								.where("id=?", existing.poll.id)
-								.executeNoResult();
-					}
-					stmt=updateForeignWallPostStatement(conn, post);
-				}
-				if(existing==null){
-					post.id=DatabaseUtils.insertAndGetID(stmt);
-					if(post.ownerID==post.authorID && post.getReplyLevel()==0){
-						new SQLQueryBuilder(conn)
-								.insertInto("newsfeed")
-								.value("type", NewsfeedEntry.Type.POST)
-								.value("author_id", post.authorID)
-								.value("object_id", post.id)
-								.value("time", post.createdAt)
-								.executeNoResult();
-					}
-					if(post.getReplyLevel()>0){
-						new SQLQueryBuilder(conn)
-								.update("wall_posts")
-								.valueExpr("reply_count", "reply_count+1")
-								.whereIn("id", post.replyKey)
-								.executeNoResult();
-						new SQLQueryBuilder(conn)
-								.update("wall_posts")
-								.valueExpr("immediate_reply_count", "immediate_reply_count+1")
-								.where("id=?", post.replyKey.getLast())
-								.executeNoResult();
-						BackgroundTaskRunner.getInstance().submit(new UpdateCommentBookmarksRunnable(post.replyKey.getFirst()));
-					}
-				}else{
-					stmt.execute();
-					post.id=existing.id;
-				}
-			});
-		}finally{
-			foreignPostUpdateLocks.release(key);
-		}
-		return existing==null;
-	}
-
 	public static List<Post> getWallPosts(int ownerID, boolean isGroup, int minID, int maxID, int offset, int count, int[] total, WallController.WallMode mode, Set<Post.Privacy> allowedPrivacy) throws SQLException{
 		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
 			PreparedStatement stmt;
@@ -347,72 +173,6 @@ public class PostStorage{
 			}
 			postprocessPosts(posts);
 			return posts;
-		}
-	}
-
-	public static PaginatedList<URI> getWallPostActivityPubIDs(int ownerID, boolean isGroup, int offset, int count, boolean includeAll) throws SQLException{
-		String ownerField=isGroup ? "owner_group_id" : "owner_user_id";
-		String extraWhere=includeAll ? "" : " AND owner_user_id=author_id";
-		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
-
-			int total=new SQLQueryBuilder(conn)
-					.selectFrom("wall_posts")
-					.count()
-					.where(ownerField+"=? AND reply_key IS NULL"+extraWhere, ownerID)
-					.executeAndGetInt();
-
-			if(total==0)
-				return PaginatedList.emptyList(count);
-
-			List<URI> ids=new SQLQueryBuilder(conn)
-					.selectFrom("wall_posts")
-					.columns("id", "ap_id")
-					.where(ownerField+"=? AND reply_key IS NULL"+extraWhere, ownerID)
-					.orderBy("id ASC")
-					.limit(count, offset)
-					.executeAsStream(res->{
-						String apID=res.getString(2);
-						if(StringUtils.isNotEmpty(apID)){
-							return URI.create(apID);
-						}else{
-							return UriBuilder.local().path("posts", String.valueOf(res.getInt(1))).build();
-						}
-					})
-					.toList();
-			return new PaginatedList<>(ids, total, offset, count);
-		}
-	}
-
-	public static PaginatedList<URI> getWallCommentActivityPubIDs(int ownerID, boolean isGroup, int offset, int count, boolean includeAll) throws SQLException{
-		String ownerField=isGroup ? "owner_group_id" : "owner_user_id";
-		String extraWhere=includeAll ? "" : " AND top_parent_is_wall_to_wall=0";
-		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
-
-			int total=new SQLQueryBuilder(conn)
-					.selectFrom("wall_posts")
-					.count()
-					.where(ownerField+"=? AND reply_key IS NOT NULL"+extraWhere, ownerID)
-					.executeAndGetInt();
-
-			if(total==0)
-				return PaginatedList.emptyList(count);
-
-			List<URI> ids=new SQLQueryBuilder(conn)
-					.selectFrom("wall_posts")
-					.columns("id", "ap_id")
-					.where(ownerField+"=? AND reply_key IS NOT NULL"+extraWhere, ownerID)
-					.orderBy("id ASC")
-					.limit(count, offset)
-					.executeAsStream(res->{
-						String apID=res.getString(2);
-						if(StringUtils.isNotEmpty(apID)){
-							return URI.create(apID);
-						}else{
-							return UriBuilder.local().path("posts", String.valueOf(res.getInt(1))).build();
-						}
-					})
-					.toList();
-			return new PaginatedList<>(ids, total, offset, count);
 		}
 	}
 
@@ -474,7 +234,7 @@ public class PostStorage{
 		if(postID<=0)
 			throw new ObjectNotFoundException("err_post_not_found");
 		Post post=getPostByID(postID, false);
-		if(post==null || (onlyLocal && !post.isLocal()))
+		if(post==null)
 			throw new ObjectNotFoundException("err_post_not_found");
 		return post;
 	}
@@ -505,26 +265,6 @@ public class PostStorage{
 		return posts;
 	}
 
-	public static Post getPostByID(URI apID) throws SQLException{
-		if(Config.isLocal(apID)){
-			String[] pathParts=apID.getPath().split("/");
-			String posts=pathParts[1];
-			int postID=Utils.parseIntOrDefault(pathParts[2], 0);
-			if(!"posts".equals(posts) || postID==0){
-				throw new ObjectNotFoundException("Invalid local URL "+apID);
-			}
-			return getPostByID(postID, false);
-		}
-		Post post=new SQLQueryBuilder()
-				.selectFrom("wall_posts")
-				.allColumns()
-				.where("ap_id=?", apID)
-				.executeAndGetSingleObject(Post::fromResultSet);
-		if(post!=null)
-			postprocessPosts(Set.of(post));
-		return post;
-	}
-
 	public static Map<Integer, int[]> getPostOwnerAndAuthorIDs(Collection<Integer> postIDs) throws SQLException{
 		return new SQLQueryBuilder()
 				.selectFrom("wall_posts")
@@ -535,14 +275,6 @@ public class PostStorage{
 					return new Pair<>(r.getInt("id"), new int[]{uid>0 ? uid : -r.getInt("owner_group_id"), r.getInt("author_id")});
 				})
 				.collect(Collectors.toMap(Pair::first, Pair::second));
-	}
-
-	public static int getLocalIDByActivityPubID(URI apID) throws SQLException{
-		return new SQLQueryBuilder()
-				.selectFrom("wall_posts")
-				.columns("id")
-				.where("ap_id=?", apID)
-				.executeAndGetInt();
 	}
 
 	public static void deletePost(int id) throws SQLException{
@@ -779,20 +511,11 @@ public class PostStorage{
 		}
 	}
 
-	public static URI getActivityPubID(int postID) throws SQLException{
-		String apID=new SQLQueryBuilder()
-				.selectFrom("wall_posts")
-				.columns("ap_id")
-				.where("id=?", postID)
-				.executeAndGetSingleObject(r->r.getString(1));
-		return apID==null ? Config.localURI("/posts/"+postID) : URI.create(apID);
-	}
-
 	public static int getLocalPostCount(boolean comments) throws SQLException{
 		return new SQLQueryBuilder()
 				.selectFrom("wall_posts")
 				.count()
-				.where("ap_id IS NULL AND reply_key IS "+(comments ? "NOT " : "")+"NULL")
+				.where("reply_key IS "+(comments ? "NOT " : "")+"NULL")
 				.executeAndGetInt();
 	}
 
@@ -861,106 +584,7 @@ public class PostStorage{
 		return result;
 	}
 
-	public static Set<URI> getInboxesForPostInteractionForwarding(Post post) throws SQLException{
-		// Interaction on a top-level post:
-		// - local: send to everyone who replied + reposted + the post's original addressees (followers + mentions if any)
-		// - remote: send to the owner server only. It forwards as it pleases.
-		// On a comment: do all of the above for the parent top-level post, and
-		// - local: send to any mentioned users
-		// - remote: send to the owner server, if not sent already if the parent post is local
-		User author=UserStorage.getById(post.authorID);
-		Actor owner;
-		if(post.ownerID<0)
-			owner=GroupStorage.getById(-post.ownerID);
-		else
-			owner=UserStorage.getById(post.ownerID);
-		HashSet<URI> inboxes=new HashSet<>();
-		Post origPost=post;
-		if(post.getReplyLevel()>0){
-			post=getPostByID(post.replyKey.get(0), false);
-			if(post==null)
-				return Set.of();
-		}
-		if(author instanceof ForeignUser fu && origPost.getReplyLevel()==0){
-			return Set.of(fu.inbox);
-		}
-		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
-			ArrayList<String> queryParts=new ArrayList<>();
-			if(post.isLocal()){
-				queryParts.add("SELECT author_id AS uid FROM wall_posts WHERE reply_key LIKE BINARY bin_prefix(?)");
-				queryParts.add("SELECT author_id AS uid FROM wall_posts WHERE repost_of="+post.id);
-				if(owner instanceof ForeignUser fu)
-					queryParts.add("SELECT "+fu.id+" AS uid");
-				else if(owner instanceof User u)
-					queryParts.add("SELECT follower_id AS uid FROM followings WHERE followee_id="+u.id);
-				else if(owner instanceof ForeignGroup fg)
-					inboxes.add(Objects.requireNonNullElse(fg.sharedInbox, fg.inbox));
-				else if(owner instanceof Group g)
-					queryParts.add("SELECT user_id AS uid FROM group_memberships WHERE group_id="+g.id);
-
-				if(!post.mentionedUserIDs.isEmpty()){
-					for(int user:post.mentionedUserIDs){
-						queryParts.add("SELECT "+user+" AS uid");
-					}
-				}
-			}else{
-				queryParts.add("SELECT "+post.authorID+" AS uid");
-			}
-			if(origPost!=post){
-				if(origPost.isLocal()){
-					if(!origPost.mentionedUserIDs.isEmpty()){
-						for(int user:origPost.mentionedUserIDs){
-							queryParts.add("SELECT "+user+" AS uid");
-						}
-					}
-				}else{
-					queryParts.add("SELECT "+origPost.authorID+" AS uid");
-				}
-			}
-			PreparedStatement stmt=conn.prepareStatement("SELECT DISTINCT IFNULL(ap_shared_inbox, ap_inbox) FROM users JOIN ("+
-					String.join(" UNION ", queryParts)+
-					") AS related_users ON users.id=related_users.uid AND ap_inbox IS NOT NULL");
-			if(post.isLocal())
-				stmt.setBytes(1, Utils.serializeIntList(post.getReplyKeyForReplies()));
-			try(ResultSet res=stmt.executeQuery()){
-				while(res.next()){
-					URI uri=URI.create(res.getString(1));
-					inboxes.add(uri);
-				}
-			}
-		}
-
-		return inboxes;
-	}
-
-	public static List<URI> getImmediateReplyActivityPubIDs(List<Integer> replyKey, int offset, int count, int[] total) throws SQLException{
-		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
-			byte[] serializedKey=Utils.serializeIntList(replyKey);
-			PreparedStatement stmt=conn.prepareStatement("SELECT count(*) FROM wall_posts WHERE reply_key=?");
-			stmt.setBytes(1, serializedKey);
-			try(ResultSet res=stmt.executeQuery()){
-				res.next();
-				total[0]=res.getInt(1);
-			}
-			stmt=conn.prepareStatement("SELECT ap_id, id FROM wall_posts WHERE reply_key=? ORDER BY created_at ASC LIMIT ?,?");
-			stmt.setBytes(1, serializedKey);
-			stmt.setInt(2, offset);
-			stmt.setInt(3, count);
-			try(ResultSet res=stmt.executeQuery()){
-				ArrayList<URI> replies=new ArrayList<>();
-				while(res.next()){
-					String apID=res.getString(1);
-					if(apID!=null)
-						replies.add(URI.create(apID));
-					else
-						replies.add(Config.localURI("/posts/"+res.getInt(2)));
-				}
-				return replies;
-			}
-		}
-	}
-
-	public static Poll getPoll(int id, URI parentApID) throws SQLException{
+	public static Poll getPoll(int id) throws SQLException{
 		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
 			Poll poll=new SQLQueryBuilder(conn)
 					.selectFrom("polls")
@@ -972,7 +596,7 @@ public class PostStorage{
 			new SQLQueryBuilder(conn)
 					.selectFrom("poll_options")
 					.where("poll_id=?", id)
-					.executeAsStream(res->PollOption.fromResultSet(res, poll.activityPubID==null ? parentApID : poll.activityPubID, poll))
+					.executeAsStream(res->PollOption.fromResultSet(res, poll))
 					.forEach(poll.options::add);
 			return poll;
 		}
@@ -1032,7 +656,7 @@ public class PostStorage{
 	}
 
 	// This is called once for each choice in a multiple-choice poll
-	public static int voteInPoll(int userID, int pollID, int optionID, URI voteID, boolean allowMultiple) throws SQLException{
+	public static int voteInPoll(int userID, int pollID, int optionID, boolean allowMultiple) throws SQLException{
 		String key=userID+"|"+pollID;
 		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
 			pollVoteLocks.acquire(key);
@@ -1059,7 +683,6 @@ public class PostStorage{
 					.value("option_id", optionID)
 					.value("user_id", userID)
 					.value("poll_id", pollID)
-					.value("ap_id", voteID)
 					.executeAndGetID();
 
 			new SQLQueryBuilder(conn)
@@ -1122,29 +745,6 @@ public class PostStorage{
 				.executeAndGetIntList();
 	}
 
-	public static List<URI> getPollOptionVotersApIDs(int optionID, int offset, int count) throws SQLException{
-		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
-			PreparedStatement stmt=SQLQueryBuilder.prepareStatement(conn,
-					"SELECT users.id, users.ap_id FROM poll_votes JOIN users ON poll_votes.user_id=users.id WHERE poll_votes.option_id=? LIMIT ? OFFSET ?", optionID, count, offset);
-			try(ResultSet res=stmt.executeQuery()){
-				ArrayList<URI> r=new ArrayList<>();
-				while(res.next()){
-					String apID=res.getString(2);
-					r.add(apID!=null ? URI.create(apID) : Config.localURI("/users/"+res.getInt(1)));
-				}
-				return r;
-			}
-		}
-	}
-
-	public static void setPostFederationState(int postID, FederationState state) throws SQLException{
-		new SQLQueryBuilder()
-				.update("wall_posts")
-				.value("federation_state", state)
-				.where("id=?", postID)
-				.executeNoResult();
-	}
-
 	public static PaginatedList<NewsfeedEntry> getCommentsFeed(int userID, int offset, int count, EnumSet<CommentsNewsfeedObjectType> filter) throws SQLException{
 		if(filter.isEmpty())
 			return PaginatedList.emptyList(count);
@@ -1179,63 +779,6 @@ public class PostStorage{
 					}).toList();
 
 			return new PaginatedList<>(entries, total, offset, count);
-		}
-	}
-
-	public static Map<URI, Integer> getPostLocalIDsByActivityPubIDs(Collection<URI> ids, int ownerUserID, int ownerGroupID, boolean comments) throws SQLException{
-		if(ids.isEmpty())
-			return Map.of();
-
-		String replyKeyCondition=comments ? "reply_key IS NOT NULL" : "reply_key IS NULL";
-
-		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
-
-			List<Integer> localIDs=ids.stream().filter(Config::isLocal).map(u->{
-				String path=u.getPath();
-				if(StringUtils.isEmpty(path))
-					return 0;
-				String[] parts=path.split("/"); // "", "posts", id
-				return parts.length==3 && "posts".equals(parts[1]) ? Utils.safeParseInt(parts[2]) : 0;
-			}).filter(i->i>0).toList();
-			List<String> remoteIDs=ids.stream().filter(Predicate.not(Config::isLocal)).map(Object::toString).toList();
-
-			Map<URI, Integer> result=new HashMap<>();
-			record IdPair(URI apID, int localID){
-			}
-
-			if(!remoteIDs.isEmpty()){
-				SQLQueryBuilder builder=new SQLQueryBuilder(conn)
-						.selectFrom("wall_posts")
-						.columns("id", "ap_id")
-						.whereIn("ap_id", remoteIDs)
-						.andWhere(replyKeyCondition);
-
-				if(ownerUserID>0 && ownerGroupID==0){
-					builder.andWhere("owner_user_id=?", ownerUserID).andWhere("owner_group_id IS NULL");
-				}else if(ownerGroupID>0 && ownerUserID==0){
-					builder.andWhere("owner_group_id=?", ownerGroupID).andWhere("owner_user_id IS NULL");
-				}else{
-					throw new IllegalArgumentException("either ownerUserID or ownerGroupID must be >0");
-				}
-				result.putAll(builder.executeAsStream(rs->new IdPair(URI.create(rs.getString(2)), rs.getInt(1))).collect(Collectors.toMap(IdPair::apID, IdPair::localID)));
-			}
-			if(!localIDs.isEmpty()){
-				SQLQueryBuilder builder=new SQLQueryBuilder(conn)
-						.selectFrom("wall_posts")
-						.columns("id")
-						.whereIn("id", localIDs)
-						.andWhere(replyKeyCondition);
-
-				if(ownerUserID>0 && ownerGroupID==0){
-					builder.andWhere("owner_user_id=?", ownerUserID).andWhere("owner_group_id IS NULL");
-				}else if(ownerGroupID>0 && ownerUserID==0){
-					builder.andWhere("owner_group_id=?", ownerGroupID).andWhere("owner_user_id IS NULL");
-				}else{
-					throw new IllegalArgumentException("either ownerUserID or ownerGroupID must be >0");
-				}
-				result.putAll(builder.executeAsStream(rs->new IdPair(Config.localURI("/posts/"+rs.getInt(1)), rs.getInt(1))).collect(Collectors.toMap(IdPair::apID, IdPair::localID)));
-			}
-			return result;
 		}
 	}
 
@@ -1367,20 +910,6 @@ public class PostStorage{
 			postprocessPosts(posts);
 			return new PaginatedList<>(posts, total, offset, count);
 		}
-	}
-
-	public static Map<Integer, URI> getActivityPubIDsByLocalIDs(Collection<Integer> ids) throws SQLException{
-		return new SQLQueryBuilder()
-				.selectFrom("wall_posts")
-				.columns("id", "ap_id")
-				.whereIn("id", ids)
-				.executeAsStream(res->new Pair<>(res.getInt("id"), res.getString("ap_id")))
-				.collect(Collectors.toMap(Pair::first, p->{
-					String apID=p.second();
-					if(apID==null)
-						return Config.localURI("/posts/"+p.first());
-					return URI.create(apID);
-				}));
 	}
 
 	public static void recountComments(int ownerID) throws SQLException{

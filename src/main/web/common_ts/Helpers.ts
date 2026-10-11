@@ -1582,33 +1582,6 @@ function closeTopmostLayer(){
 		topLayer.dismiss();
 }
 
-function saveRemoteInteractionDomain(){
-	var input=ge("remoteInteractionDomain");
-	if(input instanceof HTMLInputElement){
-		try{
-			window.localStorage.setItem("remoteInteractionDomain", input.value);
-		}catch(e){
-			console.log(e);
-		}
-	}
-}
-
-function restoreRemoteInteractionDomain(){
-	var input=ge("remoteInteractionDomain");
-	if(input instanceof HTMLInputElement){
-		try{
-			var savedDomain=window.localStorage.getItem("remoteInteractionDomain");
-			if(savedDomain){
-				input.value=savedDomain;
-			}
-		}catch(e){
-			console.log(e);
-		}
-		if(!mobile)
-			input.focus();
-	}
-}
-
 function chooseFileAndUpload(url:string, fieldName:string, accept:string){
 	var fileField=ce("input", {type: "file", accept: accept});
 	fileField.addEventListener("change", ()=>{

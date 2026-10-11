@@ -43,39 +43,19 @@
 {% endblock %}
 {%block content%}
 <div class="cardsBackdrop">
-{% if movedTo is not null %}
-<div class="card padded">
-	{{ L('profile_moved', {'name': user | name('first')}) }}<br/>
-	{% if movedTo.domain is empty %}
-	<a href="{{ movedTo.profileURL }}"><b>{{ movedTo | name }}</b></a>
-	{% else %}
-	<a href="{{ movedTo.profileURL }}">{{ L('profile_moved_link', {'domain': movedTo.domain, 'name': movedTo | name}) }}</a>
-	{% endif %}
-</div>
-{% elseif user.domain is not null %}
-<div class="card padded">
-	{{L('incomplete_profile')}}<br/>
-	<a href="{{user.url}}" target="_blank">{{L('open_on_server_X', {'domain': user.domain})}}</a>
-</div>
-{%endif%}
 {% if user.banInfo is not null and currentUser is not null and userPermissions.hasPermission('MANAGE_USERS') %}
 {% set banModerator=users[user.banInfo.moderatorID] %}
 <div class="card padded textByItself">
 	{% if user.banStatus=='FROZEN' %}
 	<p>{{ L('admin_user_state_frozen', {'expirationTime': user.banInfo.expiresAt is null ? L('email_account_frozen_until_first_login') : LD(user.banInfo.expiresAt)}) }}</p>
 	{% elseif user.banStatus=='SUSPENDED' %}
-	{% if user.domain is empty %}
 	<p>{{ L('admin_user_state_suspended', {'deletionTime': LD(accountDeletionTime)}) }}</p>
-	{% else %}
-	<p>{{ L('admin_user_state_suspended_foreign') }}</p>
-	{% endif %}
 	{% elseif user.banStatus=='HIDDEN' %}
 	<p>{{ L('admin_user_state_hidden') }}</p>
 	{% elseif user.banStatus=='SELF_DEACTIVATED' %}
 	<p>{{ L('admin_user_state_self_deactivated', {'gender': user.gender, 'deletionTime': LD(accountDeletionTime)}) }}</p>
 	{% endif %}
 	{% if user.banInfo is not null %}
-	{% if user.banInfo.suspendedOnRemoteServer %}<p>{{ L('admin_user_suspended_remotely') }}</p>{% endif %}
 	<p>{% if banModerator is not null %}<a href="{{ banModerator.profileURL }}">{{ banModerator | name }}</a>, {% endif %}{{ LD(user.banInfo.bannedAt()) }}</p>
 	{% if user.banInfo.message is not empty %}<p>{{ L('admin_user_ban_message') }}: {{ user.banInfo.message }}</p>{% endif %}
 	{% endif %}
@@ -111,7 +91,7 @@
 			{% endif %}
 		</div>
 	</div>
-	{% if currentUser is not null and currentUser.id!=user.id and not isSelfBlocked and movedTo is null %}
+	{% if currentUser is not null and currentUser.id!=user.id and not isSelfBlocked %}
 		{% if friendshipStatusText is not empty and (followRequested or (followedBy and not isFriend)) %}<div class="profileFriendshipStatusText">{{ friendshipStatusText }}</div>{% endif %}
 		<div class="profileBelowAva">
 			{% if canMessage %}

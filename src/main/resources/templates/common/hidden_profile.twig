@@ -5,7 +5,6 @@
 	<p>{{ L('profile_hidden_info') }}</p>
 	<p>
 		<a href="/account/login">{{ L('log_in') }}</a>
-		{% if user.domain is not empty %}| <a href="{{ user.url }}" target="_blank" rel="nofollow">{{ L('open_on_server_X', {'domain': user.domain}) }}</a>{% endif %}
 	</p>
 </div>
 {% endblock %}

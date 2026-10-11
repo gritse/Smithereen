@@ -45,13 +45,12 @@ import smithereen.util.InetAddressRange;
 import spark.utils.StringUtils;
 
 public class ModerationStorage{
-	public static int createViolationReport(int reporterID, int targetID, String comment, String otherServerDomain, String contentJson, boolean hasFileRefs, ViolationReport.Reason reason, Set<Integer> rules) throws SQLException{
+	public static int createViolationReport(int reporterID, int targetID, String comment, String contentJson, boolean hasFileRefs, ViolationReport.Reason reason, Set<Integer> rules) throws SQLException{
 		SQLQueryBuilder bldr=new SQLQueryBuilder()
 				.insertInto("reports")
 				.value("reporter_id", reporterID!=0 ? reporterID : null)
 				.value("target_id", targetID)
 				.value("comment", comment)
-				.value("server_domain", otherServerDomain)
 				.value("content", contentJson)
 				.value("has_file_refs", hasFileRefs)
 				.value("reason", reason)
@@ -193,15 +192,6 @@ public class ModerationStorage{
 				.executeAndGetSingleObject(ViolationReportAction::fromResultSet);
 	}
 
-	public static void setServerRestriction(int id, String restrictionJson) throws SQLException{
-		new SQLQueryBuilder()
-				.update("servers")
-				.value("restriction", restrictionJson)
-				.value("is_restricted", restrictionJson!=null)
-				.where("id=?", id)
-				.executeNoResult();
-	}
-
 	public static Map<Integer, Integer> getRoleAccountCounts() throws SQLException{
 		return new SQLQueryBuilder()
 				.selectFrom("accounts")
@@ -286,7 +276,7 @@ public class ModerationStorage{
 		}
 	}
 
-	public static PaginatedList<AdminUserViewModel> getUsers(String q, Boolean localOnly, String emailDomain, InetAddressRange ipRange, int role, UserBanStatus banStatus, boolean remoteSuspended, int offset, int count) throws SQLException{
+	public static PaginatedList<AdminUserViewModel> getUsers(String q, String emailDomain, InetAddressRange ipRange, int role, UserBanStatus banStatus, int offset, int count) throws SQLException{
 		if(StringUtils.isNotEmpty(q)){
 			q=Arrays.stream(TextProcessor.transliterate(q).replaceAll("[()\\[\\]*+~<>\\\"@-]", " ").split("[ \t]+")).filter(Predicate.not(String::isBlank)).map(s->'+'+s+'*').collect(Collectors.joining(" "));
 		}
@@ -298,12 +288,6 @@ public class ModerationStorage{
 			query+=" JOIN qsearch_index ON `users`.id=qsearch_index.user_id";
 			whereParts.add("MATCH (qsearch_index.`string`) AGAINST (? IN BOOLEAN MODE)");
 			whereArgs.add(q);
-		}
-		if(localOnly!=null){
-			if(localOnly)
-				whereParts.add("`users`.ap_id IS NULL");
-			else
-				whereParts.add("`users`.ap_id IS NOT NULL");
 		}
 		if(StringUtils.isNotEmpty(emailDomain)){
 			whereParts.add("accounts.email_domain=?");
@@ -326,8 +310,6 @@ public class ModerationStorage{
 		if(banStatus!=null){
 			whereParts.add("`users`.ban_status=?");
 			whereArgs.add(banStatus);
-		}else if(remoteSuspended){
-			whereParts.add("`users`.ap_id IS NOT NULL AND `users`.ban_info IS NOT NULL AND `users`.ban_info->'$.suspendedOnRemoteServer'=true");
 		}
 		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
 			String where;

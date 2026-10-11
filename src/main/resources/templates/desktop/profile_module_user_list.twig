@@ -2,7 +2,7 @@
 {% block moduleContent %}
 <div class="memberList">
 {% for admin in (users | length>5 ? (users | slice(0, 5)) : users) %}
-	<a href="{{ admin.user.profileURL }}"{{ profileRel(admin.user) }}>{{ admin.user | pictureForAvatar('a', 32) }}</a>
+	<a href="{{ admin.user.profileURL }}">{{ admin.user | pictureForAvatar('a', 32) }}</a>
 	<div class="nameAndInfo">
 		<div><a href="{{ admin.user.profileURL }}"{{ profile.rel(admin.user) }}>{{ admin.user | name }}</a></div>
 		{% if admin.title is not empty %}

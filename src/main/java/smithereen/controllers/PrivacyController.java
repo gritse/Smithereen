@@ -26,7 +26,6 @@ import java.util.stream.Stream;
 
 import smithereen.ApplicationContext;
 import smithereen.Config;
-import smithereen.activitypub.ActivityPub;
 import smithereen.activitypub.objects.Actor;
 import smithereen.exceptions.BadRequestException;
 import smithereen.exceptions.InaccessibleGroupException;
@@ -36,8 +35,6 @@ import smithereen.exceptions.UserActionNotAllowedException;
 import smithereen.exceptions.UserContentUnavailableException;
 import smithereen.exceptions.UserErrorException;
 import smithereen.model.Account;
-import smithereen.model.ForeignGroup;
-import smithereen.model.ForeignUser;
 import smithereen.model.PaginatedList;
 import smithereen.model.friends.FriendshipStatus;
 import smithereen.model.Group;
@@ -193,7 +190,6 @@ public class PrivacyController{
 				UserStorage.updateExtendedFields(self, self.serializeProfileFields());
 				context.getNewsfeedController().clearFriendsFeedCache();
 			}
-			context.getActivityPubWorker().sendUpdateUserActivity(self);
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -201,7 +197,7 @@ public class PrivacyController{
 
 	public boolean checkUserPrivacy(@Nullable User self, @NotNull User owner, @NotNull UserPrivacySettingKey key){
 		// Unconditionally deny any active actions to blocked users
-		if(!key.isForViewing() && self!=null && (isUserBlocked(self, owner) || (Config.demoMode && owner instanceof ForeignUser)))
+		if(!key.isForViewing() && self!=null && (isUserBlocked(self, owner) || (false)))
 			return false;
 		boolean r=checkUserPrivacy(self, owner, owner.getPrivacySetting(key));
 		if(key==UserPrivacySettingKey.PRIVATE_MESSAGES && !r && self!=null){
@@ -263,158 +259,12 @@ public class PrivacyController{
 			throw forViewing ? new UserContentUnavailableException() : new UserActionNotAllowedException();
 	}
 
-	public boolean checkUserPrivacyForRemoteServer(@Nullable String serverDomain, @NotNull User owner, @NotNull PrivacySetting setting){
-		if(setting.baseRule==PrivacySetting.Rule.EVERYONE)
-			return true;
-		if(serverDomain==null)
-			return false;
-		try{
-			// TODO cache these things
-			HashSet<Integer> friendsAtDomain=new HashSet<>(UserStorage.getFriendIDsWithDomain(owner.id, serverDomain));
-			friendsAtDomain.removeAll(setting.exceptUsers);
-			for(int id:setting.allowUsers){
-				if(friendsAtDomain.contains(id))
-					return true;
-			}
-			if(setting.baseRule==PrivacySetting.Rule.FRIENDS){
-				return !friendsAtDomain.isEmpty();
-			}else if(setting.baseRule==PrivacySetting.Rule.FRIENDS_OF_FRIENDS){
-				if(!friendsAtDomain.isEmpty())
-					return true;
-				return UserStorage.getCountOfFriendsOfFriendsWithDomain(owner.id, serverDomain)>0;
-			}else if(setting.baseRule==PrivacySetting.Rule.NONE){
-				return false;
-			}
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-		return false;
-	}
-
-	public void enforceUserPrivacyForRemoteServer(Request req, User owner, PrivacySetting setting){
-		if(setting.isFullyPublic())
-			return;
-		if(setting.isFullyPrivate())
-			throw new UserActionNotAllowedException();
-
-		String domain=ActivityPub.getRequesterDomain(req);
-		if(!checkUserPrivacyForRemoteServer(domain, owner, setting))
-			throw new UserActionNotAllowedException();
-	}
-
-	public void enforceContentPrivacyForActivityPub(spark.Request req, OwnedContentObject obj){
-		OwnerAndAuthor oaa=context.getWallController().getContentAuthorAndOwner(obj);
-		if(oaa.owner() instanceof Group g){
-			enforceGroupContentAccess(req, g);
-			switch(obj){
-				case Post post -> {
-					if(g.wallState==GroupFeatureState.DISABLED)
-						throw new UserActionNotAllowedException("Wall is disabled in this group");
-				}
-				case PhotoAlbum pa -> {
-					if(g.photosState==GroupFeatureState.DISABLED)
-						throw new UserActionNotAllowedException("Photo albums are disabled in this group");
-				}
-				case Photo photo -> {
-					if(g.photosState==GroupFeatureState.DISABLED)
-						throw new UserActionNotAllowedException("Photo albums are disabled in this group");
-				}
-				case Comment comment -> {
-					CommentableContentObject parent=context.getCommentsController().getCommentParentIgnoringPrivacy(comment);
-					enforceContentPrivacyForActivityPub(req, parent);
-				}
-				case BoardTopic topic -> {
-					if(g.boardState==GroupFeatureState.DISABLED)
-						throw new UserActionNotAllowedException("Discussion board is disabled in this group");
-				}
-				default -> {}
-			}
-		}else if(oaa.owner() instanceof User u){
-			switch(obj){
-				case Post post when post.ownerID!=post.authorID && post.getReplyLevel()==0 -> {
-					if(!checkUserPrivacyForRemoteServer(ActivityPub.getRequesterDomain(req), u, u.privacySettings.getOrDefault(UserPrivacySettingKey.WALL_OTHERS_POSTS, PrivacySetting.DEFAULT)))
-						throw new UserActionNotAllowedException();
-				}
-				case PhotoAlbum pa -> {
-					if(pa.viewPrivacy.baseRule==PrivacySetting.Rule.EVERYONE && pa.viewPrivacy.exceptUsers.isEmpty())
-						return;
-					String domain=ActivityPub.getRequesterDomain(req);
-					if(!checkUserPrivacyForRemoteServer(domain, u, pa.viewPrivacy))
-						throw new UserContentUnavailableException();
-				}
-				case Photo photo -> enforceContentPrivacyForActivityPub(req, context.getPhotosController().getAlbumIgnoringPrivacy(photo.albumID));
-				case Comment comment -> {
-					CommentableContentObject parent=context.getCommentsController().getCommentParentIgnoringPrivacy(comment);
-					enforceContentPrivacyForActivityPub(req, parent);
-				}
-				default -> {}
-			}
-		}
-	}
-
-	public void enforceGroupContentAccess(@NotNull spark.Request req, @NotNull Group group){
-		if(group.accessType==Group.AccessType.OPEN)
-			return;
-		Actor signer;
-		try{
-			signer=ActivityPub.verifyHttpSignature(req, null);
-		}catch(Exception x){
-			throw new UserActionNotAllowedException("This object is in a "+group.accessType.toString().toLowerCase()+" group. Valid member HTTP signature is required.", x);
-		}
-		if(group instanceof ForeignGroup foreignGroup){
-			String authHeader=req.headers("Authorization");
-			if(StringUtils.isEmpty(authHeader))
-				throw new UserActionNotAllowedException("Authorization header with ActivityPubActorToken is required");
-			String[] parts=authHeader.split(" ", 2);
-			if(parts.length!=2)
-				throw new BadRequestException();
-			if(!"ActivityPubActorToken".equals(parts[0]))
-				throw new BadRequestException("Unsupported auth scheme '"+parts[0]+"'");
-			JsonObject token;
-			try{
-				token=JsonParser.parseString(parts[1]).getAsJsonObject();
-			}catch(JsonParseException x){
-				throw new BadRequestException("Can't parse actor token: "+x.getMessage(), x);
-			}
-			ActivityPub.verifyActorToken(token, signer, foreignGroup);
-		}else{
-			try{
-				if(!GroupStorage.areThereGroupMembersWithDomain(group.id, signer.domain))
-					throw new UserActionNotAllowedException("HTTP signature is valid, but this object is in a "+group.accessType.toString().toLowerCase()+" group and "+TextProcessor.escapeHTML(signer.activityPubID.toString())+" is not its member");
-			}catch(SQLException x){
-				throw new InternalServerErrorException(x);
-			}
-		}
-		LOG.trace("Actor {} was allowed to access object {} in a {} group {}", signer.activityPubID, req.pathInfo(), group.accessType, group.activityPubID);
-	}
-
-	public void enforceGroupProfileAccess(@NotNull spark.Request req, @NotNull Group group){
-		try{
-			if(group.accessType==Group.AccessType.PRIVATE){
-				Actor requester;
-				try{
-					requester=ActivityPub.verifyHttpSignature(req, null);
-				}catch(Exception x){
-					throw new UserActionNotAllowedException("This is a private group. Valid HTTP signature of a group member or invitee is required.", x);
-				}
-				if(!GroupStorage.areThereGroupMembersWithDomain(group.id, requester.domain) && !GroupStorage.areThereGroupInvitationsWithDomain(group.id, requester.domain))
-					throw new UserActionNotAllowedException("This is a private group and there are no "+requester.domain+" members or invitees in it.");
-			}
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
 	public boolean isUserBlocked(User self, Actor target){
 		try{
 			// TODO cache
 			if(target instanceof User user){
-				if(self instanceof ForeignUser && UserStorage.isDomainBlocked(user.id, self.domain))
-					return true;
 				return UserStorage.isUserBlocked(user.id, self.id);
 			}else if(target instanceof Group group){
-				if(self instanceof ForeignUser && GroupStorage.isDomainBlocked(group.id, self.domain))
-					return true;
 				return GroupStorage.isUserBlocked(group.id, self.id);
 			}
 			return false;
@@ -495,7 +345,7 @@ public class PrivacyController{
 	}
 
 	private boolean canAccessBannedProfiles(@Nullable User self){
-		if(self!=null && !(self instanceof ForeignUser)){
+		if(self!=null){
 			Account account=context.getUsersController().getAccountForUser(self);
 			if(account.roleID!=0)
 				return Config.userRoles.get(account.roleID).hasPermission(UserRole.Permission.MANAGE_USERS);
@@ -504,7 +354,7 @@ public class PrivacyController{
 	}
 
 	private boolean canAccessBannedGroups(@Nullable User self){
-		if(self!=null && !(self instanceof ForeignUser)){
+		if(self!=null){
 			Account account=context.getUsersController().getAccountForUser(self);
 			if(account.roleID!=0)
 				return Config.userRoles.get(account.roleID).hasPermission(UserRole.Permission.MANAGE_GROUPS);
@@ -623,11 +473,9 @@ public class PrivacyController{
 
 			if(!affectedUserSettings.isEmpty()){
 				UserStorage.setPrivacySettings(owner, owner.privacySettings);
-				context.getActivityPubWorker().sendUpdateUserActivity(owner);
 			}
 			for(PhotoAlbum album:affectedPhotoAlbums){
 				PhotoStorage.updateUserAlbumPrivacy(album.id, album.viewPrivacy, album.commentPrivacy);
-				context.getActivityPubWorker().sendUpdatePhotoAlbum(owner, album, albumOldViewSettings.get(album.id));
 			}
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
@@ -642,32 +490,4 @@ public class PrivacyController{
 		}
 	}
 
-	public List<String> getBlockedDomains(User self){
-		try{
-			return UserStorage.getBlockedDomains(self.id);
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	public void blockDomain(User self, String domain){
-		try{
-			if(domain.matches("^([a-zA-Z0-9-]+\\.)+[a-zA-Z0-9-]{2,}$")){
-				if(UserStorage.isDomainBlocked(self.id, domain))
-					throw new UserErrorException("err_domain_already_blocked");
-				UserStorage.blockDomain(self.id, domain);
-			}
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	public void unblockDomain(User self, String domain){
-		try{
-			if(StringUtils.isNotEmpty(domain))
-				UserStorage.unblockDomain(self.id, domain);
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
 }

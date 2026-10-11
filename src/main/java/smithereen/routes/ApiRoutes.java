@@ -102,15 +102,7 @@ public class ApiRoutes{
 	}
 
 	private static ClientApp getApp(ApplicationContext ctx, URI appApID, boolean forceReload){
-		ClientApp app=ctx.getObjectLinkResolver().resolveNative(appApID, ClientApp.class, true, true, false, (JsonObject) null, true, true, false);
-		if(!Config.isLocal(appApID)){
-			if(app.lastUpdated.isBefore(Instant.now().minus(1, ChronoUnit.DAYS)) || forceReload){
-				try{
-					app=ctx.getObjectLinkResolver().resolveNative(appApID, ClientApp.class, true, true, true, (JsonObject) null, true, true, false);
-				}catch(ObjectNotFoundException ignore){}
-			}
-		}
-		return app;
+		return ctx.getObjectLinkResolver().resolveLocally(appApID, ClientApp.class);
 	}
 
 	public static Object oauthAuthorize(Request req, Response resp){
@@ -161,7 +153,7 @@ public class ApiRoutes{
 		try{
 			app=getApp(ctx, appApID, req.queryParams("forceReload")!=null);
 		}catch(ObjectNotFoundException x){
-			return oauthAuthorizeError(req, "failed to resolve client_id to an ActivityPub Application object: "+x.getMessage());
+			return oauthAuthorizeError(req, "failed to resolve client_id to a registered application: "+x.getMessage());
 		}
 
 		if(!app.allowedRedirectURIs.isEmpty() && !app.allowedRedirectURIs.contains(redirectUri)){
@@ -317,7 +309,7 @@ public class ApiRoutes{
 			try{
 				app=getApp(ctx, appApID, false);
 			}catch(ObjectNotFoundException x){
-				return oauthTokenError(resp, "invalid_client", "failed to resolve client_id to an ActivityPub Application object: "+x.getMessage());
+				return oauthTokenError(resp, "invalid_client", "failed to resolve client_id to a registered application: "+x.getMessage());
 			}
 
 			InetAddress ip=getRequestIP(req);

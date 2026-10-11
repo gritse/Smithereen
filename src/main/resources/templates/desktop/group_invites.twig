@@ -23,10 +23,6 @@
 					<div class="grayText">{{ L('event_start_time') }}:</div>
 					<div>{{ LD(invite.group.eventStartTime) }}	</div>
 					{% endif %}
-					{% if invite.group.domain is not empty %}
-					<div class="grayText">{{ L('server') }}:</div>
-					<div>{{ invite.group.domain }}</div>
-					{% endif %}
 					<div class="unlabeled grayText">
 						{{ L('group_invited_by_X', {'inviter': invite.inviter | name}, {'inviter': {'href': invite.inviter.profileURL} }) }}
 						<form action="/groups/{{ invite.group.id }}/respondToInvite" method="post" data-ajax>

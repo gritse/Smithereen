@@ -44,10 +44,10 @@
 {% if postInteractions is not null %}
 {% set interactions=postInteractions[realPost.getIDForInteractions()] %}
 {% endif %}
-	<div class="postAva"><a href="{{ profileURL(realPost.authorID) }}"{{ profileRel(realPost.authorID) }}>{{ users[realPost.authorID] | pictureForAvatar('a', 40) }}</a></div>
+	<div class="postAva"><a href="{{ profileURL(realPost.authorID) }}">{{ users[realPost.authorID] | pictureForAvatar('a', 40) }}</a></div>
 	<div class="post">
 		<div class="postContentWrap">
-			<a href="{{ profileURL(realPost.authorID) }}" class="authorName" id="postAuthor{{ realPost.id }}_{{ randomID }}"{{ profileRel(realPost.authorID) }}>{{ users[realPost.authorID] | name }}</a>
+			<a href="{{ profileURL(realPost.authorID) }}" class="authorName" id="postAuthor{{ realPost.id }}_{{ randomID }}">{{ users[realPost.authorID] | name }}</a>
 			{%- if realPost.privacy is not null and realPost.privacy!='PUBLIC' -%}
 			<span class="privatePostLockIcon" data-tooltip="{{ L(realPost.privacy.langKey, {'name': users[realPost.authorID].firstAndGender}) }}"></span>
 			{%- endif %}

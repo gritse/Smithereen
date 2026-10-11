@@ -15,8 +15,6 @@ import smithereen.exceptions.ObjectNotFoundException;
 import smithereen.exceptions.UserErrorException;
 import smithereen.lang.Lang;
 import smithereen.model.Account;
-import smithereen.model.ForeignGroup;
-import smithereen.model.ForeignUser;
 import smithereen.model.Group;
 import smithereen.model.PaginatedList;
 import smithereen.model.User;
@@ -59,7 +57,7 @@ public class AdminGroupsRoutes{
 				.pageTitle(group.name)
 				.headerBack(group);
 		if(group.banInfo!=null){
-			if(group.domain==null && (group.banStatus==GroupBanStatus.SUSPENDED || group.banStatus==GroupBanStatus.SELF_DEACTIVATED)){
+			if((group.banStatus==GroupBanStatus.SUSPENDED || group.banStatus==GroupBanStatus.SELF_DEACTIVATED)){
 				model.with("groupDeletionTime", group.banInfo.bannedAt().plus(UserBanInfo.ACCOUNT_DELETION_DAYS, ChronoUnit.DAYS));
 			}
 			if(group.banInfo.moderatorID()!=0){
@@ -161,7 +159,7 @@ public class AdminGroupsRoutes{
 					case "message" -> group.banInfo!=null ? group.banInfo.message() : null;
 					default -> throw new IllegalStateException("Unexpected value: " + s);
 				}, null, Map.of("group", group, "hideNone", report!=null, "deleteReportContent", deleteReportContent, "numDaysUntilDeletion", GroupBanInfo.GROUP_DELETION_DAYS));
-		if(group.domain==null && form instanceof WebDeltaResponse wdr){
+		if(form instanceof WebDeltaResponse wdr){
 			wdr.runScript("""
 					function groupBanForm_updateFieldVisibility(){
 						var message=ge("formRow_message");
@@ -229,7 +227,7 @@ public class AdminGroupsRoutes{
 
 	public static Object deleteGroupImmediatelyForm(Request req, Response resp, Account self, ApplicationContext ctx){
 		Group group=getGroup(req);
-		if(group instanceof ForeignGroup || (group.banStatus!=GroupBanStatus.SELF_DEACTIVATED && group.banStatus!=GroupBanStatus.SUSPENDED))
+		if((group.banStatus!=GroupBanStatus.SELF_DEACTIVATED && group.banStatus!=GroupBanStatus.SUSPENDED))
 			throw new BadRequestException();
 		RenderedTemplateResponse model=new RenderedTemplateResponse("admin_delete_group_form", req)
 				.with("group", group)
@@ -239,7 +237,7 @@ public class AdminGroupsRoutes{
 
 	public static Object deleteGroupImmediately(Request req, Response resp, Account self, ApplicationContext ctx){
 		Group group=getGroup(req);
-		if(group instanceof ForeignGroup || (group.banStatus!=GroupBanStatus.SELF_DEACTIVATED && group.banStatus!=GroupBanStatus.SUSPENDED))
+		if((group.banStatus!=GroupBanStatus.SELF_DEACTIVATED && group.banStatus!=GroupBanStatus.SUSPENDED))
 			throw new BadRequestException();
 		String usernameCheck=group.username+"@"+Config.domain;
 		if(!usernameCheck.equalsIgnoreCase(req.queryParams("username"))){
@@ -298,26 +296,4 @@ public class AdminGroupsRoutes{
 		return wrapConfirmation(req, resp, l.get("admin_reset_username_title"), l.get("admin_reset_username_confirm", Map.of("newUsername", newUsername)), "/groups/"+target.id+"/adminChangeUsername?username="+newUsername);
 	}
 
-	public static Object syncRelationshipsCollections(Request req, Response resp, Account self, ApplicationContext ctx){
-		Group group=getGroup(req);
-		group.ensureRemote();
-		ctx.getActivityPubWorker().fetchActorRelationshipCollections(group);
-		Lang l=lang(req);
-		return new WebDeltaResponse(resp).messageBox(l.get("sync_members"), l.get("sync_started"), l.get("ok"));
-	}
-
-	public static Object syncProfile(Request req, Response resp, Account self, ApplicationContext ctx){
-		Group group=getGroup(req);
-		group.ensureRemote();
-		ctx.getObjectLinkResolver().resolve(group.activityPubID, ForeignGroup.class, true, true, true);
-		return new WebDeltaResponse(resp).refresh();
-	}
-
-	public static Object syncContentCollections(Request req, Response resp, Account self, ApplicationContext ctx){
-		Group group=getGroup(req);
-		group.ensureRemote();
-		ctx.getActivityPubWorker().fetchActorContentCollections(group);
-		Lang l=lang(req);
-		return new WebDeltaResponse(resp).messageBox(l.get("sync_content"), l.get("sync_started"), l.get("ok"));
-	}
 }

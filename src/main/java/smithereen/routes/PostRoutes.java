@@ -27,7 +27,6 @@ import smithereen.ApplicationContext;
 import smithereen.Config;
 import smithereen.Utils;
 import smithereen.activitypub.objects.Actor;
-import smithereen.activitypub.objects.ForeignActor;
 import smithereen.activitypub.objects.LocalImage;
 import smithereen.controllers.WallController;
 import smithereen.exceptions.BadRequestException;
@@ -136,8 +135,6 @@ public class PostRoutes{
 		Post inReplyTo=null;
 		if(replyTo!=0){
 			inReplyTo=ctx.getWallController().getPostOrThrow(replyTo);
-			if(inReplyTo.isMastodonStyleRepost())
-				inReplyTo=ctx.getWallController().getPostOrThrow(inReplyTo.repostOf);
 			owner=ctx.getWallController().getContentAuthorAndOwner(inReplyTo).owner();
 		}
 
@@ -435,17 +432,8 @@ public class PostRoutes{
 		}
 
 		if(post.post.repostOf!=0){
-			if(post.post.isMastodonStyleRepost()){
-				if(isAjaxLayout(req) || isLayer){
-					post=new PostViewModel(ctx.getWallController().getPostOrThrow(post.post.repostOf));
-					req.attribute("alFinalURL", post.post.getInternalURL().toString());
-				}else{
-					resp.redirect("/posts/"+post.post.repostOf);
-					return "";
-				}
-			}else{
-				ctx.getWallController().populateReposts(self!=null ? self.user : null, List.of(post), 10);
-			}
+			ctx.getWallController().populateReposts(self!=null ? self.user : null, List.of(post), 10);
+
 		}
 		if(post.post.getReplyLevel()>0 && (isAjaxLayout(req) || isLayer)){
 			int commentID=post.post.id;
@@ -625,9 +613,6 @@ public class PostRoutes{
 		if(post.post.getReplyLevel()>0){
 			model.with("jsRedirect", "/posts/"+post.post.replyKey.get(0)+"#comment"+post.post.id);
 		}
-		model.with("activityPubURL", post.post.getActivityPubID());
-		if(!post.post.isLocal() && owner instanceof ForeignActor)
-			model.with("noindex", true);
 
 		model.with("users", ctx.getUsersController().getUsers(needUsers, true))
 				.with("groups", ctx.getGroupsController().getGroupsByIdAsMap(needGroups))
@@ -843,8 +828,6 @@ public class PostRoutes{
 			model.pageTitle(lang(req).get("wall_of_group"));
 		}
 
-		if(owner instanceof ForeignActor)
-			model.with("noindex", true);
 
 		return model;
 	}
@@ -891,8 +874,6 @@ public class PostRoutes{
 		Post requestedPost;
 		Post post=requestedPost=ctx.getWallController().getPostOrThrow(parseIntOrDefault(req.params(":postID"), 0));
 		int postID=post.id;
-		if(post.isMastodonStyleRepost())
-			post=ctx.getWallController().getPostOrThrow(post.repostOf);
 		ctx.getPrivacyController().enforceObjectPrivacy(self!=null ? self.user : null, post);
 		int maxID=parseIntOrDefault(req.queryParams("firstID"), 0);
 		if(maxID==0)
@@ -915,11 +896,7 @@ public class PostRoutes{
 		if(StringUtils.isNotEmpty(rid))
 			model.with("randomID", rid);
 		preparePostList(ctx, comments.list, model, self);
-		PostViewModel topLevel;
-		if(requestedPost.isMastodonStyleRepost())
-			topLevel=new PostViewModel(requestedPost);
-		else
-			topLevel=new PostViewModel(post.replyKey.isEmpty() ? post : ctx.getWallController().getPostOrThrow(post.replyKey.getFirst()));
+		PostViewModel topLevel=new PostViewModel(post.replyKey.isEmpty() ? post : ctx.getWallController().getPostOrThrow(post.replyKey.getFirst()));
 		Map<Integer, UserInteractions> interactions=ctx.getWallController().getUserInteractions(Stream.of(List.of(topLevel), comments.list).flatMap(List::stream).toList(), self!=null ? self.user : null);
 		model.with("postInteractions", interactions)
 					.with("preview", true)
@@ -971,7 +948,7 @@ public class PostRoutes{
 			int realTopLevelID=post.replyKey.getFirst();
 			if(req.queryParams("topLevel")!=null){
 				Post topLevelSupposedly=ctx.getWallController().getPostOrThrow(safeParseInt(req.queryParams("topLevel")));
-				if(topLevelSupposedly.isMastodonStyleRepost() && post.replyKey.contains(topLevelSupposedly.repostOf)){
+				if(false && post.replyKey.contains(topLevelSupposedly.repostOf)){
 					topLevel=new PostViewModel(topLevelSupposedly);
 					model.with("baseReplyLevel", post.getReplyLevel()-1);
 				}
@@ -1094,13 +1071,8 @@ public class PostRoutes{
 		ApplicationContext ctx=context(req);
 		Lang l=lang(req);
 		Post post=ctx.getWallController().getPostOrThrow(safeParseInt(req.params(":postID")));
-		if(post.isMastodonStyleRepost())
-			post=ctx.getWallController().getPostOrThrow(post.repostOf);
-		if(!requireAccount(req, null)){
-			String url=post.getActivityPubURL().toString();
-			String title=l.get(post.getReplyLevel()>0 ? "share_comment_title" : "share_post_title");
-			return UserInteractionsRoutes.remoteInteraction(req, resp, url, title, post, false);
-		}
+		if(!requireAccount(req, resp))
+			return "";
 		RenderedTemplateResponse model=new RenderedTemplateResponse("repost_form", req);
 		model.with("repostedPost", post)
 				.with("users", ctx.getUsersController().getUsers(Set.of(post.authorID)));
@@ -1108,7 +1080,7 @@ public class PostRoutes{
 			WebDeltaResponse wdr=new WebDeltaResponse(resp)
 					.box(l.get(post.getReplyLevel()>0 ? "share_comment_title" : "share_post_title"), model.renderToString(), "repostFormBox", isMobile(req) ? 0 : 502)
 					.runScript("updatePostForms();");
-			if(!isMobile(req) && post.isLocal()){
+			if(!isMobile(req)){
 				wdr.runScript("initTabbedBox(ge(\"repostTabBar"+post.id+"\"), ge(\"repostTabContent"+post.id+"\")); initEmbedPreview("+post.id+");");
 			}
 			return wdr;
@@ -1130,7 +1102,7 @@ public class PostRoutes{
 		ctx.getWallController().populateReposts(self!=null ? self.user : null, reposts.list, 2);
 		CommentViewType viewType=self!=null ? self.prefs.commentViewType : CommentViewType.THREADED;
 		if(req.attribute("mobile")==null){
-			ctx.getWallController().populateCommentPreviews(self!=null ? self.user : null, reposts.list.stream().filter(p->!p.post.isMastodonStyleRepost()).toList(), viewType);
+			ctx.getWallController().populateCommentPreviews(self!=null ? self.user : null, reposts.list.stream().filter(p->true).toList(), viewType);
 		}
 		UserInteractions interactions=ctx.getWallController().getUserInteractions(Stream.of(reposts.list, List.of(new PostViewModel(post))).flatMap(List::stream).toList(), self!=null ? self.user : null).get(post.getIDForInteractions());
 		RenderedTemplateResponse model;
@@ -1138,9 +1110,6 @@ public class PostRoutes{
 			model=new RenderedTemplateResponse("content_interactions_reposts", req);
 		}else{
 			for(PostViewModel p:reposts.list){
-				if(p.post.isMastodonStyleRepost()){
-//					p.canComment=false;
-				}
 			}
 			model=new RenderedTemplateResponse(isAjax(req) ? "content_interactions_box" : "content_wrap", req);
 		}
@@ -1191,7 +1160,7 @@ public class PostRoutes{
 		req.attribute("noPreload", true);
 		ApplicationContext ctx=context(req);
 		Post post=ctx.getWallController().getLocalPostOrThrow(safeParseInt(req.params(":postID")));
-		if(!post.isLocal() || post.privacy!=Post.Privacy.PUBLIC || (post.getReplyLevel()==0 && post.ownerID!=post.authorID)){
+		if(post.privacy!=Post.Privacy.PUBLIC || (post.getReplyLevel()==0 && post.ownerID!=post.authorID)){
 			throw new UserActionNotAllowedException();
 		}
 		PostViewModel pvm=new PostViewModel(post);
@@ -1280,7 +1249,7 @@ public class PostRoutes{
 			self=info.account;
 		}
 		ctx.getPrivacyController().enforcePostPrivacy(self==null ? null : self.user, post.post);
-		if(post.post.getReplyLevel()>0 || post.post.isMastodonStyleRepost())
+		if(post.post.getReplyLevel()>0)
 			throw new BadRequestException();
 
 		String rid=req.queryParams("rid");

@@ -44,10 +44,10 @@
 	<div class="feedRow feedPostRow">
 		<div class="post">
 			<div class="postAvaWrap">
-				<a href="{{ profileURL(photo.authorID) }}"{{ profileRel(photo.authorID) }}>{{ users[photo.authorID] | pictureForAvatar('a') }}</a>
+				<a href="{{ profileURL(photo.authorID) }}">{{ users[photo.authorID] | pictureForAvatar('a') }}</a>
 			</div>
 			<div class="postContentWrap">
-				<a href="{{ profileURL(photo.authorID) }}" class="authorName" {{ profileRel(photo.authorID) }}>{{ users[photo.authorID] | name }}</a>
+				<a href="{{ profileURL(photo.authorID) }}" class="authorName" >{{ users[photo.authorID] | name }}</a>
 				<div>{# "postInner" #}
 					<div class="postContent">{{ photo.description | postprocessHTML | truncateText }}</div>
 					<div class="feedRowPhotos">{{ renderPhotoGrid([photo], "single/#{photo.idString}") }}</div>
@@ -65,9 +65,6 @@
 					</span>
 					{%- endif -%}
 					<a href="{{ photo.url }}" class="postLink">{{ LD(photo.createdAt) }}</a>
-{#					{% if not realPost.local %}#}
-{#						| <a href="{{ realPost.activityPubURL }}" target="_blank" rel="noopener">{{ L('open_on_server_X', {'domain': realPost.activityPubURL.host}) }}</a>#}
-{#					{% endif %}#}
 					{% if currentUser is not null and interactions.canComment %}
 						<span id="postCommentLinkWrap{{ photo.idString }}" style="{{ interactions.commentCount==0 ? '' : 'display: none;' }}">| <a href="{{ photo.url }}" onclick="return showPostCommentForm('{{ photo.idString }}')">{{ L('add_comment') }}</a></span>
 					{% endif %}

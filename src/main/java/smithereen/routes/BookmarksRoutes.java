@@ -5,8 +5,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
+import smithereen.model.LikeObjectType;
 import smithereen.ApplicationContext;
-import smithereen.activitypub.objects.activities.Like;
 import smithereen.model.Account;
 import smithereen.model.Group;
 import smithereen.model.PaginatedList;
@@ -178,7 +178,7 @@ public class BookmarksRoutes{
 		int offset=offset(req);
 		RenderedTemplateResponse model=new RenderedTemplateResponse("bookmarks_photos", req)
 				.pageTitle(lang(req).get("bookmarks_title"));
-		PaginatedList<Long> photoIDs=ctx.getUserInteractionsController().getLikedObjects(self.user, Like.ObjectType.PHOTO, offset, 100);
+		PaginatedList<Long> photoIDs=ctx.getUserInteractionsController().getLikedObjects(self.user, LikeObjectType.PHOTO, offset, 100);
 		Map<Long, Photo> photoObjects=ctx.getPhotosController().getPhotosIgnoringPrivacy(photoIDs.list);
 		PaginatedList<Photo> photos=new PaginatedList<>(photoIDs, photoIDs.list.stream().map(photoObjects::get).toList());
 		model.paginate(photos);

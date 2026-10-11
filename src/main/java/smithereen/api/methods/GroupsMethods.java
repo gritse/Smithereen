@@ -31,7 +31,6 @@ import smithereen.exceptions.BadRequestException;
 import smithereen.exceptions.ObjectNotFoundException;
 import smithereen.exceptions.UserErrorException;
 import smithereen.lang.Lang;
-import smithereen.model.ForeignUser;
 import smithereen.model.Group;
 import smithereen.model.PaginatedList;
 import smithereen.model.User;
@@ -281,34 +280,6 @@ public class GroupsMethods{
 		return new ApiPaginatedList<>(users.total, ApiUtils.getUsers(users.list, ctx, actx));
 	}
 
-	public static Object getBannedDomains(ApplicationContext ctx, ApiCallContext actx){
-		Group group=ApiUtils.getGroup(ctx, actx, "group_id");
-		ctx.getGroupsController().enforceUserAdminLevel(group, actx.self.user, Group.AdminLevel.MODERATOR);
-		List<String> domains=ctx.getGroupsController().getBlockedDomains(group);
-		int offset=actx.getOffset();
-		int count=actx.getCount(100, 1000);
-		if(offset>=domains.size())
-			return new ApiPaginatedList<>(0, List.of());
-		return new ApiPaginatedList<>(domains.size(), domains.subList(offset, Math.min(offset+count, domains.size())));
-	}
-
-	public static Object banDomain(ApplicationContext ctx, ApiCallContext actx){
-		Group group=ApiUtils.getGroup(ctx, actx, "group_id");
-		ctx.getGroupsController().enforceUserAdminLevel(group, actx.self.user, Group.AdminLevel.MODERATOR);
-		String domain=actx.requireParamString("domain");
-		if(!domain.matches("^([a-zA-Z0-9-]+\\.)+[a-zA-Z0-9-]{2,}$"))
-			throw actx.paramError("invalid domain");
-		ctx.getGroupsController().blockDomain(group, domain);
-		return true;
-	}
-
-	public static Object unbanDomain(ApplicationContext ctx, ApiCallContext actx){
-		Group group=ApiUtils.getGroup(ctx, actx, "group_id");
-		ctx.getGroupsController().enforceUserAdminLevel(group, actx.self.user, Group.AdminLevel.MODERATOR);
-		ctx.getGroupsController().unblockDomain(group, actx.requireParamString("domain"));
-		return true;
-	}
-
 	public static Object getInvitedUsers(ApplicationContext ctx, ApiCallContext actx){
 		Group group=ApiUtils.getGroup(ctx, actx, "group_id");
 		PaginatedList<User> users=ctx.getGroupsController().getGroupInvites(actx.self.user, group, actx.getOffset(), actx.getCount(100, 1000));
@@ -326,7 +297,7 @@ public class GroupsMethods{
 		ctx.getGroupsController().acceptJoinRequest(actx.self.user, group, ApiUtils.getUser(ctx, actx, "user_id"));
 		return true;
 	}
-	
+
 	public static Object removeUser(ApplicationContext ctx, ApiCallContext actx){
 		Group group=ApiUtils.getGroup(ctx, actx, "group_id");
 		User user=ApiUtils.getUser(ctx, actx, "user_id");
@@ -471,8 +442,6 @@ public class GroupsMethods{
 			throw actx.error(ApiErrorType.CANT_PROMOTE_GROUP_MEMBER, "this user is not a member of this group");
 		if(ctx.getGroupsController().getMemberAdminLevel(group, user)!=Group.AdminLevel.REGULAR)
 			throw actx.error(ApiErrorType.CANT_PROMOTE_GROUP_MEMBER, "this user is already a manager in this group");
-		if(user instanceof ForeignUser)
-			throw actx.error(ApiErrorType.CANT_PROMOTE_GROUP_MEMBER, "groups currently cannot be managed by users from other servers");
 
 		ctx.getGroupsController().addOrUpdateAdmin(group, actx.self.user, user, actx.optParamString("title", ""), actx.requireParamEnum("level", Map.of("moderator", Group.AdminLevel.MODERATOR, "admin", Group.AdminLevel.ADMIN)));
 

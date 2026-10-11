@@ -1,11 +1,9 @@
 package smithereen;
 
-import smithereen.activitypub.ActivityPubWorker;
 import smithereen.controllers.AppsController;
 import smithereen.controllers.BoardController;
 import smithereen.controllers.BookmarksController;
 import smithereen.controllers.CommentsController;
-import smithereen.controllers.FASPController;
 import smithereen.controllers.FriendsController;
 import smithereen.controllers.GroupsController;
 import smithereen.controllers.MailController;
@@ -29,7 +27,6 @@ public class ApplicationContext{
 	private final UserInteractionsController userInteractionsController;
 	private final FriendsController friendsController;
 	private final ObjectLinkResolver objectLinkResolver;
-	private final ActivityPubWorker activityPubWorker;
 	private final PrivacyController privacyController;
 	private final NewsfeedController newsfeedController;
 	private final NotificationsController notificationsController;
@@ -40,7 +37,6 @@ public class ApplicationContext{
 	private final BookmarksController bookmarksController;
 	private final PhotosController photosController;
 	private final CommentsController commentsController;
-	private final FASPController faspController;
 	private final BoardController boardController;
 	private final UserDataExportWorker userDataExportWorker;
 	private final AppsController appsController;
@@ -52,7 +48,6 @@ public class ApplicationContext{
 		userInteractionsController=new UserInteractionsController(this);
 		friendsController=new FriendsController(this);
 		objectLinkResolver=new ObjectLinkResolver(this);
-		activityPubWorker=new ActivityPubWorker(this);
 		privacyController=new PrivacyController(this);
 		newsfeedController=new NewsfeedController(this);
 		notificationsController=new NotificationsController(this);
@@ -63,7 +58,6 @@ public class ApplicationContext{
 		bookmarksController=new BookmarksController(this);
 		photosController=new PhotosController(this);
 		commentsController=new CommentsController(this);
-		faspController=new FASPController(this);
 		boardController=new BoardController(this);
 		userDataExportWorker=new UserDataExportWorker(this);
 		appsController=new AppsController(this);
@@ -91,10 +85,6 @@ public class ApplicationContext{
 
 	public ObjectLinkResolver getObjectLinkResolver(){
 		return objectLinkResolver;
-	}
-
-	public ActivityPubWorker getActivityPubWorker(){
-		return activityPubWorker;
 	}
 
 	public PrivacyController getPrivacyController(){
@@ -135,10 +125,6 @@ public class ApplicationContext{
 
 	public CommentsController getCommentsController(){
 		return commentsController;
-	}
-
-	public FASPController getFaspController(){
-		return faspController;
 	}
 
 	public BoardController getBoardController(){

@@ -31,29 +31,18 @@
 {% endblock %}
 {%block content%}
 <div class="cardsBackdrop">
-{%if group.domain is not null%}
-<div class="card padded">
-	{{L('incomplete_profile')}}<br/>
-	<a href="{{group.url}}" target="_blank">{{L('open_on_server_X', {'domain': group.domain})}}</a>
-</div>
-{%endif%}
 {% if group.banInfo is not null and currentUser is not null and userPermissions.hasPermission('MANAGE_GROUPS') %}
-{% if group.domain is empty and movedTo is null %}<div class="marginsAreMessy"></div>{% endif %}
+
 {% set banModerator=users[group.banInfo.moderatorID] %}
 <div class="card padded textByItself">
 	{% if group.banStatus=='SUSPENDED' %}
-	{% if group.domain is empty %}
 	<p>{{ L('admin_group_state_suspended', {'deletionTime': LD(deletionTime)}) }}</p>
-	{% else %}
-	<p>{{ L('admin_group_state_suspended_foreign') }}</p>
-	{% endif %}
 	{% elseif group.banStatus=='HIDDEN' %}
 	<p>{{ L('admin_group_state_hidden') }}</p>
 	{% elseif group.banStatus=='SELF_DEACTIVATED' %}
 	<p>{{ L('admin_group_state_self_deactivated', {'deletionTime': LD(deletionTime)}) }}</p>
 	{% endif %}
 	{% if group.banInfo is not null %}
-	{% if group.banInfo.suspendedOnRemoteServer %}<p>{{ L('admin_group_suspended_remotely') }}</p>{% endif %}
 	<p>{% if banModerator is not null %}<a href="{{ banModerator.profileURL }}">{{ banModerator | name }}</a>, {% endif %}{{ LD(group.banInfo.bannedAt()) }}</p>
 	{% if group.banInfo.message is not empty %}<p>{{ L('admin_group_ban_message') }}: {{ group.banInfo.message }}</p>{% endif %}
 	{% endif %}
@@ -84,7 +73,7 @@
 	<div class="profileBelowAva">
 		{% set membershipOptions=[] %}
 		{% if membershipState=="MEMBER" or membershipState=="TENTATIVE_MEMBER" %}
-		{% if group.event and (group.domain is empty or group.hasCapability("TENTATIVE_MEMBERSHIP")) %}
+		{% if group.event %}
 		{% if membershipState=="MEMBER" %}
 			{% set _=membershipOptions.add({'label': L('join_event_tentative').toString(), 'type': 'link', 'ajax': 'box', 'href': "/groups/#{group.id}/join?tentative=1&csrf=#{csrf}"}) %}
 		{% else %}
@@ -101,9 +90,7 @@
 		{% if group.event %}
 		{% if membershipState=="NONE" or membershipState=="INVITED" %}
 			<a href="/groups/{{ group.id }}/join?csrf={{ csrf }}" class="button">{{ L('join_event_certain') }}</a>
-			{% if group.domain is empty or group.hasCapability("TENTATIVE_MEMBERSHIP") %}
 				<a href="/groups/{{ group.id }}/join?csrf={{ csrf }}&tentative=1" class="button">{{ L('join_event_tentative') }}</a>
-			{% endif %}
 		{% else %}
 			<a href="javascript:void(0)" class="button secondary" onclick="return showOptions(this)" data-options="{{ json(membershipOptions) }}"><span class="ellipsize">{{ L(membershipState=='TENTATIVE_MEMBER' ? 'event_you_are_tentative_member' : 'event_you_are_member') }}</span><span class="arrowIcon"></span></a>
 		{% endif %}
@@ -196,7 +183,7 @@
 		<div class="userList noPadding" style="padding-bottom: 16px;">
 		{% for admin in admins %}
 			<div>
-				<a href="{{ admin.user.profileURL }}"{{ profileRel(admin.user) }}>{{ admin.user | pictureForAvatar('a') }}</a>
+				<a href="{{ admin.user.profileURL }}">{{ admin.user | pictureForAvatar('a') }}</a>
 			</div>
 			<div class="info">
 				<b><a href="{{ admin.user.profileURL }}">{{ admin.user | name('complete') }}</a></b>

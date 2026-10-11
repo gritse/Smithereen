@@ -23,8 +23,8 @@
 {% if post.repost is not null %}
 <div class="repostHeader">
 	{% set authorID=post.repost.post.post.authorID %}
-	<a href="{{ profileURL(authorID) }}" class="flL avaW"{{ profileRel(authorID) }}>{{ users[authorID] | pictureForAvatar('a', 32) }}</a>
-	<div class="nameW ellipsize"><span class="repostIcon{{ realPost.mastodonStyleRepost ? ' mastodonStyle' : '' }}"></span><a href="{{ profileURL(authorID) }}" class="name"{{ profileRel(authorID) }}>{{ users[authorID] | name }}</a></div>
+	<a href="{{ profileURL(authorID) }}" class="flL avaW">{{ users[authorID] | pictureForAvatar('a', 32) }}</a>
+	<div class="nameW ellipsize"><span class="repostIcon{{ realPost.mastodonStyleRepost ? ' mastodonStyle' : '' }}"></span><a href="{{ profileURL(authorID) }}" class="name">{{ users[authorID] | name }}</a></div>
 	<div class="ellipsize grayText">
 		{%- if post.repost.post.post.replyLevel>0 -%}
 		{%- if post.repost.topLevel is not null %}

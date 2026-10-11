@@ -415,16 +415,6 @@ public class CommentStorage{
 		}
 	}
 
-	public static Set<URI> getPhotoAlbumForeignComments(long albumID, Set<URI> filter) throws SQLException{
-		return new SQLQueryBuilder()
-				.selectFrom("comments")
-				.columns("ap_id")
-				.whereIn("ap_id", filter.stream().map(Object::toString).collect(Collectors.toSet()))
-				.andWhere("parent_object_type=? AND parent_object_id IN (SELECT id FROM photos WHERE album_id=?)", CommentableObjectType.PHOTO, albumID)
-				.executeAsStream(r->URI.create(r.getString(1)))
-				.collect(Collectors.toSet());
-	}
-
 	public static Set<Long> getPhotoAlbumLocalComments(long albumID, Set<Long> filter) throws SQLException{
 		return new SQLQueryBuilder()
 				.selectFrom("comments")
@@ -433,16 +423,6 @@ public class CommentStorage{
 				.andWhere("parent_object_type=? AND parent_object_id IN (SELECT id FROM photos WHERE album_id=?)", CommentableObjectType.PHOTO, albumID)
 				.executeAndGetLongStream()
 				.boxed()
-				.collect(Collectors.toSet());
-	}
-
-	public static Set<URI> getObjectForeignComments(CommentParentObjectID id, Set<URI> filter) throws SQLException{
-		return new SQLQueryBuilder()
-				.selectFrom("comments")
-				.columns("ap_id")
-				.whereIn("ap_id", filter.stream().map(Object::toString).collect(Collectors.toSet()))
-				.andWhere("parent_object_type=? AND parent_object_id=?", id.type(), id.id())
-				.executeAsStream(r->URI.create(r.getString(1)))
 				.collect(Collectors.toSet());
 	}
 
@@ -486,82 +466,6 @@ public class CommentStorage{
 			postprocessComments(comments);
 			return new PaginatedList<>(comments, total, offset, count);
 		}
-	}
-
-	public static void putOrUpdateForeignComment(Comment comment, boolean markAsUpdated) throws SQLException{
-		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
-			if(comment.id==0){
-				comment.id=new SQLQueryBuilder(conn)
-						.insertInto("comments")
-						.value("author_id", comment.authorID)
-						.value("owner_user_id", comment.ownerID>0 ? comment.ownerID : null)
-						.value("owner_group_id", comment.ownerID<0 ? -comment.ownerID : null)
-						.value("parent_object_type", comment.parentObjectID.type())
-						.value("parent_object_id", comment.parentObjectID.id())
-						.value("text", comment.text)
-						.value("attachments", comment.serializeAttachments())
-						.value("ap_id", comment.getActivityPubID().toASCIIString())
-						.value("ap_url", comment.getActivityPubURL().toASCIIString())
-						.value("created_at", comment.createdAt)
-						.value("content_warning", comment.contentWarning)
-						.value("reply_key", Utils.serializeLongCollection(comment.replyKey))
-						.value("mentions", Utils.serializeIntList(comment.mentionedUserIDs))
-						.value("ap_replies", comment.activityPubReplies==null ? null : comment.activityPubReplies.toASCIIString())
-						.executeAndGetIDLong();
-				if(!comment.replyKey.isEmpty()){
-					new SQLQueryBuilder(conn)
-							.update("comments")
-							.valueExpr("reply_count", "reply_count+1")
-							.whereIn("id", comment.replyKey)
-							.executeNoResult();
-					new SQLQueryBuilder(conn)
-							.update("comments")
-							.valueExpr("immediate_reply_count", "immediate_reply_count+1")
-							.where("id=?", comment.replyKey.getLast())
-							.executeNoResult();
-				}
-				if(comment.parentObjectID.type()==CommentableObjectType.BOARD_TOPIC){
-					Timestamp updatedAt;
-					int lastAuthorID;
-					try(ResultSet res=new SQLQueryBuilder(conn)
-							.selectFrom("comments")
-							.columns("created_at", "author_id")
-							.where("parent_object_type=? AND parent_object_id=?", comment.parentObjectID.type(), comment.parentObjectID.id())
-							.orderBy("created_at DESC")
-							.limit(1, 0)
-							.execute()){
-						res.next();
-						updatedAt=res.getTimestamp(1);
-						lastAuthorID=res.getInt(2);
-					}
-					new SQLQueryBuilder(conn)
-							.update("board_topics")
-							.where("id=?", comment.parentObjectID.id())
-							.valueExpr("num_comments", "num_comments+1")
-							.value("updated_at", updatedAt)
-							.value("last_comment_author_id", lastAuthorID)
-							.executeNoResult();
-				}
-			}else{
-				new SQLQueryBuilder(conn)
-						.update("comments")
-						.where("id=?", comment.id)
-						.value("text", comment.text)
-						.value("attachments", comment.serializeAttachments())
-						.value("content_warning", comment.contentWarning)
-						.value("mentions", Utils.serializeIntList(comment.mentionedUserIDs))
-						.value("updated_at", markAsUpdated && comment.updatedAt==null ? Instant.now() : comment.updatedAt)
-						.executeNoResult();
-			}
-		}
-	}
-
-	public static long getCommentIdByActivityPubId(URI activityPubID) throws SQLException{
-		return new SQLQueryBuilder()
-				.selectFrom("comments")
-				.columns("id")
-				.where("ap_id=?", activityPubID.toString())
-				.executeAndGetLong();
 	}
 
 	public static List<Long> getCommentIDsForDeletion(CommentParentObjectID parentID) throws SQLException{
@@ -609,20 +513,6 @@ public class CommentStorage{
 		return comments;
 	}
 
-	public static Set<URI> getInboxesForCommentInteractionForwarding(CommentParentObjectID parentID, Set<Integer> exceptUsers) throws SQLException{
-		SQLQueryBuilder b=new SQLQueryBuilder()
-				.selectFrom("users")
-				.distinct()
-				.selectExpr("IFNULL(ap_shared_inbox, ap_inbox)")
-				.where("id IN (SELECT DISTINCT author_id FROM comments WHERE parent_object_type=? AND parent_object_id=?) AND ap_id IS NOT NULL", parentID.type(), parentID.id());
-
-		if(!exceptUsers.isEmpty())
-			b.andWhere("id NOT IN ("+String.join(", ", Collections.nCopies(exceptUsers.size(), "?"))+")", exceptUsers.toArray());
-
-		return b.executeAsStream(r->URI.create(r.getString(1)))
-				.collect(Collectors.toSet());
-	}
-
 	public static int getCommentIndex(CommentParentObjectID parentID, long id) throws SQLException{
 		return new SQLQueryBuilder()
 				.selectFrom("comments")
@@ -653,20 +543,6 @@ public class CommentStorage{
 			postprocessComments(comments);
 			return new PaginatedList<>(comments, total, offset, count);
 		}
-	}
-
-	public static Map<Long, URI> getCommentActivityPubIDsByLocalIDs(Collection<Long> ids) throws SQLException{
-		return new SQLQueryBuilder()
-				.selectFrom("comments")
-				.columns("id", "ap_id")
-				.whereIn("id", ids)
-				.executeAsStream(res->new Pair<>(res.getLong("id"), res.getString("ap_id")))
-				.collect(Collectors.toMap(Pair::first, p->{
-					String apID=p.second();
-					if(apID==null)
-						return Config.localURI("/comments/"+XTEA.encodeObjectID(p.first(), ObfuscatedObjectIDType.COMMENT));
-					return URI.create(apID);
-				}));
 	}
 
 	public static Map<Long, Comment> getFirstOrLastBoardTopicComments(Collection<Long> topicIDs, boolean first, boolean needAttachments) throws SQLException{

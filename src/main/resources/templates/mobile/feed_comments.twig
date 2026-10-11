@@ -22,10 +22,10 @@
 	<div class="post">
 		<div class="postHeader">
 			<div class="avaW">
-				<a href="{{ profileURL(photo.authorID) }}"{{ profileRel(photo.authorID) }}>{{ users[photo.authorID] | pictureForAvatar('a', 40) }}</a>
+				<a href="{{ profileURL(photo.authorID) }}">{{ users[photo.authorID] | pictureForAvatar('a', 40) }}</a>
 			</div>
 			<div class="headerRight">
-				<div class="singleLine authorNameW"><a href="{{ profileURL(photo.authorID) }}" class="authorName"{{ profileRel(photo.authorID) }}>{{ users[photo.authorID] | name }}</a></div>
+				<div class="singleLine authorNameW"><a href="{{ profileURL(photo.authorID) }}" class="authorName">{{ users[photo.authorID] | name }}</a></div>
 				<div class="singleLine timeW"><a href="{{ photo.url }}" class="postLink">{{LD(photo.createdAt)}}</a></div>
 			</div>
 		</div>

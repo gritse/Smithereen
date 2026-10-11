@@ -33,13 +33,10 @@ import java.util.stream.Collectors;
 import smithereen.Config;
 import smithereen.LruCache;
 import smithereen.Utils;
-import smithereen.activitypub.SerializerContext;
 import smithereen.activitypub.objects.Actor;
-import smithereen.activitypub.objects.ForeignActor;
 import smithereen.activitypub.objects.LocalImage;
 import smithereen.controllers.FriendsController;
 import smithereen.model.Account;
-import smithereen.model.ForeignUser;
 import smithereen.model.PaginatedList;
 import smithereen.model.PrivacySetting;
 import smithereen.model.SignupInvitation;
@@ -70,11 +67,9 @@ public class UserStorage{
 
 	private static final LruCache<Integer, User> cache=new LruCache<>(500);
 	private static final LruCache<String, Integer> cacheByUsername=new LruCache<>(500);
-	private static final LruCache<URI, Integer> cacheByActivityPubID=new LruCache<>(500);
 
 	private static final LruCache<Integer, Account> accountCache=new LruCache<>(500);
 	private static final LruCache<Integer, BirthdayReminder> birthdayReminderCache=new LruCache<>(500);
-	private static final NamedMutexCollection foreignUserUpdateLocks=new NamedMutexCollection();
 
 	@Nullable
 	public static User getById(int id) throws SQLException{
@@ -191,38 +186,11 @@ public class UserStorage{
 			remainingUsernames.add(u);
 		}
 		if(!remainingUsernames.isEmpty()){
-			StringBuilder where=new StringBuilder("(username, domain) IN (");
-			ArrayList<String> whereArgs=new ArrayList<>();
-			boolean first=true;
-			for(String u:remainingUsernames){
-				String realUsername;
-				String domain="";
-				if(u.contains("@")){
-					String[] parts=u.split("@");
-					realUsername=parts[0];
-					domain=parts[1];
-				}else{
-					realUsername=u;
-				}
-				if(first){
-					first=false;
-				}else{
-					where.append(',');
-				}
-				where.append("(?,?)");
-				whereArgs.add(realUsername);
-				whereArgs.add(domain);
-			}
-			where.append(')');
 			new SQLQueryBuilder()
 					.selectFrom("users")
-					.columns("id", "username", "domain")
-					.where(where.toString(), whereArgs.toArray())
-					.executeAsStream(r->{
-						String username=r.getString("username");
-						String domain=r.getString("domain");
-						return new Pair<>(username+(domain.isEmpty() ? "" : ("@"+domain)), r.getInt("id"));
-					})
+					.columns("id", "username")
+					.whereIn("username", remainingUsernames)
+					.executeAsStream(r->new Pair<>(r.getString("username"), r.getInt("id")))
 					.forEach(p->{
 						cacheByUsername.put(p.first().toLowerCase(), p.second());
 						ids.put(p.first(), p.second());
@@ -236,19 +204,10 @@ public class UserStorage{
 		Integer id=cacheByUsername.get(username);
 		if(id!=null)
 			return getById(id);
-		String realUsername;
-		String domain="";
-		if(username.contains("@")){
-			String[] parts=username.split("@");
-			realUsername=parts[0];
-			domain=parts[1];
-		}else{
-			realUsername=username;
-		}
 		User user=new SQLQueryBuilder()
 				.selectFrom("users")
 				.allColumns()
-				.where("username=? AND domain=?", realUsername, domain)
+				.where("username=?", username)
 				.executeAndGetSingleObject(User::fromResultSet);
 		if(user!=null){
 			if(user.icon!=null && !user.icon.isEmpty() && user.icon.getFirst() instanceof LocalImage li){
@@ -266,21 +225,12 @@ public class UserStorage{
 		Integer id=cacheByUsername.get(username);
 		if(id!=null)
 			return id;
-		String realUsername;
-		String domain="";
-		if(username.contains("@")){
-			String[] parts=username.split("@");
-			realUsername=parts[0];
-			domain=parts[1];
-		}else{
-			realUsername=username;
-		}
-		if(realUsername.length()>Actor.USERNAME_MAX_LENGTH)
-			realUsername=realUsername.substring(0, Actor.USERNAME_MAX_LENGTH);
+		if(username.length()>Actor.USERNAME_MAX_LENGTH)
+			username=username.substring(0, Actor.USERNAME_MAX_LENGTH);
 		return new SQLQueryBuilder()
 				.selectFrom("users")
 				.columns("id")
-				.where("username=? AND domain=?", realUsername, domain)
+				.where("username=?", username)
 				.executeAndGetInt();
 	}
 
@@ -511,23 +461,6 @@ public class UserStorage{
 				.columns("followee_id")
 				.where("follower_id=? AND mutual=1", userID)
 				.executeAndGetIntList();
-	}
-
-	public static List<URI> getActivityPubFriendList(int userID, int offset, int count) throws SQLException{
-		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
-			PreparedStatement stmt=conn.prepareStatement("SELECT followee_id, ap_id FROM followings JOIN `users` ON followee_id=users.id WHERE follower_id=? AND mutual=1 ORDER BY followee_id ASC LIMIT ? OFFSET ?");
-			stmt.setInt(1, userID);
-			stmt.setInt(2, count);
-			stmt.setInt(3, offset);
-			try(ResultSet res=stmt.executeQuery()){
-				ArrayList<URI> ids=new ArrayList<>();
-				while(res.next()){
-					String apID=res.getString(2);
-					ids.add(apID==null ? Config.localURI("/users/"+res.getInt(1)) : URI.create(apID));
-				}
-				return ids;
-			}
-		}
 	}
 
 	public static int getUserFriendsCount(int userID) throws SQLException{
@@ -963,213 +896,9 @@ public class UserStorage{
 		removeFromCache(user);
 	}
 
-	public static int putOrUpdateForeignUser(ForeignUser user) throws SQLException{
-		if(user.isServiceActor)
-			throw new IllegalArgumentException("Can't store a service actor as a user");
-
-		String key=user.activityPubID.toString().toLowerCase();
-		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
-			foreignUserUpdateLocks.acquire(key);
-			int existingUserID=new SQLQueryBuilder(conn)
-					.selectFrom("users")
-					.columns("id")
-					.where("ap_id=?", Objects.toString(user.activityPubID))
-					.executeAndGetInt();
-			boolean isNew=existingUserID==-1;
-			SQLQueryBuilder bldr=new SQLQueryBuilder(conn);
-			if(!isNew){
-				bldr.update("users").where("id=?", existingUserID);
-			}else{
-				bldr.insertInto("users");
-			}
-
-			bldr.valueExpr("last_updated", "CURRENT_TIMESTAMP()")
-					.value("fname", user.firstName)
-					.value("lname", user.lastName)
-					.value("bdate", user.birthDate)
-					.value("username", user.username)
-					.value("domain", user.domain)
-					.value("public_key", user.publicKey.getEncoded())
-					.value("ap_url", Objects.toString(user.url, null))
-					.value("ap_inbox", Objects.toString(user.inbox, null))
-					.value("ap_shared_inbox", Objects.toString(user.sharedInbox, null))
-					.value("ap_id", user.activityPubID.toString())
-					.value("about", user.summary)
-					.value("gender", user.gender)
-					.value("avatar", user.icon!=null ? user.icon.getFirst().asActivityPubObject(new JsonObject(), new SerializerContext(null, (String)null)).toString() : null)
-					.value("profile_fields", user.serializeProfileFields())
-					.value("flags", user.flags)
-					.value("middle_name", user.middleName)
-					.value("maiden_name", user.maidenName)
-					.value("endpoints", user.serializeEndpoints())
-					.value("privacy", user.privacySettings!=null ? Utils.gson.toJson(user.privacySettings) : null)
-					.value("ban_info", user.banInfo!=null ? Utils.gson.toJson(user.banInfo) : null);
-
-			if(isNew){
-				bldr.value("num_followers", user.getRawFollowersCount())
-						.value("num_following", user.getRawFollowingCount())
-						.value("num_friends", user.getFriendsCount());
-				existingUserID=bldr.executeAndGetID();
-			}else{
-				bldr.valueExpr("num_followers", "GREATEST(?, (SELECT COUNT(*) FROM followings WHERE followee_id=?))", user.getRawFollowersCount(), existingUserID)
-						.valueExpr("num_following", "GREATEST(?, (SELECT COUNT(*) FROM followings WHERE follower_id=?))", user.getRawFollowingCount(), existingUserID)
-						.valueExpr("num_friends", "GREATEST(?, (SELECT COUNT(*) FROM followings WHERE followee_id=? AND mutual=1))", user.getFriendsCount(), existingUserID);
-				bldr.executeNoResult();
-
-				ResultSet res=new SQLQueryBuilder(conn)
-						.selectFrom("users")
-						.columns("num_followers", "num_following", "num_friends")
-						.where("id=?", existingUserID)
-						.execute();
-				try(res){
-					res.next();
-					user.setFollowersCount(res.getLong("num_followers"));
-					user.setFollowingCount(res.getLong("num_following"));
-					user.setFriendsCount(res.getLong("num_friends"));
-				}
-			}
-			user.id=existingUserID;
-			user.lastUpdated=Instant.now();
-			putIntoCache(user);
-
-			if(isNew){
-				new SQLQueryBuilder(conn)
-						.insertInto("qsearch_index")
-						.value("user_id", existingUserID)
-						.value("string", getQSearchStringForUser(user))
-						.executeNoResult();
-			}else{
-				updateQSearchIndex(user);
-			}
-
-			return existingUserID;
-		}catch(SQLIntegrityConstraintViolationException x){
-			// Rare case: user with a matching username@domain but a different AP ID already exists
-			try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
-				int oldID=new SQLQueryBuilder(conn)
-						.selectFrom("users")
-						.columns("id")
-						.where("username=? AND domain=? AND ap_id<>?", user.username, user.domain, user.activityPubID)
-						.executeAndGetInt();
-				if(oldID<=0){
-					LOG.warn("Didn't find an existing user with username {}@{} while trying to deduplicate {}", user.username, user.domain, user.activityPubID);
-					throw x;
-				}
-				LOG.info("Deduplicating user rows: username {}@{}, old local ID {}, new AP ID {}", user.username, user.domain, oldID, user.activityPubID);
-				// Assign a temporary random username to this existing user row to get it out of the way
-				new SQLQueryBuilder(conn)
-						.update("users")
-						.value("username", UUID.randomUUID().toString())
-						.where("id=?", oldID)
-						.executeNoResult();
-				// Try again
-				return putOrUpdateForeignUser(user);
-			}
-		}finally{
-			foreignUserUpdateLocks.release(key);
-		}
-	}
-
-	public static User getUserByActivityPubID(URI apID) throws SQLException{
-		if(Config.isLocal(apID)){
-			String[] components=apID.getPath().substring(1).split("/");
-			if(components.length<2)
-				return null;
-			if(!"users".equals(components[0]))
-				return null;
-			return getById(Utils.parseIntOrDefault(components[1], 0));
-		}
-		return getForeignUserByActivityPubID(apID);
-	}
-
-	public static ForeignUser getForeignUserByActivityPubID(URI apID) throws SQLException{
-		Integer id=cacheByActivityPubID.get(apID);
-		if(id!=null)
-			return getById(id) instanceof ForeignUser fu ? fu : null;
-		ForeignUser user=new SQLQueryBuilder()
-				.selectFrom("users")
-				.where("ap_id=?", apID)
-				.executeAndGetSingleObject(ForeignUser::fromResultSet);
-		if(user!=null){
-			cacheByActivityPubID.put(apID, user.id);
-			cache.put(user.id, user);
-			cacheByUsername.put(user.getFullUsername().toLowerCase(), user.id);
-		}
-		return user;
-	}
-
-	public static List<URI> getFollowerInboxes(int userID) throws SQLException{
-		return getFollowerInboxes(userID, Set.of());
-	}
-
-	public static List<URI> getFollowerInboxes(int userID, Set<Integer> except) throws SQLException{
-		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
-			String query="SELECT DISTINCT IFNULL(`ap_shared_inbox`, `ap_inbox`) FROM `users` WHERE `id` IN (SELECT `follower_id` FROM `followings` WHERE `followee_id`=?)";
-			if(except!=null && !except.isEmpty()){
-				query+=" AND `id` NOT IN ("+except.stream().map(Object::toString).collect(Collectors.joining(", "))+")";
-			}
-			PreparedStatement stmt=SQLQueryBuilder.prepareStatement(conn, query, userID);
-			return DatabaseUtils.resultSetToObjectStream(stmt.executeQuery(), r->{
-				String url=r.getString(1);
-				if(url==null)
-					return null;
-				return URI.create(url);
-			}, null).filter(Objects::nonNull).collect(Collectors.toList());
-		}
-	}
-
-	public static List<URI> getFriendInboxes(int userID, Set<Integer> except) throws SQLException{
-		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
-			String query="SELECT DISTINCT IFNULL(`ap_shared_inbox`, `ap_inbox`) FROM `users` WHERE `id` IN (SELECT `follower_id` FROM `followings` WHERE `followee_id`=? AND mutual=1)";
-			if(except!=null && !except.isEmpty()){
-				query+=" AND `id` NOT IN ("+except.stream().map(Object::toString).collect(Collectors.joining(", "))+")";
-			}
-			PreparedStatement stmt=SQLQueryBuilder.prepareStatement(conn, query, userID);
-			return DatabaseUtils.resultSetToObjectStream(stmt.executeQuery(), r->{
-				String url=r.getString(1);
-				if(url==null)
-					return null;
-				return URI.create(url);
-			}, null).filter(Objects::nonNull).collect(Collectors.toList());
-		}
-	}
-
-	public static List<URI> getUserFollowerURIs(int userID, boolean followers, int offset, int count, int[] total) throws SQLException{
-		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
-			String fld1=followers ? "follower_id" : "followee_id";
-			String fld2=followers ? "followee_id" : "follower_id";
-			if(total!=null){
-				total[0]=new SQLQueryBuilder(conn)
-						.selectFrom("followings")
-						.count()
-						.where(fld2+"=?", userID)
-						.executeAndGetInt();
-			}
-			if(count>0){
-				PreparedStatement stmt=conn.prepareStatement("SELECT `ap_id`,`id` FROM `followings` INNER JOIN `users` ON `users`.`id`=`"+fld1+"` WHERE `"+fld2+"`=? AND `accepted`=1 LIMIT ? OFFSET ?");
-				stmt.setInt(1, userID);
-				stmt.setInt(2, count);
-				stmt.setInt(3, offset);
-				ArrayList<URI> list=new ArrayList<>();
-				try(ResultSet res=stmt.executeQuery()){
-					while(res.next()){
-						String _u=res.getString(1);
-						if(_u==null){
-							list.add(Config.localURI("/users/"+res.getInt(2)));
-						}else{
-							list.add(URI.create(_u));
-						}
-					}
-				}
-				return list;
-			}
-			return Collections.emptyList();
-		}
-	}
-
 	public static List<FollowRelationship> getUserLocalFollowers(int userID) throws SQLException{
 		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
-			PreparedStatement stmt=SQLQueryBuilder.prepareStatement(conn, "SELECT followings.* FROM followings INNER JOIN `users` on `users`.id=follower_id WHERE followee_id=? AND accepted=1 AND `users`.ap_id IS NULL", userID);
+			PreparedStatement stmt=SQLQueryBuilder.prepareStatement(conn, "SELECT followings.* FROM followings INNER JOIN `users` on `users`.id=follower_id WHERE followee_id=? AND accepted=1", userID);
 			return DatabaseUtils.resultSetToObjectStream(stmt.executeQuery(), FollowRelationship::fromResultSet, null).toList();
 		}
 	}
@@ -1244,24 +973,6 @@ public class UserStorage{
 				.columns("user_id")
 				.whereIn("role", rolesToShow)
 				.executeAndGetIntList());
-	}
-
-	public static int getPeerDomainCount() throws SQLException{
-		return new SQLQueryBuilder()
-				.selectFrom("users")
-				.selectExpr("COUNT(DISTINCT domain)")
-				.executeAndGetInt()-1; // -1 for local domain (empty string)
-	}
-
-	public static List<String> getPeerDomains() throws SQLException{
-		return new SQLQueryBuilder()
-				.selectFrom("users")
-				.distinct()
-				.columns("domain")
-				.orderBy("domain asc")
-				.executeAsStream(r->r.getString(1))
-				.filter(s->s.length()>0)
-				.toList();
 	}
 
 	public static boolean isUserBlocked(int ownerID, int targetID) throws SQLException{
@@ -1345,50 +1056,14 @@ public class UserStorage{
 				.collect(Collectors.toSet());
 	}
 
-	public static boolean isDomainBlocked(int selfID, String domain) throws SQLException{
-		return new SQLQueryBuilder()
-				.selectFrom("blocks_user_domain")
-				.count()
-				.where("owner_id=? AND domain=?", selfID, domain)
-				.executeAndGetInt()==1;
-	}
-
-	public static List<String> getBlockedDomains(int selfID) throws SQLException{
-		return new SQLQueryBuilder()
-				.selectFrom("blocks_user_domain")
-				.columns("domain")
-				.where("owner_id=?", selfID)
-				.executeAsStream(r->r.getString(1))
-				.toList();
-	}
-
-	public static void blockDomain(int selfID, String domain) throws SQLException{
-		new SQLQueryBuilder()
-				.insertIgnoreInto("blocks_user_domain")
-				.value("owner_id", selfID)
-				.value("domain", domain)
-				.executeNoResult();
-	}
-
-	public static void unblockDomain(int selfID, String domain) throws SQLException{
-		new SQLQueryBuilder()
-				.deleteFrom("blocks_user_domain")
-				.where("owner_id=? AND domain=?", selfID, domain)
-				.executeNoResult();
-	}
-
 	private static void putIntoCache(User user){
 		cache.put(user.id, user);
 		cacheByUsername.put(user.getFullUsername().toLowerCase(), user.id);
-		if(user instanceof ForeignUser)
-			cacheByActivityPubID.put(user.activityPubID, user.id);
 	}
 
 	private static void removeFromCache(User user){
 		cache.remove(user.id);
 		cacheByUsername.remove(user.getFullUsername().toLowerCase());
-		if(user instanceof ForeignUser)
-			cacheByActivityPubID.remove(user.activityPubID);
 	}
 
 	static String getQSearchStringForUser(User user){
@@ -1407,10 +1082,6 @@ public class UserStorage{
 		}
 		sb.append(' ');
 		sb.append(user.username);
-		if(user.domain!=null){
-			sb.append(' ');
-			sb.append(user.domain);
-		}
 		return sb.toString();
 	}
 
@@ -1489,56 +1160,13 @@ public class UserStorage{
 		}
 	}
 
-	public static Map<URI, Integer> getFriendsByActivityPubIDs(Collection<URI> ids, int userID) throws SQLException{
-		if(ids.isEmpty())
-			return Map.of();
-		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
-			ArrayList<Integer> localIDs=new ArrayList<>();
-			ArrayList<String> remoteIDs=new ArrayList<>();
-			for(URI id: ids){
-				if(Config.isLocal(id)){
-					String path=id.getPath();
-					if(StringUtils.isEmpty(path))
-						continue;
-					String[] pathSegments=path.split("/");
-					if(pathSegments.length!=3 || !"users".equals(pathSegments[1])) // "", "users", id
-						continue;
-					int uid=Utils.safeParseInt(pathSegments[2]);
-					if(uid>0)
-						localIDs.add(uid);
-				}else{
-					remoteIDs.add(id.toString());
-				}
-			}
-			HashMap<Integer, URI> localIdToApIdMap=new HashMap<>();
-			if(!remoteIDs.isEmpty()){
-				try(ResultSet res=new SQLQueryBuilder(conn).selectFrom("users").columns("id", "ap_id").whereIn("ap_id", remoteIDs).execute()){
-					while(res.next()){
-						int localID=res.getInt(1);
-						localIDs.add(localID);
-						localIdToApIdMap.put(localID, URI.create(res.getString(2)));
-					}
-				}
-			}
-			if(localIDs.isEmpty())
-				return Map.of();
-			return new SQLQueryBuilder(conn)
-					.selectFrom("followings")
-					.columns("followee_id")
-					.whereIn("followee_id", localIDs)
-					.andWhere("mutual=1 AND accepted=1 AND follower_id=?", userID)
-					.executeAsStream(res->res.getInt(1))
-					.collect(Collectors.toMap(id->localIdToApIdMap.computeIfAbsent(id, UserStorage::localUserURI), Function.identity()));
-		}
-	}
-
 	private static URI localUserURI(int id){
 		return Config.localURI("/users/"+id);
 	}
 
 	public static int getLocalFollowersCount(int userID) throws SQLException{
 		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
-			PreparedStatement stmt=SQLQueryBuilder.prepareStatement(conn, "SELECT COUNT(*) FROM `followings` JOIN `users` ON `follower_id`=`users`.id WHERE followee_id=? AND accepted=1 AND `users`.domain=''", userID);
+			PreparedStatement stmt=SQLQueryBuilder.prepareStatement(conn, "SELECT COUNT(*) FROM `followings` JOIN `users` ON `follower_id`=`users`.id WHERE followee_id=? AND accepted=1", userID);
 			return DatabaseUtils.oneFieldToInt(stmt.executeQuery());
 		}
 	}
@@ -1550,59 +1178,6 @@ public class UserStorage{
 				.where("id=?", user.id)
 				.executeNoResult();
 		removeFromCache(user);
-	}
-
-	public static Set<Integer> getFriendIDsWithDomain(int userID, String domain) throws SQLException{
-		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
-			PreparedStatement stmt=SQLQueryBuilder.prepareStatement(conn, "SELECT id FROM followings JOIN `users` ON `followee_id`=`users`.id WHERE follower_id=? AND mutual=1 AND `users`.domain=?", userID, domain);
-			return DatabaseUtils.resultSetToObjectStream(stmt.executeQuery(), rs->rs.getInt(1), null).collect(Collectors.toSet());
-		}
-	}
-
-	public static int getCountOfFriendsOfFriendsWithDomain(int userID, String domain) throws SQLException{
-		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
-			PreparedStatement stmt=SQLQueryBuilder.prepareStatement(conn,
-					"SELECT COUNT(*) FROM followings JOIN `users` ON followings.follower_id=`users`.id WHERE followee_id IN (SELECT follower_id FROM followings WHERE followee_id=? AND mutual=1) AND mutual=1 AND `users`.domain=?",
-					userID, domain);
-			return DatabaseUtils.oneFieldToInt(stmt.executeQuery());
-		}
-	}
-
-	public static void deleteForeignUser(ForeignUser user) throws SQLException{
-		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
-			new SQLQueryBuilder(conn)
-					.update("users")
-					.valueExpr("num_following", "num_following-1")
-					.where("id IN (SELECT follower_id FROM followings WHERE followee_id=?)", user.id)
-					.executeNoResult();
-
-			new SQLQueryBuilder(conn)
-					.update("users")
-					.valueExpr("num_followers", "num_followers-1")
-					.where("id IN (SELECT followee_id FROM followings WHERE follower_id=?)", user.id)
-					.executeNoResult();
-
-			new SQLQueryBuilder(conn)
-					.update("users")
-					.valueExpr("num_friends", "num_friends-1")
-					.where("id IN (SELECT followee_id FROM followings WHERE follower_id=? AND mutual=1)", user.id)
-					.executeNoResult();
-
-			new SQLQueryBuilder(conn)
-					.deleteFrom("users")
-					.where("id=?", user.id)
-					.executeNoResult();
-			if(user.banInfo!=null){
-				new SQLQueryBuilder(conn)
-						.insertInto("deleted_user_bans")
-						.value("user_id", user.id)
-						.value("domain", user.domain)
-						.value("ban_status", user.banStatus)
-						.value("ban_info", Utils.gson.toJson(user.banInfo))
-						.executeNoResult();
-			}
-			removeFromCache(user);
-		}
 	}
 
 	public static void deleteAccount(Account account) throws SQLException{
@@ -1673,7 +1248,6 @@ public class UserStorage{
 				.selectFrom("users")
 				.columns("id")
 				.whereIn("ban_status", UserBanStatus.SELF_DEACTIVATED, UserBanStatus.SUSPENDED)
-				.andWhere("ap_id IS NULL")
 				.executeAndGetIntList());
 	}
 
@@ -1978,29 +1552,4 @@ public class UserStorage{
 		removeFromCache(user);
 	}
 
-	public static Set<URI> getRemoteUserApIDsDueForRefresh(Set<Integer> ids) throws SQLException{
-		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
-			// First, get AP IDs of all remote users that haven't been updated in over 24h
-			HashMap<Integer, URI> apIdsById=new SQLQueryBuilder(conn)
-					.selectFrom("users")
-					.columns("id", "ap_id")
-					.whereIn("id", ids)
-					.andWhere("ap_id IS NOT NULL AND last_updated<DATE_SUB(CURRENT_TIMESTAMP(), INTERVAL ? SECOND)", ForeignActor.UPDATE_INTERVAL_SECONDS)
-					.executeAsStream(r->new Pair<>(r.getInt("id"), URI.create(r.getString("ap_id"))))
-					.collect(Collectors.toMap(Pair::first, Pair::second, (a, b)->b, HashMap::new));
-			if(apIdsById.isEmpty())
-				return Set.of();
-			// Next, only keep those that have no local followers
-			new SQLQueryBuilder(conn)
-					.selectFrom("followings")
-					.distinct()
-					.columns("followee_id")
-					.join("JOIN users ON follower_id=users.id")
-					.whereIn("followee_id", apIdsById.keySet())
-					.andWhere("users.ap_id IS NULL")
-					.executeAsStream(r->r.getInt(1))
-					.forEach(apIdsById::remove);
-			return apIdsById.isEmpty() ? Set.of() : new HashSet<>(apIdsById.values());
-		}
-	}
 }

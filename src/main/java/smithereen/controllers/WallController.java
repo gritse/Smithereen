@@ -28,20 +28,15 @@ import java.util.stream.Stream;
 import smithereen.ApplicationContext;
 import smithereen.Config;
 import smithereen.LruCache;
-import smithereen.activitypub.ActivityPub;
 import smithereen.activitypub.objects.ActivityPubObject;
 import smithereen.activitypub.objects.Actor;
-import smithereen.activitypub.objects.ForeignActor;
 import smithereen.activitypub.objects.LocalImage;
-import smithereen.activitypub.objects.Mention;
-import smithereen.activitypub.objects.NoteOrQuestion;
 import smithereen.exceptions.BadRequestException;
 import smithereen.exceptions.InternalServerErrorException;
 import smithereen.exceptions.ObjectNotFoundException;
 import smithereen.exceptions.UserActionNotAllowedException;
 import smithereen.exceptions.UserErrorException;
 import smithereen.model.CommentViewType;
-import smithereen.model.ForeignUser;
 import smithereen.model.Group;
 import smithereen.model.OwnedContentObject;
 import smithereen.model.OwnerAndAuthor;
@@ -89,26 +84,6 @@ public class WallController{
 
 	public WallController(ApplicationContext context){
 		this.context=context;
-	}
-
-	public void loadAndPreprocessRemotePostMentions(PostLikeObject post, NoteOrQuestion apSource){
-		if(apSource.tag!=null){
-			HashMap<Integer, User> mentionedUsers=new HashMap<>();
-			for(ActivityPubObject tag:apSource.tag){
-				if(tag instanceof Mention mention){
-					URI uri=mention.href;
-					try{
-						User mentionedUser=context.getObjectLinkResolver().resolve(uri, User.class, true, true, false);
-						mentionedUsers.put(mentionedUser.id, mentionedUser);
-					}catch(Exception x){
-						LOG.debug("Error resolving mention for URI {}", uri, x);
-					}
-				}
-			}
-			if(!mentionedUsers.isEmpty() && StringUtils.isNotEmpty(post.text)){
-				post.text=TextProcessor.preprocessRemotePostMentions(post.text, mentionedUsers);
-			}
-		}
 	}
 
 	/**
@@ -166,13 +141,7 @@ public class WallController{
 			if(StringUtils.isBlank(textSource) && attachmentIDs.isEmpty() && poll==null && repost==null)
 				throw new BadRequestException("Empty post");
 
-			if(!wallOwner.hasWall() && inReplyTo==null)
-				throw new BadRequestException("This actor doesn't support wall posts");
-
 			if(inReplyTo!=null){
-				if(inReplyTo.isMastodonStyleRepost()){
-					inReplyTo=getPostOrThrow(inReplyTo.repostOf);
-				}
 				context.getPrivacyController().enforcePostPrivacy(author, inReplyTo);
 			}
 			if(inReplyTo!=null || wallOwner.getLocalID()!=author.id)
@@ -181,7 +150,7 @@ public class WallController{
 			User repostAuthor=null;
 			if(repost!=null){
 				// If we're reposting a repost, use the original post if it's an Announce or there's no comment
-				if(repost.isMastodonStyleRepost() || (repost.repostOf!=0 && TextProcessor.stripHTML(repost.text, false).trim().isEmpty() && (repost.attachments==null || repost.attachments.isEmpty()) && repost.poll==null)){
+				if((repost.repostOf!=0 && TextProcessor.stripHTML(repost.text, false).trim().isEmpty() && (repost.attachments==null || repost.attachments.isEmpty()) && repost.poll==null)){
 					repost=getPostOrThrow(repost.repostOf);
 				}
 				// Can't repost wall posts
@@ -326,24 +295,7 @@ public class WallController{
 				}
 			}
 
-			// Add{Note} is sent for any wall posts & comments on them, for local wall owners.
-			// Create{Note} is sent for anything else.
-			if(isTopLevelPostOwn || wallOwner instanceof ForeignActor){
-				context.getActivityPubWorker().sendCreatePostActivity(post);
-			}else{
-				context.getActivityPubWorker().sendAddPostToWallActivity(post);
-			}
 			context.getNotificationsController().createNotificationsForObject(post);
-
-			if(repost!=null && repostAuthor instanceof ForeignUser foreignRepostAuthor && repost.flags.contains(Post.Flag.HAS_QUOTE_POLICY)){
-				boolean needSendQuoteRequest=true;
-				if(repost.flags.contains(Post.Flag.HAS_FOLLOWERS_QUOTE_POLICY)){
-					FriendshipStatus fs=context.getFriendsController().getSimpleFriendshipStatus(author, repostAuthor);
-					needSendQuoteRequest=fs==FriendshipStatus.FOLLOWING || fs==FriendshipStatus.FRIENDS;
-				}
-				if(needSendQuoteRequest)
-					context.getActivityPubWorker().sendQuoteRequest(author, post, repost, foreignRepostAuthor);
-			}
 
 			if(StringUtils.isNotEmpty(guid)){
 				synchronized(guids){
@@ -375,13 +327,12 @@ public class WallController{
 							mentionedUsers.add(user);
 						return user;
 					}
-					User user=UserStorage.getByUsername(username+"@"+domain);
-					if(user!=null){
-						mentionedUsers.add(user);
+					if(domain.equalsIgnoreCase(Config.domain)){
+						User user=UserStorage.getByUsername(username);
+						if(user!=null)
+							mentionedUsers.add(user);
 						return user;
 					}
-					URI uri=ActivityPub.resolveUsername(username, domain);
-					return context.getObjectLinkResolver().resolve(uri, User.class, true, true, false);
 				}catch(Exception x){
 					LOG.warn("Can't resolve {}@{}", username, domain, x);
 				}
@@ -399,8 +350,8 @@ public class WallController{
 						}
 						return resolveMention(u.getSchemeSpecificPart(), null);
 					}
-					User user=UserStorage.getUserByActivityPubID(u);
-					if(user!=null){
+					if(Config.isLocal(u)){
+						User user=context.getObjectLinkResolver().resolveLocally(u, User.class);
 						mentionedUsers.add(user);
 						return user;
 					}
@@ -461,21 +412,7 @@ public class WallController{
 	@NotNull
 	public Post getLocalPostOrThrow(int id){
 		Post post=getPostOrThrow(id);
-		if(!post.isLocal())
-			throw new ObjectNotFoundException("err_post_not_found");
 		return post;
-	}
-
-	@NotNull
-	public Post getPostOrThrow(URI apID){
-		try{
-			Post post=PostStorage.getPostByID(apID);
-			if(post==null)
-				throw new ObjectNotFoundException();
-			return post;
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
 	}
 
 	@NotNull
@@ -552,7 +489,6 @@ public class WallController{
 			}
 
 			post=getPostOrThrow(id);
-			context.getActivityPubWorker().sendUpdatePostActivity(post);
 			return post;
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
@@ -666,23 +602,18 @@ public class WallController{
 			HashSet<Integer> postIDs=new HashSet<>();
 			for(PostViewModel p:posts){
 				postIDs.add(p.post.getIDForInteractions());
-				if(p.repost!=null && !p.post.isMastodonStyleRepost()){
+				if(p.repost!=null){
 					p.collectRepostIDs(postIDs);
 				}
 			}
 			Set<Integer> ownerUserIDs=new HashSet<>(), ownerGroupIDs=new HashSet<>();
 			for(PostViewModel p:posts){
 				p.getAllReplyIDs(postIDs);
-				if(!p.post.isMastodonStyleRepost()){
-					if(p.post.ownerID>0)
-						ownerUserIDs.add(p.post.ownerID);
-					else if(p.post.ownerID<0)
-						ownerGroupIDs.add(-p.post.ownerID);
-				}else if(p.repost!=null && p.repost.post()!=null){
-					Post repost=p.repost.post().post;
-					if(repost.ownerID>0)
-						ownerUserIDs.add(repost.ownerID);
-				}
+				if(p.post.ownerID>0)
+					ownerUserIDs.add(p.post.ownerID);
+				else if(p.post.ownerID<0)
+					ownerGroupIDs.add(-p.post.ownerID);
+
 			}
 			Map<Integer, Boolean> canComment=context.getUsersController().getUsers(ownerUserIDs)
 					.entrySet()
@@ -718,18 +649,11 @@ public class WallController{
 			for(PostViewModel post:allPosts){
 				UserInteractions ui=interactions.get(post.post.getIDForInteractions());
 				int ownerID;
-				if(post.post.isMastodonStyleRepost()){
-					if(post.repost!=null && post.repost.post()!=null){
-						ownerID=post.repost.post().post.ownerID;
-					}else{
-						ownerID=0;
-					}
-				}else{
-					ownerID=post.post.ownerID;
-				}
+				ownerID=post.post.ownerID;
+
 
 				// Can't comment on posts or in threads that don't exist
-				if(post.post.isMastodonStyleRepost() && post.repost!=null && (post.repost.post()==null || (post.repost.post().post.getReplyLevel()>0 && post.repost.topLevel()==null)))
+				if(false && post.repost!=null && (post.repost.post()==null || (post.repost.post().post.getReplyLevel()>0 && post.repost.topLevel()==null)))
 					ui.canComment=false;
 				else
 					ui.canComment=canComment.getOrDefault(ownerID, true);
@@ -762,26 +686,15 @@ public class WallController{
 	public void sendUpdateQuestionIfNeeded(Post post){
 		if(post.poll==null)
 			throw new IllegalArgumentException("Post must have a poll");
-		if(!post.isLocal())
-			return;
 
 		if(post.poll.lastVoteTime.until(Instant.now(), ChronoUnit.MINUTES)>=5){
 			BackgroundTaskRunner.getInstance().submitDelayed(()->{
 				try{
 					// Get post again so the poll inside is up-to-date.
-					context.getActivityPubWorker().sendUpdatePostActivity(getPostOrThrow(post.id));
 				}catch(Exception x){
 				  LOG.warn("Error sending Update{Question}", x);
 				}
 			}, 5, TimeUnit.MINUTES);
-		}
-	}
-
-	public Map<URI, Integer> getPostLocalIDsByActivityPubIDs(@NotNull Collection<URI> ids, Actor owner, boolean comments){
-		try{
-			return PostStorage.getPostLocalIDsByActivityPubIDs(ids, owner instanceof User u ? u.id : 0, owner instanceof Group g ? g.id : 0, comments);
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
 		}
 	}
 
@@ -929,14 +842,10 @@ public class WallController{
 			}
 			User deleteActor=self;
 			// if the current user is a moderator, and the post isn't made or owned by them, send the deletion as if the author deleted the post themselves
-			if(ignorePermissions && post.authorID!=self.id && !post.isGroupOwner() && post.ownerID!=self.id && !(oaa.author() instanceof ForeignUser)){
+			if(ignorePermissions && post.authorID!=self.id && !post.isGroupOwner() && post.ownerID!=self.id){
 				deleteActor=oaa.author();
 			}
-			if(oaa.author()!=null && Config.isLocal(post.getActivityPubID())){
-				context.getActivityPubWorker().sendDeletePostActivity(post, deleteActor);
-			}
-
-			if(post.isLocal() && post.attachments!=null){
+			if(post.attachments!=null){
 				MediaStorage.deleteMediaFileReferences(post.id, MediaFileReferenceType.WALL_ATTACHMENT);
 			}
 		}catch(SQLException x){
@@ -963,10 +872,8 @@ public class WallController{
 				context.getNewsfeedController().clearFriendsFeedCache();
 			}
 
-			if(post.isLocal()){
-				post=getPostOrThrow(post.id);
-				context.getActivityPubWorker().sendUpdatePostActivity(post);
-			}
+			post=getPostOrThrow(post.id);
+
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -992,15 +899,6 @@ public class WallController{
 			author=null;
 		}
 		return new OwnerAndAuthor(owner, author);
-	}
-
-	public int getPostIDByActivityPubID(URI id){
-		try{
-			int lid=PostStorage.getLocalIDByActivityPubID(id);
-			return Math.max(lid, 0);
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
 	}
 
 	public void populateReposts(User self, Collection<PostViewModel> posts, int maxDepth){
@@ -1078,16 +976,6 @@ public class WallController{
 		}
 	}
 
-	public void setPostQuoteAuthorization(Post post, URI quoteAuth){
-		try{
-			post.mastodonQuoteAuth=quoteAuth;
-			PostStorage.updateWallPostExtraFields(post.id, post.serializeExtraFields());
-			context.getActivityPubWorker().sendUpdatePostActivity(post);
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
 	public int getLocalPostCount(boolean comments){
 		try{
 			return PostStorage.getLocalPostCount(comments);
@@ -1144,17 +1032,14 @@ public class WallController{
 	public void pinPost(Post post, boolean keepPrevious){
 		try{
 			User author=context.getUsersController().getUserOrThrow(post.authorID);
-			if(!keepPrevious && !(author instanceof ForeignUser)){
+			if(!keepPrevious){
 				List<Post> currentPosts=getPinnedPosts(author, author);
 				for(Post oldPost:currentPosts){
-					context.getActivityPubWorker().sendUnpinPostActivity(author, oldPost);
 				}
 			}
 			PostStorage.pinPost(post.authorID, post.id, keepPrevious);
 			pinnedPostIDsCache.remove(author.id);
-			if(!(author instanceof ForeignUser)){
-				context.getActivityPubWorker().sendPinPostActivity(author, post);
-			}
+
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -1165,9 +1050,7 @@ public class WallController{
 			PostStorage.unpinPost(post.authorID, post.id);
 			User author=context.getUsersController().getUserOrThrow(post.authorID);
 			pinnedPostIDsCache.remove(author.id);
-			if(!(author instanceof ForeignUser)){
-				context.getActivityPubWorker().sendUnpinPostActivity(author, post);
-			}
+
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -1186,7 +1069,7 @@ public class WallController{
 
 	public Poll getPollByID(int id){
 		try{
-			Poll poll=PostStorage.getPoll(id, null);
+			Poll poll=PostStorage.getPoll(id);
 			if(poll==null)
 				throw new ObjectNotFoundException();
 			return poll;
@@ -1243,7 +1126,6 @@ public class WallController{
 			for(PollOption opt:options)
 				opt.numVotes++;
 
-			context.getActivityPubWorker().sendPollVotes(self, poll, owner, options, voteIDs);
 
 			post.poll=poll; // So the last vote time is as it was before the vote
 			sendUpdateQuestionIfNeeded(post);

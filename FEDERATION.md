@@ -1,1 +1,0 @@
-ActivityPub extensions introduced by Smithereen are described [on the developer documentation website](https://smithereen.software/docs/federation).

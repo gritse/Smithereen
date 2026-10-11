@@ -60,7 +60,7 @@ public class ApiWallPost{
 		ownerId=p.ownerID;
 		fromId=p.authorID;
 		apId=p.getActivityPubID().toString();
-		url=p.getActivityPubURL().toString();
+		url=p.getActivityPubID().toString();
 		date=p.createdAt.getEpochSecond();
 		text=p.text;
 		privacy=switch(p.privacy){
@@ -110,7 +110,6 @@ public class ApiWallPost{
 		}
 
 		if(p.getReplyLevel()==0){
-			isMastodonStyleRepost=p.isMastodonStyleRepost();
 			if(post.repost!=null && fillReposts){
 				repostHistory=new ArrayList<>();
 				fillReposts(post.repost, actx, interactions, pinnedIDs, photos, apps, new HashSet<>());

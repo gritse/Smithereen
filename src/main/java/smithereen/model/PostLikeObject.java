@@ -12,8 +12,6 @@ import java.util.List;
 import java.util.Set;
 
 import smithereen.Utils;
-import smithereen.activitypub.ParserContext;
-import smithereen.activitypub.SerializerContext;
 import smithereen.activitypub.objects.ActivityPubObject;
 import smithereen.model.comments.Comment;
 import smithereen.storage.DatabaseUtils;
@@ -31,11 +29,7 @@ public abstract sealed class PostLikeObject implements OwnedContentObject, Attac
 	public Instant updatedAt;
 	public Set<Integer> mentionedUserIDs=Set.of();
 	public int replyCount, immediateReplyCount;
-	public FederationState federationState=FederationState.NONE;
-	public URI activityPubURL;
-	public URI activityPubReplies;
 	public boolean deleted;
-	protected URI activityPubID;
 
 	protected void fillFromResultSet(ResultSet res) throws SQLException{
 		ownerID=res.getInt("owner_user_id");
@@ -55,24 +49,14 @@ public abstract sealed class PostLikeObject implements OwnedContentObject, Attac
 		String att=res.getString("attachments");
 		if(att!=null){
 			try{
-				attachments=ActivityPubObject.parseSingleObjectOrArray(JsonParser.parseString(att), ParserContext.LOCAL);
+				attachments=ActivityPubObject.parseSingleObjectOrArray(JsonParser.parseString(att));
 			}catch(Exception ignore){}
 		}
 
-		String id=res.getString("ap_id");
-		if(id!=null)
-			setActivityPubID(URI.create(id));
-		String url=res.getString("ap_url");
-		if(url!=null)
-			activityPubURL=URI.create(url);
 		createdAt=DatabaseUtils.getInstant(res, "created_at");
 		contentWarning=res.getString("content_warning");
 		updatedAt=DatabaseUtils.getInstant(res, "updated_at");
 		mentionedUserIDs=Utils.deserializeIntSet(res.getBytes("mentions"));
-		String replies=res.getString("ap_replies");
-		if(replies!=null)
-			activityPubReplies=URI.create(replies);
-		federationState=FederationState.values()[res.getInt("federation_state")];
 	}
 
 	public boolean hasContentWarning(){
@@ -92,14 +76,10 @@ public abstract sealed class PostLikeObject implements OwnedContentObject, Attac
 	public String serializeAttachments(){
 		if(attachments==null)
 			return null;
-		return ActivityPubObject.serializeObjectArrayCompact(attachments, new SerializerContext(null, (String)null)).toString();
+		return ActivityPubObject.serializeObjectArrayCompact(attachments).toString();
 	}
 
 	public abstract URI getInternalURL();
-
-	public boolean isLocal(){
-		return activityPubID==null;
-	}
 
 	public String getShortTitle(){
 		return getShortTitle(100);
@@ -142,13 +122,6 @@ public abstract sealed class PostLikeObject implements OwnedContentObject, Attac
 	public void setAttachments(@NotNull List<ActivityPubObject> attachments){
 		this.attachments=attachments;
 	}
-
-	public void setActivityPubID(URI activityPubID){
-		this.activityPubID=activityPubID;
-	}
-
-	@Override
-	public abstract NonCachedRemoteImage.Args getPhotoArgs(int index);
 
 	@Override
 	public abstract String getPhotoListID();

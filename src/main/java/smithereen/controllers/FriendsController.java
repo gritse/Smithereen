@@ -26,7 +26,6 @@ import smithereen.exceptions.InternalServerErrorException;
 import smithereen.exceptions.ObjectNotFoundException;
 import smithereen.exceptions.UserActionNotAllowedException;
 import smithereen.exceptions.UserErrorException;
-import smithereen.model.ForeignUser;
 import smithereen.model.PaginatedList;
 import smithereen.model.User;
 import smithereen.model.feed.NewsfeedEntry;
@@ -213,14 +212,6 @@ public class FriendsController{
 		}
 	}
 
-	public Map<URI, Integer> getFriendsByActivityPubIDs(@NotNull User user, Collection<URI> query){
-		try{
-			return UserStorage.getFriendsByActivityPubIDs(query, user.id);
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
 	public void storeFriendship(@NotNull User user1, @NotNull User user2, boolean updateNumbers){
 		try{
 			if(UserStorage.getFriendshipStatus(user1.id, user2.id)==FriendshipStatus.FRIENDS)
@@ -237,28 +228,19 @@ public class FriendsController{
 			if(user.id==self.id){
 				throw new UserErrorException("err_cant_friend_self");
 			}
-			if(Config.demoMode && user instanceof ForeignUser)
-				throw new UserActionNotAllowedException("err_unavailable_in_demo_mode");
 			Utils.ensureUserNotBlocked(self, user);
 			Utils.ensureUserNotBlocked(user, self);
 			FriendshipStatus status=getFriendshipStatus(self, user);
 			switch(status){
 				case NONE, FOLLOWED_BY -> {
 					if(status==FriendshipStatus.NONE && user.supportsFriendRequests()){
-						UserStorage.putFriendRequest(self.id, user.id, message, !(user instanceof ForeignUser));
-						if(user instanceof ForeignUser fu){
-							ctx.getActivityPubWorker().sendFriendRequestActivity(self, fu, message, UserStorage.getFollowRelationship(self.id, user.id));
-						}else{
-							ctx.getNotificationsController().sendRealtimeNotifications(user, "friendReq"+self.id+"_"+Utils.randomAlphanumericString(5), RealtimeNotification.Type.FRIEND_REQUEST, null, null, self);
-						}
+						UserStorage.putFriendRequest(self.id, user.id, message, true);
+						ctx.getNotificationsController().sendRealtimeNotifications(user, "friendReq"+self.id+"_"+Utils.randomAlphanumericString(5), RealtimeNotification.Type.FRIEND_REQUEST, null, null, self);
+
 					}else{
-						UserStorage.followUser(self.id, user.id, !(user instanceof ForeignUser), false, true);
-						if(user instanceof ForeignUser fu){
-							ctx.getActivityPubWorker().sendFollowUserActivity(self, fu, UserStorage.getFollowRelationship(self.id, user.id));
-						}else{
-							ctx.getNotificationsController().createNotification(user, Notification.Type.FOLLOW, null, null, self);
-							ctx.getActivityPubWorker().sendAddToFriendsCollectionActivity(self, user, UserStorage.getFollowRelationship(self.id, user.id));
-						}
+						UserStorage.followUser(self.id, user.id, true, false, true);
+						ctx.getNotificationsController().createNotification(user, Notification.Type.FOLLOW, null, null, self);
+
 					}
 				}
 				case FRIENDS -> throw new UserErrorException("err_already_friends");
@@ -275,21 +257,15 @@ public class FriendsController{
 			if(user.id==self.id){
 				throw new UserErrorException("err_cant_friend_self");
 			}
-			if(Config.demoMode && user instanceof ForeignUser)
-				throw new UserActionNotAllowedException("err_unavailable_in_demo_mode");
 			Utils.ensureUserNotBlocked(self, user);
 			Utils.ensureUserNotBlocked(user, self);
 			FriendshipStatus status=getFriendshipStatus(self, user);
 			switch(status){
 				case NONE, FOLLOWED_BY, REQUEST_RECVD -> {
-					UserStorage.followUser(self.id, user.id, !(user instanceof ForeignUser), false, true);
-					if(user instanceof ForeignUser fu){
-						ctx.getActivityPubWorker().sendFollowUserActivity(self, fu, UserStorage.getFollowRelationship(self.id, user.id));
-					}else{
-						ctx.getNotificationsController().createNotification(user, Notification.Type.FOLLOW, null, null, self);
-						ctx.getNewsfeedController().putFriendsFeedEntry(self, user.id, NewsfeedEntry.Type.ADD_FRIEND);
-						ctx.getActivityPubWorker().sendAddToFriendsCollectionActivity(self, user, UserStorage.getFollowRelationship(self.id, user.id));
-					}
+					UserStorage.followUser(self.id, user.id, true, false, true);
+					ctx.getNotificationsController().createNotification(user, Notification.Type.FOLLOW, null, null, self);
+					ctx.getNewsfeedController().putFriendsFeedEntry(self, user.id, NewsfeedEntry.Type.ADD_FRIEND);
+
 				}
 				case FRIENDS -> throw new UserErrorException("err_already_friends");
 				case FOLLOWING, REQUEST_SENT, FOLLOW_REQUESTED -> throw new UserErrorException("err_friend_req_already_sent");
@@ -301,17 +277,11 @@ public class FriendsController{
 
 	public void acceptFriendRequest(User self, User user){
 		try{
-			if(user instanceof ForeignUser fu){
-				if(!UserStorage.acceptFriendRequest(self.id, user.id, false))
-					return;
-				ctx.getActivityPubWorker().sendFollowUserActivity(self, fu, UserStorage.getFollowRelationship(self.id, user.id));
-			}else{
-				if(!UserStorage.acceptFriendRequest(self.id, user.id, true))
-					return;
-				ctx.getNotificationsController().createNotification(user, Notification.Type.FRIEND_REQ_ACCEPT, null, null, self);
-				ctx.getActivityPubWorker().sendAddToFriendsCollectionActivity(self, user, UserStorage.getFollowRelationship(self.id, user.id));
-				ctx.getNewsfeedController().putFriendsFeedEntry(user, self.id, NewsfeedEntry.Type.ADD_FRIEND);
-			}
+			if(!UserStorage.acceptFriendRequest(self.id, user.id, true))
+				return;
+			ctx.getNotificationsController().createNotification(user, Notification.Type.FRIEND_REQ_ACCEPT, null, null, self);
+			ctx.getNewsfeedController().putFriendsFeedEntry(user, self.id, NewsfeedEntry.Type.ADD_FRIEND);
+
 			ctx.getNewsfeedController().putFriendsFeedEntry(self, user.id, NewsfeedEntry.Type.ADD_FRIEND);
 			ctx.getNotificationsController().sendRealtimeCountersUpdates(self);
 		}catch(SQLException x){
@@ -322,9 +292,6 @@ public class FriendsController{
 	public void rejectFriendRequest(User self, User user){
 		try{
 			UserStorage.deleteFriendRequest(self.id, user.id);
-			if(user instanceof ForeignUser fu){
-				ctx.getActivityPubWorker().sendRejectFriendRequestActivity(self, fu);
-			}
 			ctx.getNotificationsController().sendRealtimeCountersUpdates(self);
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
@@ -336,23 +303,17 @@ public class FriendsController{
 			FriendshipStatus status=UserStorage.getFriendshipStatus(self.id, user.id);
 			Set<Integer> user1Lists=Set.of(), user2Lists=Set.of();
 			if(status==FriendshipStatus.FRIENDS){
-				if(!(self instanceof ForeignUser)){
-					user1Lists=getFriendListIDsForUser(self, user);
-				}
-				if(!(user instanceof ForeignUser)){
-					user2Lists=getFriendListIDsForUser(user, self);
-				}
+				user1Lists=getFriendListIDsForUser(self, user);
+
+				user2Lists=getFriendListIDsForUser(user, self);
+
 			}
 			FollowRelationship relationship=UserStorage.getFollowRelationship(self.id, user.id);
 			UserStorage.blockUser(self.id, user.id);
-			if(user instanceof ForeignUser fu)
-				ctx.getActivityPubWorker().sendBlockActivity(self, fu);
 			if(status==FriendshipStatus.FRIENDS){
-				ctx.getActivityPubWorker().sendRemoveFromFriendsCollectionActivity(self, user, relationship);
 				ctx.getNewsfeedController().deleteFriendsFeedEntry(self, user.id, NewsfeedEntry.Type.ADD_FRIEND);
-				if(!(user instanceof ForeignUser)){
-					ctx.getNewsfeedController().deleteFriendsFeedEntry(user, self.id, NewsfeedEntry.Type.ADD_FRIEND);
-				}
+				ctx.getNewsfeedController().deleteFriendsFeedEntry(user, self.id, NewsfeedEntry.Type.ADD_FRIEND);
+
 				if(!user1Lists.isEmpty())
 					ctx.getPrivacyController().updatePrivacySettingsAffectedByFriendListChanges(self, user1Lists);
 				if(!user2Lists.isEmpty())
@@ -366,8 +327,6 @@ public class FriendsController{
 	public void unblockUser(User self, User user){
 		try{
 			UserStorage.unblockUser(self.id, user.id);
-			if(user instanceof ForeignUser fu)
-				ctx.getActivityPubWorker().sendUndoBlockActivity(self, fu);
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -381,24 +340,17 @@ public class FriendsController{
 			}
 			Set<Integer> user1Lists=Set.of(), user2Lists=Set.of();
 			if(status==FriendshipStatus.FRIENDS){
-				if(!(self instanceof ForeignUser)){
-					user1Lists=getFriendListIDsForUser(self, user);
-				}
-				if(!(user instanceof ForeignUser)){
-					user2Lists=getFriendListIDsForUser(user, self);
-				}
+				user1Lists=getFriendListIDsForUser(self, user);
+
+				user2Lists=getFriendListIDsForUser(user, self);
+
 			}
 			FollowRelationship relationship=UserStorage.getFollowRelationship(self.id, user.id);
 			UserStorage.unfriendUser(self.id, user.id);
-			if(user instanceof ForeignUser){
-				ctx.getActivityPubWorker().sendUnfriendActivity(self, user, relationship);
-			}
 			if(status==FriendshipStatus.FRIENDS){
-				ctx.getActivityPubWorker().sendRemoveFromFriendsCollectionActivity(self, user, relationship);
 				ctx.getNewsfeedController().deleteFriendsFeedEntry(self, user.id, NewsfeedEntry.Type.ADD_FRIEND);
-				if(!(user instanceof ForeignUser)){
-					ctx.getNewsfeedController().deleteFriendsFeedEntry(user, self.id, NewsfeedEntry.Type.ADD_FRIEND);
-				}
+				ctx.getNewsfeedController().deleteFriendsFeedEntry(user, self.id, NewsfeedEntry.Type.ADD_FRIEND);
+
 				if(!user1Lists.isEmpty())
 					ctx.getPrivacyController().updatePrivacySettingsAffectedByFriendListChanges(self, user1Lists);
 				if(!user2Lists.isEmpty())

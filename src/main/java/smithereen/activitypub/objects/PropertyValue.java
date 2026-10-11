@@ -2,9 +2,6 @@ package smithereen.activitypub.objects;
 
 import com.google.gson.JsonObject;
 
-import smithereen.activitypub.SerializerContext;
-import smithereen.activitypub.ParserContext;
-import smithereen.jsonld.JLD;
 import smithereen.text.TextProcessor;
 
 public class PropertyValue extends ActivityPubObject{
@@ -25,8 +22,8 @@ public class PropertyValue extends ActivityPubObject{
 	}
 
 	@Override
-	protected ActivityPubObject parseActivityPubObject(JsonObject obj, ParserContext parserContext){
-		super.parseActivityPubObject(obj, parserContext);
+	protected ActivityPubObject parseActivityPubObject(JsonObject obj){
+		super.parseActivityPubObject(obj);
 		if(obj.has("value"))
 			value=TextProcessor.sanitizeHTML(obj.get("value").getAsString());
 		else
@@ -35,11 +32,9 @@ public class PropertyValue extends ActivityPubObject{
 	}
 
 	@Override
-	public JsonObject asActivityPubObject(JsonObject obj, SerializerContext serializerContext){
-		obj=super.asActivityPubObject(obj, serializerContext);
+	public JsonObject asActivityPubObject(JsonObject obj){
+		obj=super.asActivityPubObject(obj);
 		obj.addProperty("value", value);
-		serializerContext.addAlias("value", JLD.SCHEMA_ORG+"value");
-		serializerContext.addAlias("PropertyValue", JLD.SCHEMA_ORG+"PropertyValue");
 		return obj;
 	}
 }

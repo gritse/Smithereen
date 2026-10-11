@@ -44,7 +44,6 @@ import smithereen.storage.sql.DatabaseConnection;
 import smithereen.storage.sql.DatabaseConnectionManager;
 import smithereen.storage.sql.SQLQueryBuilder;
 import smithereen.util.CryptoUtils;
-import smithereen.util.PublicSuffixList;
 import smithereen.util.TopLevelDomainList;
 import spark.utils.StringUtils;
 
@@ -61,17 +60,12 @@ public class Config{
 	public static int serverPort;
 
 	public static File uploadPath;
-	public static File mediaCachePath;
-	public static long mediaCacheMaxSize;
-	public static long mediaCacheFileSizeLimit;
 	public static boolean useHTTP;
 	public static String staticFilesPath;
 	public static String uploadUrlPath;
-	public static String mediaCacheUrlPath;
 	public static final boolean DEBUG=System.getProperty("smithereen.debug")!=null || System.getenv("SMITHEREEN_DEBUG")!=null;
 
 	public static String imgproxyLocalUploads;
-	public static String imgproxyLocalMediaCache;
 	public static String imgproxyUrl;
 	public static byte[] imgproxyKey;
 	public static byte[] imgproxySalt;
@@ -105,8 +99,6 @@ public class Config{
 	public static String smtpPassword;
 	public static boolean smtpUseTLS;
 
-	public static PrivateKey serviceActorPrivateKey;
-	public static PublicKey serviceActorPublicKey;
 	public static byte[] objectIdObfuscationKey;
 	public static int[][] objectIdObfuscationKeysByType=new int[ObfuscatedObjectIDType.values().length][];
 	public static byte[] emailUnsubscribeKey;
@@ -133,11 +125,7 @@ public class Config{
 		domain=props.getProperty("domain");
 
 		uploadPath=new File(props.getProperty("upload.path"));
-		mediaCachePath=new File(props.getProperty("media_cache.path"));
-		mediaCacheMaxSize=Utils.parseFileSize(props.getProperty("media_cache.max_size"));
-		mediaCacheFileSizeLimit=Utils.parseFileSize(props.getProperty("media_cache.file_size_limit"));
 		uploadUrlPath=props.getProperty("upload.url_path");
-		mediaCacheUrlPath=props.getProperty("media_cache.url_path");
 
 		useHTTP=Boolean.parseBoolean(props.getProperty("use_http_scheme.i_know_what_i_am_doing", "false"));
 		localURI=URI.create("http"+(useHTTP ? "" : "s")+"://"+domain+"/");
@@ -148,7 +136,6 @@ public class Config{
 
 		imgproxyUrl=props.getProperty("imgproxy.url_prefix");
 		imgproxyLocalUploads=props.getProperty("imgproxy.local_uploads");
-		imgproxyLocalMediaCache=props.getProperty("imgproxy.local_media_cache");
 		String imgproxyKeyStr=props.getProperty("imgproxy.key");
 		try{
 			imgproxyKey=Utils.hexStringToByteArray(imgproxyKeyStr);
@@ -228,28 +215,6 @@ public class Config{
 			smtpPassword=dbValues.get("Mail_SMTP_Password");
 			smtpUseTLS=Utils.parseIntOrDefault(dbValues.get("Mail_SMTP_UseTLS"), 0)==1;
 
-			String pkey=dbValues.get("ServiceActorPrivateKey");
-			try{
-				if(pkey==null){
-					KeyPairGenerator kpg=KeyPairGenerator.getInstance("RSA");
-					kpg.initialize(2048);
-					KeyPair pair=kpg.generateKeyPair();
-					PrivateKey priv=pair.getPrivate();
-					PublicKey pub=pair.getPublic();
-					updateInDatabase(Map.of(
-							"ServiceActorPrivateKey", Base64.getEncoder().encodeToString(priv.getEncoded()),
-							"ServiceActorPublicKey", Base64.getEncoder().encodeToString(pub.getEncoded())
-					));
-					serviceActorPrivateKey=priv;
-					serviceActorPublicKey=pub;
-				}else{
-					EncodedKeySpec spec=new PKCS8EncodedKeySpec(Base64.getDecoder().decode(pkey));
-					serviceActorPrivateKey=KeyFactory.getInstance("RSA").generatePrivate(spec);
-					spec=new X509EncodedKeySpec(Base64.getDecoder().decode(dbValues.get("ServiceActorPublicKey")));
-					serviceActorPublicKey=KeyFactory.getInstance("RSA").generatePublic(spec);
-				}
-			}catch(NoSuchAlgorithmException|InvalidKeySpecException ignore){}
-
 			String obfKey=dbValues.get("ObjectIdObfuscationKey");
 			if(obfKey==null){
 				byte[] key=new byte[16];
@@ -287,11 +252,6 @@ public class Config{
 			TopLevelDomainList.lastUpdatedTime=Long.parseLong(dbValues.getOrDefault("TLDList_LastUpdated", "0"));
 			if(TopLevelDomainList.lastUpdatedTime>0){
 				TopLevelDomainList.update(dbValues.get("TLDList_Data"));
-			}
-
-			PublicSuffixList.lastUpdatedTime=Long.parseLong(dbValues.getOrDefault("PSList_LastUpdated", "0"));
-			if(PublicSuffixList.lastUpdatedTime>0){
-				PublicSuffixList.update(Arrays.asList(dbValues.get("PSList_Data").split("\n")));
 			}
 
 			commonCSS=dbValues.get("CommonCSS");

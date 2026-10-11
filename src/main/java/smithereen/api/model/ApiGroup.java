@@ -8,7 +8,6 @@ import java.util.Map;
 import java.util.Set;
 
 import smithereen.api.ApiCallContext;
-import smithereen.model.ForeignGroup;
 import smithereen.model.Group;
 import smithereen.model.SizedImage;
 import smithereen.model.apps.ClientAppPermission;
@@ -91,8 +90,6 @@ public class ApiGroup{
 		if(group.banStatus!=GroupBanStatus.NONE && !(actx.self!=null && group.banStatus==GroupBanStatus.HIDDEN))
 			return;
 
-		if(fields.contains(Field.DOMAIN) && group instanceof ForeignGroup fg)
-			domain=fg.domain;
 		if(fields.contains(Field.SCREEN_NAME))
 			screenName=group.username;
 		if(fields.contains(Field.STATUS) && group.status!=null && !group.status.isExpired())
@@ -106,10 +103,10 @@ public class ApiGroup{
 		if(group.isEvent()){
 			if(fields.contains(Field.PLACE))
 				place=group.location;
-			if(fields.contains(Field.START_DATE) && group.startTime!=null)
-				startDate=group.startTime.getEpochSecond();
-			if(fields.contains(Field.FINISH_DATE) && group.endTime!=null)
-				finishDate=group.endTime.getEpochSecond();
+			if(fields.contains(Field.START_DATE) && group.eventStartTime!=null)
+				startDate=group.eventStartTime.getEpochSecond();
+			if(fields.contains(Field.FINISH_DATE) && group.eventEndTime!=null)
+				finishDate=group.eventEndTime.getEpochSecond();
 		}
 		if(fields.contains(Field.MEMBERS_COUNT))
 			membersCount=(long)group.memberCount;

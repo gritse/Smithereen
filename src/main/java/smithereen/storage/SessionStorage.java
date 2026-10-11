@@ -196,22 +196,11 @@ public class SessionStorage{
 
 				int inviterAccountID=inv.ownerID;
 
-				KeyPairGenerator kpg;
-				try{
-					kpg=KeyPairGenerator.getInstance("RSA");
-				}catch(NoSuchAlgorithmException x){
-					throw new RuntimeException(x);
-				}
-				kpg.initialize(2048);
-				KeyPair pair=kpg.generateKeyPair();
-
-				stmt=conn.prepareStatement("INSERT INTO `users` (`fname`, `lname`, `username`, `public_key`, `private_key`, gender) VALUES (?, ?, ?, ?, ?, ?)", Statement.RETURN_GENERATED_KEYS);
+				stmt=conn.prepareStatement("INSERT INTO `users` (`fname`, `lname`, `username`, gender) VALUES (?, ?, ?, ?)", Statement.RETURN_GENERATED_KEYS);
 				stmt.setString(1, firstName);
 				stmt.setString(2, lastName);
 				stmt.setString(3, username==null ? Utils.randomAlphanumericString(50) : username);
-				stmt.setBytes(4, pair.getPublic().getEncoded());
-				stmt.setBytes(5, pair.getPrivate().getEncoded());
-				stmt.setInt(6, gender.ordinal());
+				stmt.setInt(4, gender.ordinal());
 				stmt.execute();
 				int userID;
 				try(ResultSet res=stmt.getGeneratedKeys()){
@@ -278,22 +267,11 @@ public class SessionStorage{
 						.where("email=?", email)
 						.executeNoResult();
 
-				KeyPairGenerator kpg;
-				try{
-					kpg=KeyPairGenerator.getInstance("RSA");
-				}catch(NoSuchAlgorithmException x){
-					throw new RuntimeException(x);
-				}
-				kpg.initialize(2048);
-				KeyPair pair=kpg.generateKeyPair();
-
-				PreparedStatement stmt=conn.prepareStatement("INSERT INTO `users` (`fname`, `lname`, `username`, `public_key`, `private_key`, gender) VALUES (?, ?, ?, ?, ?, ?)", Statement.RETURN_GENERATED_KEYS);
+				PreparedStatement stmt=conn.prepareStatement("INSERT INTO `users` (`fname`, `lname`, `username`, gender) VALUES (?, ?, ?, ?)", Statement.RETURN_GENERATED_KEYS);
 				stmt.setString(1, firstName);
 				stmt.setString(2, lastName);
 				stmt.setString(3, username==null ? Utils.randomAlphanumericString(50) : username);
-				stmt.setBytes(4, pair.getPublic().getEncoded());
-				stmt.setBytes(5, pair.getPrivate().getEncoded());
-				stmt.setInt(6, gender.ordinal());
+				stmt.setInt(4, gender.ordinal());
 				stmt.execute();
 				int userID;
 				try(ResultSet res=stmt.getGeneratedKeys()){
@@ -387,7 +365,7 @@ public class SessionStorage{
 			int uid=new SQLQueryBuilder(conn)
 					.selectFrom("users")
 					.columns("id")
-					.where("username=? AND ap_id IS NULL", username)
+					.where("username=?", username)
 					.executeAndGetInt();
 			if(uid==-1)
 				return null;

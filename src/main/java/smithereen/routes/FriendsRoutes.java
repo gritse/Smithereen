@@ -20,7 +20,6 @@ import smithereen.exceptions.ObjectNotFoundException;
 import smithereen.exceptions.UserErrorException;
 import smithereen.lang.Lang;
 import smithereen.model.Account;
-import smithereen.model.ForeignUser;
 import smithereen.model.friends.FriendRequest;
 import smithereen.model.friends.FriendshipStatus;
 import smithereen.model.Group;
@@ -190,8 +189,6 @@ public class FriendsRoutes{
 		}else if(self==null || user.id!=self.user.id){
 			model.headerBack(user);
 		}
-		if(user instanceof ForeignUser)
-			model.with("noindex", true);
 		jsLangKey(req, "remove_friend", "yes", "no", "send", "mail_tab_compose");
 		if(!isMobile(req)){
 			Map<Integer, Photo> userPhotos=ctx.getPhotosController().getUserProfilePhotos(friends.list);
@@ -260,8 +257,6 @@ public class FriendsRoutes{
 		model.with("tab", "mutual");
 		model.with("mutualCount", friends.total);
 		model.headerBack(user);
-		if(user instanceof ForeignUser)
-			model.with("noindex", true);
 		jsLangKey(req, "remove_friend", "yes", "no");
 		if(!isMobile(req)){
 			Map<Integer, Photo> userPhotos=ctx.getPhotosController().getUserProfilePhotos(friends.list);
@@ -319,8 +314,6 @@ public class FriendsRoutes{
 		if(self==null || user.id!=self.user.id){
 			model.headerBack(user);
 		}
-		if(user instanceof ForeignUser)
-			model.with("noindex", true);
 		if(!isMobile(req)){
 			Map<Integer, Photo> userPhotos=ctx.getPhotosController().getUserProfilePhotos(followers.list);
 			model.with("avatarPhotos", userPhotos)
@@ -378,8 +371,6 @@ public class FriendsRoutes{
 		if(self==null || user.id!=self.user.id){
 			model.headerBack(user);
 		}
-		if(user instanceof ForeignUser)
-			model.with("noindex", true);
 		jsLangKey(req, "unfollow", "yes", "no");
 		if(!isMobile(req)){
 			Map<Integer, Photo> userPhotos=ctx.getPhotosController().getUserProfilePhotos(follows.list);

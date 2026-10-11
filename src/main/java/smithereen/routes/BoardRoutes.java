@@ -176,7 +176,7 @@ public class BoardRoutes{
 		req.session().attribute("groupBoardMessage"+group.id, "topicDeleted");
 		return ajaxAwareRedirect(req, resp, "/groups/"+group.id+"/board");
 	}
-	
+
 	public static Object renameTopicForm(Request req, Response resp, Account self, ApplicationContext ctx){
 		BoardTopic topic=getTopic(req);
 		return wrapForm(req, resp, "board_rename_topic_form", "/topics/"+topic.getIdString()+"/rename", lang(req).get("board_editing_topic"), "save", "renameTopic", List.of("title"), k->topic.title, null);

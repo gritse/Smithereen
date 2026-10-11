@@ -1,4 +1,4 @@
-{% if canPostOnWall and wallOwner.hasWall %}
+{% if canPostOnWall %}
 <div class="card">
 {% include "wall_post_form" with {'id': "wall#{wallOwner.ownerID}"} %}
 </div>

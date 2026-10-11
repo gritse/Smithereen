@@ -39,7 +39,6 @@ import smithereen.exceptions.UserErrorException;
 import smithereen.lang.Lang;
 import smithereen.model.Account;
 import smithereen.model.ActorStatus;
-import smithereen.model.ForeignUser;
 import smithereen.model.Group;
 import smithereen.model.OtherSession;
 import smithereen.model.PaginatedList;
@@ -59,7 +58,6 @@ import smithereen.model.friends.FollowRelationship;
 import smithereen.model.viewmodel.UserContentMetrics;
 import smithereen.model.viewmodel.UserRelationshipMetrics;
 import smithereen.storage.DatabaseUtils;
-import smithereen.storage.FederationStorage;
 import smithereen.storage.ModerationStorage;
 import smithereen.storage.PostStorage;
 import smithereen.storage.SessionStorage;
@@ -104,8 +102,6 @@ public class UsersController{
 
 	public User getLocalUserOrThrow(int id){
 		User user=getUserOrThrow(id);
-		if(user instanceof ForeignUser)
-			throw new ObjectNotFoundException("err_user_not_found");
 		return user;
 	}
 
@@ -380,17 +376,8 @@ public class UsersController{
 		}
 	}
 
-	public void deleteForeignUser(ForeignUser user){
-		try{
-			UserStorage.deleteForeignUser(user);
-			context.getNewsfeedController().clearFriendsFeedCache();
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
 	public void deleteLocalUser(User admin, User user){
-		if(user instanceof ForeignUser || (user.banStatus!=UserBanStatus.SELF_DEACTIVATED && user.banStatus!=UserBanStatus.SUSPENDED))
+		if((user.banStatus!=UserBanStatus.SELF_DEACTIVATED && user.banStatus!=UserBanStatus.SUSPENDED))
 			throw new IllegalArgumentException();
 		try{
 			Account acc=SessionStorage.getAccountByUserID(user.id);
@@ -400,7 +387,6 @@ public class UsersController{
 				LOG.error("Database inconsistency, local user {} does not have an account", user.id);
 				return;
 			}
-			context.getActivityPubWorker().sendUserDeleteSelf(user);
 			UserStorage.deleteAccount(acc);
 			SmithereenApplication.invalidateAllSessionsForAccount(acc.id);
 			if(admin!=null)
@@ -575,7 +561,6 @@ public class UsersController{
 				throw new UserErrorException("err_reg_username_taken");
 			self.username=username;
 			self.url=Config.localURI(username);
-			context.getActivityPubWorker().sendUpdateUserActivity(self);
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -605,11 +590,9 @@ public class UsersController{
 				self.hometown=hometown;
 				self.relationship=relation;
 				self.relationshipPartnerID=partnerID;
-				self.relationshipPartnerActivityPubID=partner==null ? null : partner.activityPubID;
 				UserStorage.updateExtendedFields(self, self.serializeProfileFields());
 			}
 			self=getUserOrThrow(self.id);
-			context.getActivityPubWorker().sendUpdateUserActivity(self);
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -643,7 +626,6 @@ public class UsersController{
 			}
 			if(anythingChanged){
 				self=getUserOrThrow(self.id);
-				context.getActivityPubWorker().sendUpdateUserActivity(self);
 			}
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
@@ -665,7 +647,6 @@ public class UsersController{
 			self.alcoholViews=alcoholViews;
 			self.inspiredBy=clampString(inspiredBy, 256);
 			UserStorage.updateExtendedFields(self, self.serializeProfileFields());
-			context.getActivityPubWorker().sendUpdateUserActivity(self);
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -682,7 +663,6 @@ public class UsersController{
 			self.location=location;
 			self.website=website;
 			UserStorage.updateExtendedFields(self, self.serializeProfileFields());
-			context.getActivityPubWorker().sendUpdateUserActivity(self);
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}
@@ -718,8 +698,7 @@ public class UsersController{
 	}
 
 	public void setOnline(User user, UserPresence.PresenceType type, long sessionID, long appID){
-		user.ensureLocal();
-		UserPresence presence=new UserPresence(true, Instant.now(), type, appID);
+				UserPresence presence=new UserPresence(true, Instant.now(), type, appID);
 		LOG.trace("Setting user {} presence to online, type {}", user.id, type);
 		String mutexName=String.valueOf(user.id);
 
@@ -736,8 +715,7 @@ public class UsersController{
 	}
 
 	public void setOffline(User user, long sessionID){
-		user.ensureLocal();
-		setOfflineInternal(user.id, sessionID);
+				setOfflineInternal(user.id, sessionID);
 	}
 
 	private void setOfflineInternal(int userID, long sessionID){
@@ -837,192 +815,6 @@ public class UsersController{
 		return result;
 	}
 
-	public URI addAlsoKnownAs(User self, String link){
-		User target;
-		try{
-			if(Utils.isUsernameAndDomain(link)){
-				ObjectLinkResolver.UsernameResolutionResult res=context.getObjectLinkResolver().resolveUsername(link, true, EnumSet.of(ObjectLinkResolver.UsernameOwnerType.USER));
-				target=context.getUsersController().getUserOrThrow(res.localID());
-			}else if(Utils.isURL(link)){
-				if(!link.startsWith("https://") && !link.startsWith("http://"))
-					link="https://"+link;
-				ActivityPubObject obj=context.getObjectLinkResolver().resolve(URI.create(link), ActivityPubObject.class, true, false, false);
-				if(!(obj instanceof User user)){
-					throw new UserErrorException("settings_transfer_link_unsupported");
-				}
-				target=user;
-			}else{
-				throw new UserErrorException("settings_transfer_link_not_found");
-			}
-		}catch(ObjectNotFoundException x){
-			throw new UserErrorException("settings_transfer_link_not_found");
-		}
-		if(!(target instanceof ForeignUser)){
-			throw new UserErrorException("settings_transfer_link_this_server", Map.of("domain", Config.domain));
-		}
-		URI id=target.activityPubID;
-		if(self.alsoKnownAs.contains(id))
-			return id;
-		self.alsoKnownAs.add(id);
-		try{
-			UserStorage.updateExtendedFields(self, self.serializeProfileFields());
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-		context.getActivityPubWorker().sendUpdateUserActivity(self);
-		return id;
-	}
-
-	public void deleteAlsoKnownAs(User self, String link){
-		List<String> links=self.alsoKnownAs.stream().map(Object::toString).toList();
-		int index=links.indexOf(link);
-		if(index==-1)
-			return;
-		self.alsoKnownAs.remove(index);
-		try{
-			UserStorage.updateExtendedFields(self, self.serializeProfileFields());
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-		context.getActivityPubWorker().sendUpdateUserActivity(self);
-	}
-
-	public void transferUserFollowers(User oldUser, User newUser){
-		synchronized(movingUsers){
-			if(movingUsers.contains(oldUser.id)){
-				LOG.debug("Not moving {} to {} because its previous Move activity is already being processed", oldUser.activityPubID, newUser.activityPubID);
-				return;
-			}
-			movingUsers.add(oldUser.id);
-		}
-
-		boolean success=false;
-		try{
-			oldUser.movedTo=newUser.id;
-			oldUser.movedToApID=newUser.activityPubID;
-			oldUser.movedAt=Instant.now();
-			newUser.movedFrom=oldUser.id;
-			if(oldUser instanceof ForeignUser)
-				context.getObjectLinkResolver().storeOrUpdateRemoteObject(oldUser, oldUser);
-			else
-				UserStorage.updateExtendedFields(oldUser, oldUser.serializeProfileFields());
-
-			if(newUser instanceof ForeignUser)
-				context.getObjectLinkResolver().storeOrUpdateRemoteObject(newUser, newUser);
-			else
-				UserStorage.updateExtendedFields(newUser, newUser.serializeProfileFields());
-
-			success=true;
-			BackgroundTaskRunner.getInstance().submit(()->performMove(oldUser, newUser));
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}finally{
-			if(!success){
-				synchronized(movingUsers){
-					movingUsers.remove(oldUser.id);
-				}
-			}
-		}
-	}
-
-	public Instant getUserLastFollowersTransferTime(User self){
-		try{
-			return UserStorage.getUserLastFollowersTransferTime(self.id);
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	public void transferLocalUserFollowers(Account self, String link, String password){
-		Instant lastTransfer=getUserLastFollowersTransferTime(self.user);
-		if(lastTransfer!=null && lastTransfer.isAfter(Instant.now().minus(FOLLOWERS_TRANSFER_COOLDOWN_DAYS, ChronoUnit.DAYS))){
-			Lang l=Lang.get(self.prefs.locale);
-			throw new UserErrorException("settings_transfer_out_too_often", Map.of("lastTransferDate", l.formatDate(lastTransfer, self.prefs.timeZone, false),
-					"days", FOLLOWERS_TRANSFER_COOLDOWN_DAYS,
-					"nextTransferDate", l.formatDate(lastTransfer.plus(FOLLOWERS_TRANSFER_COOLDOWN_DAYS, ChronoUnit.DAYS), self.prefs.timeZone, false)));
-		}
-		if(!checkPassword(self, password))
-			throw new UserErrorException("err_old_password_incorrect");
-
-		User target;
-		try{
-			if(Utils.isUsernameAndDomain(link)){
-				ObjectLinkResolver.UsernameResolutionResult res=context.getObjectLinkResolver().resolveUsername(link, true, EnumSet.of(ObjectLinkResolver.UsernameOwnerType.USER));
-				target=context.getUsersController().getUserOrThrow(res.localID());
-				if(target instanceof ForeignUser && target.lastUpdated.isBefore(Instant.now().minus(10, ChronoUnit.SECONDS)))
-					target=context.getObjectLinkResolver().resolve(target.activityPubID, User.class, true, true, true);
-			}else if(Utils.isURL(link)){
-				if(!link.startsWith("https://") && !link.startsWith("http://"))
-					link="https://"+link;
-				ActivityPubObject obj=context.getObjectLinkResolver().resolve(URI.create(link), ActivityPubObject.class, true, true, true);
-				if(!(obj instanceof User user)){
-					throw new UserErrorException("settings_transfer_link_unsupported");
-				}
-				target=user;
-			}else{
-				throw new UserErrorException("settings_transfer_out_link_not_found");
-			}
-		}catch(ObjectNotFoundException x){
-			throw new UserErrorException("settings_transfer_out_link_not_found");
-		}
-		if(!(target instanceof ForeignUser)){
-			throw new UserErrorException("settings_transfer_link_this_server", Map.of("domain", Config.domain));
-		}
-		if(!target.alsoKnownAs.contains(self.user.activityPubID))
-			throw new UserErrorException("settings_transfer_out_no_link", Map.of("thisAccountUsername", self.user.username+"@"+Config.domain, "newAccountServer", target.activityPubID.getHost()));
-
-		transferUserFollowers(self.user, target);
-		context.getActivityPubWorker().sendUserMoveSelf(self.user, target);
-		SmithereenApplication.invalidateAllSessionsForAccount(self.id);
-	}
-
-	public void clearMovedTo(Account self){
-		try{
-			self.user.movedTo=0;
-			self.user.movedToApID=null;
-			self.user.movedAt=null;
-			UserStorage.updateExtendedFields(self.user, self.user.serializeProfileFields());
-			context.getActivityPubWorker().sendUpdateUserActivity(self.user);
-			SmithereenApplication.invalidateAllSessionsForAccount(self.id);
-		}catch(SQLException x){
-			throw new InternalServerErrorException(x);
-		}
-	}
-
-	private void performMove(User oldUser, User newUser){
-		try{
-			ModerationStorage.addUserActionLogEntry(oldUser.id, UserActionLogAction.TRANSFER_FOLLOWERS, Map.of("to", newUser.id, "toApID", newUser.activityPubID.toString()));
-			List<FollowRelationship> localFollowers=UserStorage.getUserLocalFollowers(oldUser.id);
-			LOG.debug("Started moving {} followers for {} -> {}", localFollowers.size(), oldUser.activityPubID, newUser.activityPubID);
-			for(FollowRelationship fr:localFollowers){
-				try{
-					User follower=context.getUsersController().getUserOrThrow(fr.followerID());
-					context.getFriendsController().removeFriend(follower, oldUser);
-					context.getFriendsController().followUser(follower, newUser);
-					if(fr.muted())
-						context.getFriendsController().setUserMuted(newUser, follower, true);
-					// TODO carry lists over as well
-				}catch(UserErrorException|ObjectNotFoundException ignore){}
-			}
-			LOG.debug("Done moving followers for {} -> {}", oldUser.activityPubID, newUser.activityPubID);
-
-			List<User> blockingUsers=UserStorage.getBlockingUsers(oldUser.id);
-			LOG.debug("Started moving {} blocks for {} -> {}", blockingUsers.size(), oldUser.activityPubID, newUser.activityPubID);
-			for(User user:blockingUsers){
-				if(newUser instanceof ForeignUser && user instanceof ForeignUser)
-					continue;
-				context.getFriendsController().blockUser(user, newUser);
-			}
-			LOG.debug("Done moving blocks for {} -> {}", oldUser.activityPubID, newUser.activityPubID);
-		}catch(Exception x){
-			LOG.error("Failed to move {} to {}", oldUser.activityPubID, newUser.activityPubID, x);
-		}finally{
-			synchronized(movingUsers){
-				movingUsers.remove(oldUser.id);
-			}
-		}
-	}
-
 	public String updateStatus(User self, String status){
 		ActorStatus result=updateStatus(self, new ActorStatus(status, Instant.now(), null, null));
 		return result==null ? null : result.text();
@@ -1043,21 +835,8 @@ public class UsersController{
 		}
 		try{
 			UserStorage.updateExtendedFields(self, self.serializeProfileFields());
-			if(self instanceof ForeignUser){
-				if(prev!=null)
-					FederationStorage.deleteFromApIdIndex(ObjectLinkResolver.ObjectType.USER_STATUS, self.id);
-				if(status!=null && status.apId()!=null)
-					FederationStorage.addToApIdIndex(status.apId(), ObjectLinkResolver.ObjectType.USER_STATUS, self.id);
-			}
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
-		}
-
-		if(!(self instanceof ForeignUser)){
-			if(self.status!=null)
-				context.getActivityPubWorker().sendCreateStatusActivity(self, self.status);
-			else
-				context.getActivityPubWorker().sendClearStatusActivity(self, prev);
 		}
 
 		return status;

@@ -173,7 +173,7 @@ public class WallMethods{
 		}
 		return res;
 	}
-	
+
 	public static Object pin(ApplicationContext ctx, ApiCallContext actx){
 		Post post=ctx.getWallController().getPostOrThrow(actx.requireParamIntPositive("post_id"));
 		if(post.ownerID!=actx.self.user.id)

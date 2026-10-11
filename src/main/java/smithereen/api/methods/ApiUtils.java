@@ -168,8 +168,6 @@ public class ApiUtils{
 				for(User user:users.values()){
 					EnumSet<UserPrivacySettingKey> keys=EnumSet.noneOf(UserPrivacySettingKey.class);
 					for(UserPrivacySettingKey key:keysToCheck){
-						if((key==UserPrivacySettingKey.WALL_POSTING || key==UserPrivacySettingKey.WALL_OTHERS_POSTS) && !user.hasWall())
-							continue;
 						if(ctx.getPrivacyController().checkUserPrivacy(actx.self.user, user, key))
 							keys.add(key);
 					}
