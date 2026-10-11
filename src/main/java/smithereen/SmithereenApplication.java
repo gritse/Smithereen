@@ -160,6 +160,7 @@ public class SmithereenApplication{
 
 		try{
 			Config.load(args[0]);
+			DatabaseSchemaUpdater.createSchemaIfEmpty();
 			Config.loadFromDatabase();
 			DatabaseSchemaUpdater.maybeUpdate();
 			Config.reloadRoles();

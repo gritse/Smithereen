@@ -35,7 +35,7 @@ The Java packages, the jar file, the database name and the systemd service are s
 2. Make libvips available: download a prebuilt one from [sharp-libvips](https://github.com/lovell/sharp-libvips), or build it with [the build script](ci/libvips/build.sh). A distribution package may work, but not all libvips builds include every feature the server needs.
 3. Install and configure imgproxy.
 4. Create a config file from [the commented example](examples/config.properties). Uploaded files can be stored on the local file system (default) or in an S3-compatible object storage, see below.
-5. Create a MySQL database and load [the schema](schema.sql) into it, for example with `mysql -p smithereen < schema.sql`.
+5. Create an empty MySQL database with the `utf8mb4` character set and give the configured user full rights on it. The server creates all tables itself on first start from [the schema](schema.sql) bundled in the jar.
 6. Install the daemon. On systemd, copy [the service file](examples/smithereen.service) to `/etc/systemd/system`, then run `systemctl daemon-reload` and `service smithereen start`.
 7. Create the first account, which becomes the server owner:
    ```
@@ -52,7 +52,7 @@ A prebuilt image is published to the GitHub Container Registry of this repositor
 
 ### Upgrading
 
-Stop the services, replace `smithereen.jar`, the libvips libraries and the whole `lib` directory, and start the services again. Never merge an old `lib` directory with a new one, or the JVM class loader will get confused. The first start after an upgrade may take a while because database migrations run then.
+Stop the services, replace `smithereen.jar`, the libvips libraries and the whole `lib` directory, and start the services again. Never merge an old `lib` directory with a new one, or the JVM class loader will get confused. The first start after an upgrade may take a while because database migrations run then. Only an empty database is initialized from the bundled schema; an existing one is always migrated in place.
 
 #### Upgrading an existing Smithereen installation
 

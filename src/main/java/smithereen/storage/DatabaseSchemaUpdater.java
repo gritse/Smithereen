@@ -10,6 +10,8 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -42,6 +44,54 @@ import smithereen.util.XTEA;
 public class DatabaseSchemaUpdater{
 	public static final int SCHEMA_VERSION=92;
 	private static final Logger LOG=LoggerFactory.getLogger(DatabaseSchemaUpdater.class);
+
+	/**
+	 * Creates all tables from the schema.sql bundled in the jar if the database has no tables yet.
+	 * Must be called before anything reads the database, because the config table does not exist until this runs.
+	 * A database that already has tables (for example one loaded from schema.sql by hand) is left alone.
+	 */
+	public static void createSchemaIfEmpty() throws SQLException{
+		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
+			try(ResultSet res=conn.createStatement().executeQuery("SHOW TABLES")){
+				if(res.next())
+					return;
+			}
+			LOG.info("Database {} is empty, creating tables from the bundled schema", Config.dbName);
+			String schema;
+			try(InputStream in=DatabaseSchemaUpdater.class.getResourceAsStream("/schema.sql")){
+				if(in==null)
+					throw new IllegalStateException("schema.sql is missing from the jar");
+				schema=new String(in.readAllBytes(), StandardCharsets.UTF_8);
+			}catch(IOException x){
+				throw new SQLException("Failed to read the bundled schema", x);
+			}
+			for(String statement:splitSqlStatements(schema)){
+				conn.createStatement().execute(statement);
+			}
+		}
+	}
+
+	/**
+	 * Splits a mysqldump-style file into statements. Comment lines are dropped and a statement ends
+	 * at a line that ends with a semicolon. The schema contains no stored routines, so no DELIMITER handling is needed.
+	 */
+	static List<String> splitSqlStatements(String sql){
+		List<String> statements=new ArrayList<>();
+		StringBuilder current=new StringBuilder();
+		for(String line:sql.split("\\n")){
+			String trimmed=line.strip();
+			if(trimmed.isEmpty() || trimmed.startsWith("--"))
+				continue;
+			current.append(line).append('\n');
+			if(trimmed.endsWith(";")){
+				statements.add(current.toString().strip());
+				current.setLength(0);
+			}
+		}
+		if(!current.toString().isBlank())
+			statements.add(current.toString().strip());
+		return statements;
+	}
 
 	public static void maybeUpdate() throws SQLException{
 		if(Config.dbSchemaVersion==0){

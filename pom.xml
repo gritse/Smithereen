@@ -186,6 +186,13 @@
 			<resource>
 				<directory>target/generated-resources</directory>
 			</resource>
+			<!-- The database schema is shipped inside the jar so the server can create its tables on first start -->
+			<resource>
+				<directory>${basedir}</directory>
+				<includes>
+					<include>schema.sql</include>
+				</includes>
+			</resource>
 		</resources>
 	</build>
 
