@@ -3353,6 +3353,20 @@ label.pretendLink{
 	.text{
 		color: $mailMessageRow;
 	}
+	.you{
+		color: $auxiliaryGrey;
+	}
+	.unreadCount{
+		justify-self: end;
+		margin: 0 10px;
+		padding: 1px 6px;
+		border-radius: 9px;
+		background: $tabBackground;
+		color: $textOnAccent;
+		font-size: 11px;
+		font-weight: bold;
+		font-feature-settings: "tnum";
+	}
 	&:last-child{
 		border-bottom: 0;
 	}

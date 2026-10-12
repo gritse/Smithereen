@@ -31,6 +31,7 @@ import smithereen.exceptions.BadRequestException;
 import smithereen.exceptions.InternalServerErrorException;
 import smithereen.exceptions.ObjectNotFoundException;
 import smithereen.exceptions.UserActionNotAllowedException;
+import smithereen.model.MailDialog;
 import smithereen.model.MailMessage;
 import smithereen.model.MessagesPrivacyGrant;
 import smithereen.model.PaginatedList;
@@ -62,6 +63,14 @@ public class MailController{
 	public PaginatedList<MailMessage> getInbox(User self, int offset, int count){
 		try{
 			return MailStorage.getInbox(self.id, offset, count);
+		}catch(SQLException x){
+			throw new InternalServerErrorException(x);
+		}
+	}
+
+	public PaginatedList<MailDialog> getDialogs(User self, int offset, int count){
+		try{
+			return MailStorage.getDialogs(self.id, offset, count);
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}

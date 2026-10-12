@@ -4,8 +4,10 @@ import org.jetbrains.annotations.Nullable;
 
 import java.net.URI;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -19,6 +21,7 @@ import java.util.stream.Collectors;
 import smithereen.Utils;
 import smithereen.activitypub.objects.ActivityPubObject;
 import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.MailDialog;
 import smithereen.model.MailMessage;
 import smithereen.model.MessagesPrivacyGrant;
 import smithereen.model.PaginatedList;
@@ -70,6 +73,47 @@ public class MailStorage{
 					.toList();
 			postprocessMessages(messages);
 			return new PaginatedList<>(messages, total, offset, count);
+		}
+	}
+
+	/**
+	 * One row per person the user has exchanged messages with, newest dialog first.
+	 * The row carries the latest non-deleted message in either direction and the number of unread incoming ones.
+	 */
+	public static PaginatedList<MailDialog> getDialogs(int ownerID, int offset, int count) throws SQLException{
+		try(DatabaseConnection conn=DatabaseConnectionManager.getConnection()){
+			PreparedStatement stmt=SQLQueryBuilder.prepareStatement(conn, "SELECT COUNT(DISTINCT peer_id) FROM mail_messages_peers JOIN mail_messages ON message_id=mail_messages.id"+
+					" WHERE mail_messages_peers.owner_id=? AND mail_messages.deleted_at IS NULL", ownerID);
+			int total=DatabaseUtils.oneFieldToInt(stmt.executeQuery());
+			if(total==0)
+				return PaginatedList.emptyList(count);
+			stmt=SQLQueryBuilder.prepareStatement(conn, "SELECT peer_id, MAX(message_id) AS last_message_id,"+
+					" SUM(mail_messages.sender_id<>mail_messages_peers.owner_id AND mail_messages.read_receipts IS NULL) AS unread_count"+
+					" FROM mail_messages_peers JOIN mail_messages ON message_id=mail_messages.id"+
+					" WHERE mail_messages_peers.owner_id=? AND mail_messages.deleted_at IS NULL"+
+					" GROUP BY peer_id ORDER BY last_message_id DESC LIMIT ? OFFSET ?", ownerID, count, offset);
+			record DialogRow(int peerID, long lastMessageID, int unreadCount){}
+			List<DialogRow> rows=new ArrayList<>();
+			try(ResultSet res=stmt.executeQuery()){
+				while(res.next()){
+					rows.add(new DialogRow(res.getInt("peer_id"), res.getLong("last_message_id"), res.getInt("unread_count")));
+				}
+			}
+			if(rows.isEmpty())
+				return new PaginatedList<>(List.of(), total, offset, count);
+			List<MailMessage> messages=new SQLQueryBuilder(conn)
+					.selectFrom("mail_messages")
+					.allColumns()
+					.whereIn("id", rows.stream().map(DialogRow::lastMessageID).collect(Collectors.toSet()))
+					.executeAsStream(MailMessage::fromResultSet)
+					.toList();
+			postprocessMessages(messages);
+			Map<Long, MailMessage> messagesByID=messages.stream().collect(Collectors.toMap(m->m.id, Function.identity()));
+			List<MailDialog> dialogs=rows.stream()
+					.filter(r->messagesByID.containsKey(r.lastMessageID()))
+					.map(r->new MailDialog(r.peerID(), messagesByID.get(r.lastMessageID()), r.unreadCount()))
+					.toList();
+			return new PaginatedList<>(dialogs, total, offset, count);
 		}
 	}
 

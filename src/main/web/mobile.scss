@@ -1672,6 +1672,20 @@ input.searchField{
 	.subject, .text{
 		color: $text;
 	}
+	.you{
+		color: $grayText;
+	}
+	.unreadCount{
+		align-self: center;
+		margin-left: 8px;
+		padding: 1px 6px;
+		border-radius: 9px;
+		background: $tabBackground;
+		color: $textOnAccent;
+		font-size: 12px;
+		font-weight: $mediumWeight;
+		font-feature-settings: "tnum";
+	}
 	&.unread{
 		background: $mailMessageRowUnreadBackgroundColor;
 	}

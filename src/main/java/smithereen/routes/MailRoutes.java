@@ -22,6 +22,7 @@ import smithereen.exceptions.BadRequestException;
 import smithereen.exceptions.ObjectNotFoundException;
 import smithereen.lang.Lang;
 import smithereen.model.Account;
+import smithereen.model.MailDialog;
 import smithereen.model.MailMessage;
 import smithereen.model.ObfuscatedObjectIDType;
 import smithereen.model.PaginatedList;
@@ -41,9 +42,10 @@ import static smithereen.Utils.*;
 
 public class MailRoutes{
 	public static Object inbox(Request req, Response resp, Account self, ApplicationContext ctx){
-		PaginatedList<MailMessage> list=ctx.getMailController().getInbox(self.user, offset(req), 20);
-		RenderedTemplateResponse model=new RenderedTemplateResponse("mail_message_list", req);
-		Set<Integer> needUsers=list.list.stream().map(m->m.senderID).collect(Collectors.toSet());
+		// One row per person, with the latest message of each dialog
+		PaginatedList<MailDialog> list=ctx.getMailController().getDialogs(self.user, offset(req), 20);
+		RenderedTemplateResponse model=new RenderedTemplateResponse("mail_dialog_list", req);
+		Set<Integer> needUsers=list.list.stream().map(MailDialog::peerID).collect(Collectors.toSet());
 		if(req.queryParams("fromCompose")!=null){
 			MailMessage msg=req.session().attribute("recentMessage");
 			if(msg!=null){

@@ -1,11 +1,11 @@
 {
-  "mail_inbox": "Received",
+  "mail_inbox": "Dialogs",
   "mail_outbox": "Sent",
-  "mail_inbox_summary": "You received {count, plural, =0 {no messages} one {# message} other {# messages}}",
+  "mail_inbox_summary": "You have {count, plural, =0 {no dialogs} one {# dialog} other {# dialogs}}",
   "mail_outbox_summary": "You sent {count, plural, =0 {no messages} one {# message} other {# messages}}",
-  "mail_inbox_empty": "You haven't received any messages yet.",
+  "mail_inbox_empty": "You don't have any dialogs yet.",
   "mail_outbox_empty": "You haven't sent any messages yet.",
-  "mail_inbox_title": "Received messages",
+  "mail_inbox_title": "Dialogs",
   "mail_outbox_title": "Sent messages",
   "mail_message_sent": "<a id=\"message\">Your message</a> was sent to {name}.",
   "mail_message_sent_multi": "<a id=\"message\">Your message</a> was sent to {name} and {moreCount, plural, one {# more person} other {# more people}}.",
@@ -42,5 +42,7 @@
   "mail_open_conversation": "Open the conversation with {name}",
   "mail_load_earlier": "Show earlier messages",
   "mail_conversation_empty": "No messages yet. Write the first one!",
-  "mail_conversation_send_hint": "Ctrl+Enter to send"
+  "mail_conversation_send_hint": "Ctrl+Enter to send",
+  "mail_dialog_you": "You:",
+  "mail_dialog_unread": "{count, plural, one {# unread message} other {# unread messages}}"
 }
