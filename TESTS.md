@@ -1,0 +1,149 @@
+# Testing cheatsheet
+
+How to run the automated tests, spin up a local instance with sample data, and check a feature in a real browser.
+Everything below was verified on Linux with JDK 21, Maven, Docker and Node 22.
+
+## 1. Automated tests
+
+```sh
+mvn test                                   # everything
+mvn -Dtest=TemplateSyntaxTest test         # parses every .twig template (fast, catches template typos)
+mvn -q -DskipTests compile                 # compile only, also builds CSS and TypeScript
+```
+
+`TemplateSyntaxTest` only parses templates. It does not render them, so a wrong variable name still passes.
+For that you need the browser check below.
+
+### "couldn't find matching tag" / "bad value for --module-version"
+
+The build takes the project version from the nearest git tag. A shallow clone has no tags, so create a
+throwaway local one (do not push it):
+
+```sh
+git tag 0.0.0-local          # must look like a version number, "v0.0.0" is rejected by javac
+```
+
+## 2. Spin up a local instance
+
+### Database
+
+```sh
+docker run -d --name smdb -e MYSQL_ROOT_PASSWORD=mysql -e MYSQL_DATABASE=smithereen \
+  -p 127.0.0.1:3306:3306 mysql:8
+```
+
+If `docker ps` says the daemon is not running, start it with `dockerd &` (root) and retry.
+The server creates the schema itself on first start, there is nothing to import.
+
+### Config
+
+```sh
+cp dev/config.dev.properties config.properties      # git-ignored
+mkdir -p /tmp/tusovochka-uploads                     # or change upload.path in the file
+```
+
+The dev config points at the database above, uses plain `http://localhost:4567` and dummy imgproxy keys.
+Images are not served without imgproxy and nginx, so expect "?" avatars. That is fine for UI checks.
+
+### Build and run
+
+```sh
+mvn -q -DskipTests -Dmaven.test.skip=true package    # produces target/smithereen.jar and target/lib
+java -Djna.library.path=/lib/x86_64-linux-gnu \
+  --module-path target/smithereen.jar:target/lib \
+  -m smithereen.server/smithereen.SmithereenApplication config.properties
+```
+
+`jna.library.path` must point at a directory with `libvips.so.42` (`ldconfig -p | grep vips`).
+On Debian/Ubuntu: `apt-get install libvips42`. The Docker image bundles its own copy.
+
+The server is ready when `curl http://127.0.0.1:4567/healthz` returns 200.
+Logs go to stdout.
+
+### Sample users and messages
+
+`init_admin` needs an interactive terminal, so for a scripted setup use the seeder in `dev/`. It creates
+four accounts and a dozen private messages spread over two days (one dialog with unread messages, one read,
+one where the last message is yours). The seeder is compiled against the built classes and patched into
+the server module, because the module does not export its packages:
+
+```sh
+mkdir -p target/dev
+javac -cp "target/classes:target/lib/*" -d target/dev dev/Seeder.java
+java --module-path target/smithereen.jar:target/lib --patch-module smithereen.server=target/dev \
+  -m smithereen.server/smithereen.Seeder config.properties
+```
+
+| Login (e-mail or username) | Password | Role |
+|---|---|---|
+| admin@example.com / `admin` | password | owner, has the admin menu |
+| yulia@example.com / `yulia` | password | sends the unread messages |
+| maria@example.com / `maria` | password | |
+| dmitry@example.com / `dmitry` | password | |
+
+The seeder refuses to run on a database that already has users. To start over:
+
+```sh
+docker rm -f smdb && docker run ... (same command as above)
+```
+
+### Alternative: the Docker image
+
+`docker compose up` builds the full image (several minutes) and runs it with MySQL and imgproxy.
+It needs a `config.properties` and `/var/www/smithereen/s` on the host, see the README. Create the first
+user with `docker compose exec web smithereen-init-admin`. For quick UI checks the local run above is faster
+because `mvn package` is incremental.
+
+## 3. Check a feature in the browser
+
+Open `http://localhost:4567`, log in as one of the users above. Useful pages:
+
+| Page | URL |
+|---|---|
+| Dialogs (one row per person) | `/my/mail` |
+| Sent messages | `/my/mail/outbox` |
+| Chat with user 2 | `/my/mail/with/2` |
+| Single message | `/my/mail/messages/<id>` (linked from the timestamp in the chat) |
+| Compose | `/my/mail/compose` |
+| Profile | `/<username>`, e.g. `/yulia` |
+| Admin | `/settings/admin` |
+| Health | `/healthz` |
+
+Tips:
+
+- Login is rate-limited to one attempt per second and 100 per hour per IP. A script that logs in several
+  times in a row needs a pause between attempts, otherwise it gets the login page back.
+- The mobile layout is chosen by user agent, not by viewport width. Use the device toolbar in the browser's
+  dev tools (iPhone preset) or any UA containing "Mobile".
+- To test both sides of a conversation, log in as two users in two browser profiles or a private window.
+  New messages arrive live in the chat view through the notifier websocket.
+- The "language" link in the footer switches the UI language and stores it in the account, so Russian
+  strings can be checked without changing the browser's `Accept-Language`.
+- Templates are packed into the jar at build time, so after editing a `.twig`, `.scss` or `.ts` file run
+  `mvn -q -DskipTests -Dmaven.test.skip=true package` and restart the server.
+- `src/main/web/live_recompile.sh` watches the SCSS and TypeScript and writes into `target/classes`, which
+  only helps when the server runs from `target/classes` (an IDE run), not from the jar.
+
+### Headless screenshots
+
+`dev/screenshot.js` logs in and screenshots pages on desktop and mobile with Playwright. It expects
+`playwright` to be resolvable by Node (a global install, or `npm i playwright` in a scratch directory and
+`NODE_PATH` pointing at its `node_modules`):
+
+```sh
+NODE_PATH=/path/to/node_modules node dev/screenshot.js screenshots /my/mail /my/mail/with/2
+```
+
+Environment variables: `BASE_URL` (default `http://127.0.0.1:4567`), `LOGIN`, `PASSWORD`
+(default admin@example.com / password). Output lands in the directory given as the first argument.
+
+## 4. Checklist for the messages feature
+
+1. `/my/mail` shows one row per person, newest dialog first, with the latest message in either direction.
+   Your own messages are prefixed with "You:", unread dialogs are highlighted and carry a count badge.
+2. Clicking a row opens `/my/mail/with/<id>`. Coming back, the badge is gone and the sidebar counter dropped.
+3. Sending from the chat appends the message in place. In another session as the recipient, the message
+   appears without a reload.
+4. "Show earlier messages" at the top of a long chat prepends the previous page and keeps the scroll position.
+5. `/my/mail/outbox` still lists individual sent messages with Delete.
+6. Send a message from `/my/mail/compose`: you land on the dialog list with a "Your message was sent" notice.
