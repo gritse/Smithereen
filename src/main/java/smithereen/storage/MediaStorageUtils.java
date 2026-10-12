@@ -29,7 +29,6 @@ import jakarta.servlet.http.Part;
 import smithereen.ApplicationContext;
 import smithereen.Utils;
 import smithereen.activitypub.objects.ActivityPubObject;
-import smithereen.activitypub.objects.Audio;
 import smithereen.activitypub.objects.LocalImage;
 import smithereen.exceptions.BadRequestException;
 import smithereen.exceptions.InternalServerErrorException;

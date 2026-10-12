@@ -338,29 +338,6 @@ public class Lang{
 		return pluralRules.getCategoryForQuantity(quantity);
 	}
 
-	public String formatDuration(long duration){
-		String res="";
-		if(duration<0){
-			res+="-";
-			duration=-duration;
-		}
-		long seconds=duration%60;
-		duration/=60;
-		long minutes=duration%60;
-		duration/=60;
-		long hours=duration;
-		if(hours>0){
-			res+=String.format(locale, "%d:%02d:%02d", hours, minutes, seconds);
-		}else{
-			res+=String.format(locale, "%d:%02d", minutes, seconds);
-		}
-		return res;
-	}
-
-	public String invalidDuration(){
-		return "-:--";
-	}
-
 	private record IndexLanguage(String locale, String name, String fallback){}
 	private record IndexFile(List<IndexLanguage> languages, List<String> files){}
 }

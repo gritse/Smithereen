@@ -8,16 +8,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 import smithereen.activitypub.objects.ActivityPubObject;
-import smithereen.activitypub.objects.Audio;
 import smithereen.activitypub.objects.Document;
 import smithereen.activitypub.objects.Image;
 import smithereen.activitypub.objects.LocalImage;
-import smithereen.activitypub.objects.Video;
 import smithereen.model.attachments.Attachment;
-import smithereen.model.attachments.AudioAttachment;
 import smithereen.model.attachments.GraffitiAttachment;
 import smithereen.model.attachments.PhotoAttachment;
-import smithereen.model.attachments.VideoAttachment;
 import smithereen.storage.MediaStorageUtils;
 import spark.utils.StringUtils;
 
@@ -50,32 +46,6 @@ public sealed interface AttachmentHostContentObject permits MailMessage, PostLik
 						att.setBlurHash(blurHash);
 				}
 				result.add(att);
-			}else if(o instanceof Video || mediaType.startsWith("video/")){
-				if(o.url==null)
-					continue;
-				VideoAttachment att=new VideoAttachment();
-				att.mediaType=o.mediaType;
-				att.url=o.url;
-				att.description=o.name;
-				if(o instanceof Document doc){
-					att.width=doc.width;
-					att.height=doc.height;
-					att.blurHash=doc.getBlurHash();
-				}
-				result.add(att);
-			}else if(o instanceof Audio || mediaType.startsWith("audio/")){
-				if(o.url==null)
-					continue;
-				AudioAttachment att=new AudioAttachment();
-				att.mediaType=o.mediaType;
-				att.description=o.name;
-				att.url=o.url;
-				if(o instanceof Audio audio){
-					att.artist=audio.artist;
-					att.title=audio.title;
-					att.duration=audio.duration;
-				}
-				result.add(att);
 			}
 		}
 		return result;
@@ -95,14 +65,5 @@ public sealed interface AttachmentHostContentObject permits MailMessage, PostLik
 			}
 		}
 		return null;
-	}
-
-	@SuppressWarnings("unused") // Used from a template
-	default boolean hasAudioAttachments(){
-		for(ActivityPubObject o:getAttachments()){
-			if(o instanceof Audio)
-				return true;
-		}
-		return false;
 	}
 }

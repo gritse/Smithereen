@@ -110,8 +110,6 @@
   "content_type_post": "Post",
   "content_type_comment": "Comentário",
   "content_type_photo": "Foto",
-  "content_type_video": "Vídeo",
-  "content_type_audio": "Arquivo de áudio",
   "captcha_label": "Código da imagem",
   "err_wrong_captcha": "Código da imagem errado",
   "statistics": "Estatísticas",

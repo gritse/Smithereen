@@ -10,7 +10,6 @@ $mediumPadding: 10px;
 
 @import "desktop_basics.scss";
 @import "common.scss";
-@import "audioplayer_desktop.scss";
 
 @svg-load popoverArrowTopWithHeader url(img/popover_arrow_top.svg) {
 	polygon[fill=red]{
@@ -5294,7 +5293,7 @@ label.largeAccented{
 			color: $secondaryLink;
 		}
 		&:hover{
-			background: $audioAreaOnHover;
+			background: $boardTopicHoverBackground;
 			text-decoration: none;
 		}
 	}

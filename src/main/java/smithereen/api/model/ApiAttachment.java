@@ -1,7 +1,5 @@
 package smithereen.api.model;
 
-import org.jetbrains.annotations.Nullable;
-
 import java.time.Instant;
 import java.util.Map;
 
@@ -12,10 +10,8 @@ import smithereen.model.OwnedContentObject;
 import smithereen.model.PostLikeObject;
 import smithereen.model.SizedImage;
 import smithereen.model.attachments.Attachment;
-import smithereen.model.attachments.AudioAttachment;
 import smithereen.model.attachments.GraffitiAttachment;
 import smithereen.model.attachments.PhotoAttachment;
-import smithereen.model.attachments.VideoAttachment;
 import smithereen.model.photos.Photo;
 
 public class ApiAttachment{
@@ -23,8 +19,6 @@ public class ApiAttachment{
 
 	public ApiPhoto photo;
 	public Graffiti graffiti;
-	public Video video;
-	public Audio audio;
 	public ApiPoll poll;
 
 	public ApiAttachment(Attachment att, ApiCallContext actx, AttachmentHostContentObject parent, Map<Long, Photo> photos){
@@ -48,22 +42,10 @@ public class ApiAttachment{
 					this.photo=new ApiPhoto(pa, ownedParent.getOwnerID(), ownedParent.getAuthorID(), createdAt, actx);
 				}
 			}
-			case VideoAttachment va -> {
-				type="video";
-				video=new Video(va.url.toString(), va.width>0 ? va.width : null, va.height>0 ? va.height : null, va.blurHash, va.description);
-			}
-			case AudioAttachment aa -> {
-				type="audio";
-				audio=new Audio(aa.url.toString(), aa.description, aa.artist, aa.title, aa.duration>0 ? aa.duration/1000 : null);
-			}
 		}
 	}
 
 	public ApiAttachment(){}
 
-	public record Video(String url, Integer width, Integer height, String blurhash, String description){}
-
-	public record Audio(String url, @Nullable String description, @Nullable String artist, @Nullable String title, @Nullable Long duration){
-	}
 	public record Graffiti(String url, String previewUrl, int width, int height){}
 }

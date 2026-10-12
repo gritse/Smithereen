@@ -1,21 +1,15 @@
 package smithereen.templates.functions;
 
-import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.unbescape.html.HtmlEscape;
 
-import java.io.IOException;
-import java.io.StringWriter;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import io.pebbletemplates.pebble.extension.Function;
@@ -27,21 +21,14 @@ import smithereen.activitypub.objects.Actor;
 import smithereen.lang.Lang;
 import smithereen.model.AttachmentHostContentObject;
 import smithereen.model.Group;
-import smithereen.model.MailMessage;
-import smithereen.model.PostLikeObject;
 import smithereen.model.SizedImage;
 import smithereen.model.User;
 import smithereen.model.attachments.Attachment;
-import smithereen.model.attachments.AudioAttachment;
 import smithereen.model.attachments.GraffitiAttachment;
 import smithereen.model.attachments.PhotoAttachment;
 import smithereen.model.attachments.SizedAttachment;
-import smithereen.model.attachments.VideoAttachment;
 import smithereen.model.media.PhotoViewerInlineData;
-import smithereen.model.viewmodel.AudioAttachmentViewModel;
-import smithereen.model.viewmodel.PostViewModel;
 import smithereen.templates.MediaLayoutHelper;
-import smithereen.templates.Templates;
 import smithereen.text.TextProcessor;
 import smithereen.util.BlurHash;
 import spark.utils.StringUtils;
@@ -129,13 +116,6 @@ public class RenderAttachmentsFunction implements Function{
 			lines.add("</div></div>");
 		}
 
-		// Now do non-sized attachments
-		for(Attachment att:attachments){
-			if(att instanceof VideoAttachment va)
-				lines.add("<video src=\""+HtmlEscape.escapeHtml4Xml(va.url.toString())+"\" controls playsinline></video>");
-		}
-		renderAudioAttachments(attachments, obj, lines, evaluationContext);
-
 		if(!lines.isEmpty()){
 			lines.add("</div>");
 			lines.addFirst("<div class=\"postAttachments\">");
@@ -193,89 +173,5 @@ public class RenderAttachmentsFunction implements Function{
 			}
 			lines.add("<a class=\"photo\" href=\""+href+"\" "+String.join(" ", attrs)+">"+photo.image.generateHTML(type, null, imgAttrs, 0, 0, true, photo.description)+"</a>");
 		}
-	}
-
-	// See https://en.wikipedia.org/w/index.php?title=HTML_audio&oldid=1331140055#Supported_audio_coding_formats
-	private final static Set<String> SUPPORTED_AUDIO_FORMATS=Set.of(
-			"audio/wav",
-			"audio/mpeg",
-			"audio/mp4",
-			"audio/aac",
-			"audio/aacp",
-			"audio/ogg",
-			"audio/webm",
-			"audio/flac"
-	);
-
-	private void renderAudioAttachments(List<Attachment> attachments, AttachmentHostContentObject obj, List<String> lines, EvaluationContext evaluationContext){
-		Lang l=Lang.get(evaluationContext.getLocale());
-
-		int audioIndex=0; // TODO: It would be better use absolute IDs for audio objects.
-		//  If we implement storing information about audios in the database,
-		//  we can use the entry's primary key for that.
-		List<AudioAttachmentViewModel> viewModels=new ArrayList<>();
-		for(Attachment att: attachments){
-			if(att instanceof AudioAttachment audio){
-				String artist=audio.artist!=null ? audio.artist : l.get("audio_unknown_artist");
-				String title=audio.title!=null ? audio.title : (StringUtils.isNotBlank(att.description) ? att.description : l.get("audio_unknown_title"));
-				long durationInSeconds=audio.duration/1000;
-
-				// If the audio format is not supported by the majority of modern browsers,
-				// render the audio as unavailable:
-				int unavailable=0;
-				if(att.mediaType!=null && !SUPPORTED_AUDIO_FORMATS.contains(att.mediaType)){
-					unavailable=4;
-				}
-
-				AudioAttachmentViewModel viewModel=new AudioAttachmentViewModel(
-						getPlayerID(audioIndex++, obj, evaluationContext),
-						audio.duration>0 ? l.formatDuration(durationInSeconds) : l.invalidDuration(),
-						durationInSeconds,
-						artist,
-						title,
-						audio.url,
-						unavailable
-				);
-				viewModels.add(viewModel);
-			}
-		}
-		if(viewModels.isEmpty()) return;
-		PebbleTemplate template=Templates.getTemplate("post_audio_attachment_list");
-		StringWriter writer=new StringWriter();
-		var context=new HashMap<String, Object>();
-		context.put("audios", viewModels);
-		context.put("isPostInLayer", evaluationContext.getVariable("isPostInLayer"));
-		try{
-			template.evaluate(writer, context, evaluationContext.getLocale());
-		}catch(IOException e){
-			log.error("Failure while evaluating template", e);
-		}
-		lines.add(writer.toString());
-	}
-
-	private static @NotNull String getPlayerID(int audioID, AttachmentHostContentObject host, EvaluationContext evaluationContext){
-		// The audio player identifier MUST be unique within a page, but also MUST be deterministic.
-		// The former is just a DOM requirement.
-		// The latter allows us to restore players' state after AJAX navigations.
-		StringBuilder playerID=new StringBuilder(Integer.toString(audioID));
-		switch(host){
-			case PostLikeObject p -> {
-				playerID.append("_");
-				PostViewModel repostParent=(PostViewModel) evaluationContext.getVariable("repostParent");
-				Long repostDepth=(Long) evaluationContext.getVariable("repostDepth");
-				if(repostParent!=null && repostDepth!=null && repostDepth>0){
-					playerID.append(repostParent.post.getObjectID());
-					playerID.append("_");
-					playerID.append(repostDepth);
-				}else{
-					playerID.append(p.getObjectID());
-				}
-			}
-			case MailMessage m -> {
-				playerID.append("_");
-				playerID.append(m.getIdString());
-			}
-		}
-		return playerID.toString();
 	}
 }

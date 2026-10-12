@@ -26,7 +26,7 @@ import smithereen.util.JsonArrayBuilder;
 import smithereen.util.UriBuilder;
 
 /**
- * Base class for JSON-serializable content objects: attachments (images, documents, audio, video),
+ * Base class for JSON-serializable content objects: attachments (images, documents),
  * profile fields and actors (users, groups). Objects are only ever parsed from JSON written by this
  * server itself (e.g. the attachments column), never from the network.
  */
@@ -333,8 +333,6 @@ public abstract class ActivityPubObject{
 			case "Image" -> new Image();
 			case "_LocalImage" -> new LocalImage();
 			case "Document" -> new Document();
-			case "Video" -> new Video();
-			case "Audio" -> new Audio();
 			case "PropertyValue" -> new PropertyValue();
 			default -> {
 				LOG.debug("Unknown object type {}", type);
