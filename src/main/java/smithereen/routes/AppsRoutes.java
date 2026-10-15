@@ -110,7 +110,7 @@ public class AppsRoutes{
 		if(!isAjax(req))
 			throw new BadRequestException();
 		Lang l=lang(req);
-		LocalImage img=MediaStorageUtils.saveUploadedImage(req, resp, self, false, "file", 400, 0, vi->{
+		LocalImage img=MediaStorageUtils.saveUploadedImage(req, resp, self, false, "file", 400, 0, false, vi->{
 			if(vi.getWidth()!=vi.getHeight())
 				Spark.halt(422, l.get("err_app_logo_not_square"));
 			if(vi.getWidth()<200)

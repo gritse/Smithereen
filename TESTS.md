@@ -160,3 +160,16 @@ request to `yulia` from her profile, then log in as `yulia` and accept it from `
    disappears from admin's feed, Yulia's own post stays. Set it back to "Everyone" and it returns.
 4. Yulia deletes Dmitry's post from her wall: it disappears from admin's feed.
 5. Posts on friends' walls made before the upgrade are not in the feed: only posts created after it are recorded.
+
+## 6. Checklist for animated images (GIF)
+
+Any animated GIF works, or make one with Python: `pip install pillow`, then
+`python3 -c "from PIL import Image; f=[Image.new('RGB',(200,200),(i*40,0,255-i*40)) for i in range(6)]; f[0].save('anim.gif',save_all=True,append_images=f[1:],duration=200,loop=0)"`.
+
+1. Attach `anim.gif` to a wall post: the preview in the composer moves, the attachment in the published post moves,
+   and so does the image in the photo viewer when you click it. The same works for comments and private messages.
+2. Upload it to a photo album: the thumbnail in the album moves and the photo has no rotate buttons, neither in the
+   album editor nor in the photo viewer. The viewer's "open original" link points at the stored `.webp` file.
+3. Upload it as a profile picture (`/settings` → upload new photo): the server refuses it with "Animated images can't be
+   used here". A still GIF, JPEG or PNG is accepted as before. The same refusal applies to group logos and app logos.
+4. A still GIF attached to a post is handled exactly like a JPEG (served through imgproxy in all sizes).

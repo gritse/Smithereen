@@ -149,7 +149,7 @@ public class SystemRoutes{
 	}
 
 	private static Object uploadPhotoAttachment(Request req, Response resp, Account self, boolean isGraffiti){
-		LocalImage photo=MediaStorageUtils.saveUploadedImage(req, resp, self, isGraffiti, "file");
+		LocalImage photo=MediaStorageUtils.saveUploadedImage(req, resp, self, isGraffiti, "file", !isGraffiti);
 		if(isAjax(req)){
 			resp.type("application/json");
 			String localID=photo.getLocalID(MediaFileUploadPurpose.ATTACHMENT, self.user.id);

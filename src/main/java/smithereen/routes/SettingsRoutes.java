@@ -223,7 +223,7 @@ public class SettingsRoutes{
 			rotation=null;
 		}
 
-		LocalImage img=MediaStorageUtils.saveUploadedImage(req, resp, self, false, "file");
+		LocalImage img=MediaStorageUtils.saveUploadedImage(req, resp, self, false, "file", false);
 		img.rotation=rotation;
 		try{
 			ctx.getPhotosController().updateAvatar(self, group, img, cropRects, null);

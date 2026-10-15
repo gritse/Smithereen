@@ -29,6 +29,13 @@ public sealed interface SizedImage extends BlurHashable permits LocalImage{
 
 	URI getOriginalURI();
 
+	/**
+	 * @return true if this is an animated image. Animated images are served as one file regardless of the requested size and format.
+	 */
+	default boolean isAnimated(){
+		return false;
+	}
+
 	default Dimensions getDimensionsForSize(Type size, Dimensions dimensions){
 		return size.getResizedDimensions(dimensions);
 	}
@@ -41,6 +48,11 @@ public sealed interface SizedImage extends BlurHashable permits LocalImage{
 		ArrayList<SizedImageURLs> urls=new ArrayList<>();
 		Dimensions origSize=getOriginalDimensions();
 		boolean isLocal=this instanceof LocalImage;
+		if(isAnimated()){
+			String url=Objects.toString(getUriForSizeAndFormat(Type.PHOTO_ORIGINAL, Format.WEBP, false, isLocal, false));
+			urls.add(new SizedImageURLs(Type.PHOTO_ORIGINAL.suffix, origSize.width, origSize.height, url, url));
+			return urls;
+		}
 		for(Type t:List.of(Type.PHOTO_SMALL, Type.PHOTO_MEDIUM, Type.PHOTO_LARGE, Type.PHOTO_ORIGINAL)){
 			Dimensions size=getDimensionsForSize(t);
 			urls.add(new SizedImageURLs(t.suffix, size.width, size.height, Objects.toString(getUriForSizeAndFormat(t, Format.WEBP, false, isLocal, false)), Objects.toString(getUriForSizeAndFormat(t, Format.JPEG, false, isLocal, false))));
@@ -66,8 +78,11 @@ public sealed interface SizedImage extends BlurHashable permits LocalImage{
 
 	default String generateHTML(Type size, List<String> additionalClasses, List<String> extraAttrs, int width, int height, boolean add2x, String altText){
 		StringBuilder sb=new StringBuilder("<picture>");
-		appendHtmlForFormat(size, Format.WEBP, sb, add2x);
-		appendHtmlForFormat(size, Format.JPEG, sb, add2x);
+		if(!isAnimated()){
+			// An animated image has one URL for every size and format, so <source>s would be redundant
+			appendHtmlForFormat(size, Format.WEBP, sb, add2x);
+			appendHtmlForFormat(size, Format.JPEG, sb, add2x);
+		}
 		sb.append("<img src=\"");
 		sb.append(getUriForSizeAndFormat(size, Format.JPEG));
 		sb.append('"');

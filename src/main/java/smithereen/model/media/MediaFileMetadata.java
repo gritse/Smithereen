@@ -7,6 +7,13 @@ public interface MediaFileMetadata{
 	float[] cropRegion();
 	int duration();
 
+	/**
+	 * @return true if this is an animated image (stored as an animated WebP)
+	 */
+	default boolean animated(){
+		return false;
+	}
+
 	static Class<? extends MediaFileMetadata> classForType(MediaFileType type){
 		return switch(type){
 			case IMAGE_PHOTO, IMAGE_AVATAR, IMAGE_GRAFFITI, IMAGE_GROUP_LINK_THUMB -> ImageMetadata.class;

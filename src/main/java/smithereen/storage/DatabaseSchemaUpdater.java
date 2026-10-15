@@ -1607,7 +1607,7 @@ public class DatabaseSchemaUpdater{
 		float[] cropRegion=new float[4];
 		for(int i=0;i<4;i++)
 			cropRegion[i]=_cropRegion.get(i).getAsFloat();
-		ImageMetadata meta=new ImageMetadata(width, height, null, cropRegion);
+		ImageMetadata meta=new ImageMetadata(width, height, null, cropRegion, false);
 		byte[] randomID=Utils.randomBytes(18);
 		long newID=new SQLQueryBuilder(conn)
 				.insertInto("media_files")
@@ -1648,7 +1648,7 @@ public class DatabaseSchemaUpdater{
 			int width=obj.getAsJsonArray("_sz").get(0).getAsInt();
 			int height=obj.getAsJsonArray("_sz").get(1).getAsInt();
 			String blurhash=obj.has("blurhash") ? obj.get("blurhash").getAsString() : null;
-			ImageMetadata meta=new ImageMetadata(width, height, blurhash, null);
+			ImageMetadata meta=new ImageMetadata(width, height, blurhash, null, false);
 			byte[] randomID=Utils.randomBytes(18);
 			boolean isGraffiti=obj.has("graffiti") && obj.get("graffiti").getAsBoolean();
 			long newID=new SQLQueryBuilder(conn)

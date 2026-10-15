@@ -31,6 +31,10 @@ public non-sealed class LocalImage extends Image implements SizedImage{
 	public long photoID;
 	public Rotation rotation;
 	public AvatarCropRects avaCropRects;
+	/**
+	 * Animated images are stored as animated WebP and served as is, without imgproxy, so that they keep moving.
+	 */
+	public boolean isAnimated;
 
 	public LocalImage(){}
 
@@ -61,6 +65,14 @@ public non-sealed class LocalImage extends Image implements SizedImage{
 		obj=super.asActivityPubObject(obj);
 		if(fileRecord==null){
 			LOG.warn("Tried to serialize a LocalImage with fileRecord not set (file ID {})", fileID);
+			return obj;
+		}
+		if(isAnimated){
+			obj.addProperty("url", getOriginalURI().toString());
+			obj.addProperty("width", width);
+			obj.addProperty("height", height);
+			if(mediaType==null)
+				obj.addProperty("mediaType", fileRecord.id().type().getMimeType());
 			return obj;
 		}
 		ImgProxy.UrlBuilder builder=MediaFileStorageDriver.getInstance().getImgProxyURL(fileRecord.id())
@@ -121,6 +133,10 @@ public non-sealed class LocalImage extends Image implements SizedImage{
 			if(useFallback)
 				return Config.localURI(size==Type.AVA_SQUARE_SMALL || (is2x && size==Type.AVA_SQUARE_MEDIUM) ? "/res/broken_photo_small.svg" : "/res/broken_photo.svg");
 			return null;
+		}
+		if(isAnimated){
+			// imgproxy would only keep the first frame, so serve the stored file for every size and format and let the browser scale it
+			return MediaFileStorageDriver.getInstance().getFilePublicURL(fileRecord.id());
 		}
 		ImgProxy.UrlBuilder builder=MediaFileStorageDriver.getInstance().getImgProxyURL(fileRecord.id())
 				.format(format)
@@ -191,7 +207,7 @@ public non-sealed class LocalImage extends Image implements SizedImage{
 	public URI getOriginalURI(){
 		if(fileRecord==null)
 			return null;
-		if(rotation!=null){
+		if(rotation!=null && !isAnimated){
 			return MediaFileStorageDriver.getInstance().getImgProxyURL(fileRecord.id())
 					.format(Format.WEBP)
 					.rotate(rotation)
@@ -209,6 +225,12 @@ public non-sealed class LocalImage extends Image implements SizedImage{
 			cropRegion=mfr.metadata().cropRegion();
 		setBlurHash(mfr.metadata().blurhash());
 		isGraffiti=mfr.id().type()==MediaFileType.IMAGE_GRAFFITI;
+		isAnimated=mfr.metadata().animated();
+	}
+
+	@Override
+	public boolean isAnimated(){
+		return isAnimated;
 	}
 
 	public String getLocalID(MediaFileUploadPurpose purpose, int ownerID){

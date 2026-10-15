@@ -236,7 +236,7 @@ public class PhotosRoutes{
 		if(album.systemType!=null || !info.permissions.canUploadToPhotoAlbum(album))
 			throw new UserActionNotAllowedException();
 
-		LocalImage photo=MediaStorageUtils.saveUploadedImage(req, resp, info.account, false, "file");
+		LocalImage photo=MediaStorageUtils.saveUploadedImage(req, resp, info.account, false, "file", true);
 		long photoID=ctx.getPhotosController().createPhoto(info.account.user, album, photo.fileID, null, null);
 		SizedImage.Type sizeType=SizedImage.Type.PHOTO_THUMB_SMALL;
 		SizedImage.Dimensions size=photo.getDimensionsForSize(sizeType);
@@ -244,6 +244,7 @@ public class PhotosRoutes{
 		return new JsonObjectBuilder()
 				.add("id", encodeLong(XTEA.obfuscateObjectID(photoID, ObfuscatedObjectIDType.PHOTO)))
 				.add("html", photo.generateHTML(SizedImage.Type.PHOTO_THUMB_MEDIUM, null, null, size.width, size.height, true, null))
+				.add("animated", photo.isAnimated)
 				.build();
 	}
 
@@ -432,7 +433,8 @@ public class PhotosRoutes{
 		if(ctx.getPhotosController().canManagePhoto(self, photo)){
 			allowedActions.add(PhotoViewerPhotoInfo.AllowedAction.DELETE);
 			allowedActions.add(PhotoViewerPhotoInfo.AllowedAction.EDIT_DESCRIPTION);
-			allowedActions.add(PhotoViewerPhotoInfo.AllowedAction.ROTATE);
+			if(photo.image==null || !photo.image.isAnimated())
+				allowedActions.add(PhotoViewerPhotoInfo.AllowedAction.ROTATE);
 			allowedActions.add(PhotoViewerPhotoInfo.AllowedAction.ADD_TAGS);
 			allowedActions.add(PhotoViewerPhotoInfo.AllowedAction.MANAGE_TAGS);
 		}

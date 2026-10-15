@@ -601,7 +601,7 @@ public class ApiRoutes{
 		Account self=ctx.getUsersController().getAccountOrThrow(accountID);
 		int ownerID=data.has("oid") ? data.get("oid").getAsInt() : self.user.id;
 		try{
-			LocalImage img=MediaStorageUtils.saveUploadedImage(req, resp, self, false, "photo");
+			LocalImage img=MediaStorageUtils.saveUploadedImage(req, resp, self, false, "photo", purpose!=MediaFileUploadPurpose.AVATAR);
 			return new JsonObjectBuilder()
 					.add("id", XTEA.encodeObjectID(img.fileID, ObfuscatedObjectIDType.MEDIA_FILE))
 					.add("hash", MediaFileUploadTokens.getToken(img.fileRecord.id(), purpose, ownerID))
