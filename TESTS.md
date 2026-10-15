@@ -173,3 +173,33 @@ Any animated GIF works, or make one with Python: `pip install pillow`, then
 3. Upload it as a profile picture (`/settings` → upload new photo): the server refuses it with "Animated images can't be
    used here". A still GIF, JPEG or PNG is accepted as before. The same refusal applies to group logos and app logos.
 4. A still GIF attached to a post is handled exactly like a JPEG (served through imgproxy in all sizes).
+
+## 7. Media regression script
+
+`dev/regression.js` runs the media checks from sections 6 and 8 in a browser: photos, animated GIFs and videos
+as post and message attachments, albums, avatars, group logos and app logos. It generates its own test files
+with ffmpeg, so ffmpeg must be on the PATH, and logs in as `admin` by default.
+
+```sh
+NODE_PATH=/path/to/node_modules UPLOAD_PATH=/tmp/tusovochka-uploads node dev/regression.js
+```
+
+`UPLOAD_PATH` is optional; when set, the script also checks that the stored files exist and the spool
+directory is empty. Each run creates posts, an album, a group and an app, so run it on a throwaway database.
+The unit tests in `src/test/java/smithereen/media` cover the processors themselves and are skipped when
+libvips or ffmpeg can't be found; `mvn test` prints them as run, not skipped, when both are installed.
+
+## 8. Checklist for video attachments
+
+Needs ffmpeg installed where the server runs (`ffmpeg -version`). The server logs "ffmpeg found" on the first
+page load; without it, `userConfig.uploads.videoEnabled` is false and the composer accepts images only.
+
+1. Attach an MP4 or WebM to a wall post. The composer shows the poster frame with a play mark; after publishing,
+   the post shows the poster with "Processing video…", which turns into a player within a few seconds without
+   reloading (through the websocket, or the status poll on pages the websocket doesn't reach).
+2. The player plays, seeks and has sound. The stored file is a 720p (or smaller) MP4 under the upload path;
+   the `spool` directory under it is empty once processing is done.
+3. The same works in comments and private messages. Albums and profile pictures refuse videos with a message.
+4. Restart the server while a video is processing: the job resumes and finishes after the restart.
+5. Upload a file that is not a video with a `.mp4` name: it is refused with the "damaged or unsupported" message.
+6. Delete the post: an hour later the abandoned-files job removes the MP4, and the poster on the following pass.

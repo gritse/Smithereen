@@ -65,6 +65,10 @@ By default profiles, walls, public posts, groups and photos are visible to anyon
 
 Uploaded files and resized images are served by your web server and imgproxy, not by the Java server, so this setting does not cover them. Their URLs are unguessable random names, but anyone who already has such a link can open it without logging in.
 
+### Video attachments
+
+Posts, comments and private messages accept videos when [ffmpeg](https://ffmpeg.org/) is installed where the server runs (the Docker image includes it). Uploads are transcoded in the background to H.264 and AAC in MP4, scaled down to 720p, and shown as a poster frame with a "processing" notice until they are ready. The limits and the CPU budget are set in `config.properties`, see the commented keys in [the example](examples/config.properties): `media.video.max_size` (300 MB by default; the web server in front must allow request bodies at least this large), `media.video.max_duration`, `media.video.max_height`, and `media.ffmpeg_threads` with `media.processing_threads`, which both default to 1 so that transcoding never uses more than one core. Videos are served as plain files by the web server or the object storage, not through imgproxy. Profile pictures and photo albums take still images only.
+
 ### Using S3 object storage
 
 Set `upload.backend=s3` in `config.properties`, then configure the properties for your provider:
