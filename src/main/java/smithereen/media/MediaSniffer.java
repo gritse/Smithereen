@@ -32,7 +32,14 @@ public final class MediaSniffer{
 		}
 		if(FFmpeg.isAvailable()){
 			try{
-				FFmpeg.probe(file);
+				FFmpeg.ProbeResult probe=FFmpeg.probe(file);
+				if(declaredVideo && probe.isImageFormat()){
+					// A GIF or a still declared as video: an image if libvips reads it, else a one-frame video is not worth having
+					MediaKind kind=sniffImage(file);
+					if(kind!=null)
+						return kind;
+					throw MediaValidationException.unreadable();
+				}
 				return MediaKind.VIDEO;
 			}catch(MediaValidationException x){
 				if(declaredVideo){
@@ -40,6 +47,7 @@ public final class MediaSniffer{
 					if(kind!=null)
 						return kind;
 				}
+				// not a video either: fall through to the message that fits the declared type
 			}catch(IOException x){
 				LOG.warn("ffprobe failed", x);
 				throw MediaValidationException.unreadable();

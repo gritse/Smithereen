@@ -119,6 +119,24 @@ public class VideoProcessorTest{
 	}
 
 	@Test
+	void animatedGifDeclaredAsVideoStaysAnImage() throws Exception{
+		Assumptions.assumeTrue(available, "ffmpeg or libvips not available");
+		File gif=tmp.resolve("declared.gif").toFile();
+		FFmpeg.run(List.of("ffmpeg", "-nostdin", "-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=duration=1:size=100x80:rate=6", "-frames:v", "6", gif.getAbsolutePath()), 60);
+		assertEquals(MediaKind.ANIMATED_IMAGE, MediaSniffer.sniff(gif, "video/gif"));
+		assertEquals(MediaKind.ANIMATED_IMAGE, MediaSniffer.sniff(gif, "video/mp4"));
+	}
+
+	@Test
+	void hangingProcessIsKilledAfterTheTimeout(){
+		Assumptions.assumeTrue(new File("/bin/sleep").canExecute() || new File("/usr/bin/sleep").canExecute(), "no sleep command");
+		long start=System.currentTimeMillis();
+		IOException x=assertThrows(IOException.class, ()->FFmpeg.run(List.of("sleep", "30"), 1));
+		assertTrue(x.getMessage().contains("did not finish"), x.getMessage());
+		assertTrue(System.currentTimeMillis()-start<10000, "the timeout should fire after about a second");
+	}
+
+	@Test
 	void targetSizeFitsPortraitAndOddSizes(){
 		assertArrayEquals(new int[]{720, 1280}, VideoProcessor.targetSize(1080, 1920, 720));
 		assertArrayEquals(new int[]{1280, 720}, VideoProcessor.targetSize(3840, 2160, 720));

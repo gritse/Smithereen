@@ -58,6 +58,9 @@ public final class MediaUploadService{
 	 * @throws MediaValidationException if the file is not accepted
 	 */
 	public static MediaFileRef store(File input, String declaredMimeType, Account self, MediaFileUploadPurpose purpose, ProcessingOptions options, MediaProcessingQueue queue) throws MediaValidationException, IOException, SQLException{
+		// Anything that isn't declared as a video is held to the image limit before it is even looked at
+		if((declaredMimeType==null || !declaredMimeType.startsWith("video/")) && input.length()>Config.imageMaxUploadSize)
+			throw MediaValidationException.tooLarge(Config.imageMaxUploadSize);
 		MediaKind kind=MediaSniffer.sniff(input, declaredMimeType);
 		Set<MediaKind> accepted=options.acceptedKinds()!=null ? options.acceptedKinds() : purpose.acceptedKinds();
 		if(!accepted.contains(kind))
@@ -93,13 +96,20 @@ public final class MediaUploadService{
 			MediaFileRecord posterRecord=MediaStorage.createMediaFileRecord(poster.type(), poster.file().length(), self.user.id, poster.metadata());
 			MediaFileStorageDriver.getInstance().storeFile(poster.file(), posterRecord.id(), false);
 
-			VideoMetadata meta=new VideoMetadata(prepared.width(), prepared.height(), prepared.durationSeconds(), posterRecord.id().id(), prepared.blurhash());
+			VideoMetadata meta=new VideoMetadata(prepared.width(), prepared.height(), prepared.durationSeconds(), posterRecord.id().id(), prepared.blurhash(), prepared.frameRate());
 			MediaFileRecord record=MediaStorage.createMediaFileRecord(MediaFileType.VIDEO, input.length(), self.user.id, meta, MediaFileStatus.PROCESSING);
 			MediaStorage.createMediaFileReference(posterRecord.id().id(), record.id().id(), MediaFileReferenceType.VIDEO_POSTER, self.user.id);
 
+			// The job row goes in before the file is moved: a record without a job would never be retried or cleaned up
 			File spool=MediaProcessingQueue.spoolFile(record.id().id());
-			Files.move(input.toPath(), spool.toPath(), StandardCopyOption.REPLACE_EXISTING);
 			MediaStorage.createProcessingJob(record.id().id(), spool.getAbsolutePath());
+			try{
+				Files.move(input.toPath(), spool.toPath(), StandardCopyOption.REPLACE_EXISTING);
+			}catch(IOException x){
+				MediaStorage.deleteProcessingJob(record.id().id());
+				MediaStorage.updateMediaFileStatus(record.id().id(), MediaFileStatus.FAILED, 0);
+				throw x;
+			}
 			queue.enqueue(record.id().id());
 
 			MediaFileRef ref=new MediaFileRef(record.id().id());

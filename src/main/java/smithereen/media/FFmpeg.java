@@ -8,6 +8,7 @@ import com.google.gson.JsonParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -38,7 +39,14 @@ public final class FFmpeg{
 	 * @param duration in seconds
 	 * @param frameRate frames per second, 0 if unknown
 	 */
-	public record ProbeResult(int width, int height, double duration, double frameRate, boolean hasAudio, String videoCodec){}
+	public record ProbeResult(int width, int height, double duration, double frameRate, boolean hasAudio, String videoCodec, String formatName){
+		/**
+		 * @return whether ffprobe read this as an image file (GIF, or any still through the image2 demuxers) rather than a video
+		 */
+		public boolean isImageFormat(){
+			return formatName!=null && (formatName.contains("image2") || formatName.contains("_pipe") || formatName.equals("gif"));
+		}
+	}
 
 	/**
 	 * @return whether ffmpeg and ffprobe can be run. Checked once; a server without them refuses video uploads instead of failing.
@@ -121,7 +129,8 @@ public final class FFmpeg{
 		double frameRate=parseFraction(optString(video, "avg_frame_rate"));
 		if(frameRate<=0)
 			frameRate=parseFraction(optString(video, "r_frame_rate"));
-		return new ProbeResult(width, height, duration, frameRate, hasAudio, optString(video, "codec_name"));
+		String formatName=root.has("format") ? optString(root.getAsJsonObject("format"), "format_name") : null;
+		return new ProbeResult(width, height, duration, frameRate, hasAudio, optString(video, "codec_name"), formatName);
 	}
 
 	/**
@@ -177,8 +186,10 @@ public final class FFmpeg{
 		ProcessBuilder pb=new ProcessBuilder(command);
 		pb.redirectInput(ProcessBuilder.Redirect.from(new File("/dev/null")));
 		Process process=pb.start();
-		// stderr is drained on another thread so that a chatty process can't fill the pipe and block
+		// Both pipes are drained on their own threads so that output can't block the process, and so that the
+		// wait below is a real timeout: a process that hangs is killed rather than blocking the caller on a read.
 		StringBuilder stderr=new StringBuilder();
+		ByteArrayOutputStream stdoutBytes=new ByteArrayOutputStream();
 		Thread stderrReader=Thread.ofVirtual().start(()->{
 			try(InputStream in=process.getErrorStream()){
 				byte[] buf=new byte[4096];
@@ -189,10 +200,11 @@ public final class FFmpeg{
 				}
 			}catch(IOException ignore){}
 		});
-		String stdout;
-		try(InputStream in=process.getInputStream()){
-			stdout=new String(in.readAllBytes(), StandardCharsets.UTF_8);
-		}
+		Thread stdoutReader=Thread.ofVirtual().start(()->{
+			try(InputStream in=process.getInputStream()){
+				in.transferTo(stdoutBytes);
+			}catch(IOException ignore){}
+		});
 		boolean exited;
 		try{
 			exited=process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
@@ -206,13 +218,14 @@ public final class FFmpeg{
 			throw new IOException(command.getFirst()+" did not finish within "+timeoutSeconds+" seconds");
 		}
 		try{
+			stdoutReader.join(5000);
 			stderrReader.join(5000);
 		}catch(InterruptedException ignore){
 			Thread.currentThread().interrupt();
 		}
 		if(process.exitValue()!=0)
 			throw new IOException(command.getFirst()+" exited with code "+process.exitValue()+": "+stderr.toString().strip());
-		return stdout;
+		return stdoutBytes.toString(StandardCharsets.UTF_8);
 	}
 
 	private static boolean isAttachedPicture(JsonObject stream){

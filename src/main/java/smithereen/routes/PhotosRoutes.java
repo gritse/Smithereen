@@ -735,6 +735,8 @@ public class PhotosRoutes{
 					throw new ObjectNotFoundException();
 				MediaFileRef img=new MediaFileRef(fileID);
 				img.fillIn(mfr);
+				if(img.image()==null)
+					throw new ObjectNotFoundException();
 				PhotoAttachment fakeAttachment=new PhotoAttachment();
 				fakeAttachment.image=img.image();
 				fakeAttachment.setBlurHash(img.image().getBlurHash());

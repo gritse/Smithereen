@@ -119,7 +119,7 @@ function storedFile(url){
 	if(uploadPath) check(gifFile && fs.statSync(gifFile).size>1000, 'animated WebP stored on disk: '+gifFile);
 	await postWithAttachment(page, profileHref, 'GIF post', gif.id);
 	tile=await page.$eval('.postAttachments a.photo picture', el=>({sources: el.querySelectorAll('source').length, src: el.querySelector('img').getAttribute('src')}));
-	check(tile.sources==0 && tile.src==gif.thumbs.webp, 'GIF post renders a plain <img> of the stored file');
+	check(tile.sources==0 && tile.src==gif.thumbs.webp, 'GIF post renders a plain <img> of the stored file: '+JSON.stringify(tile)+' expected '+gif.thumbs.webp);
 	r=await upload(page, '/system/upload/postPhoto', 'file', f('huge.gif'), 'huge.gif', 'image/gif');
 	const huge=JSON.parse(r.body);
 	check(r.status==200 && huge.width<800 && huge.width>600, 'animation over the pixel budget is scaled down: '+huge.width);

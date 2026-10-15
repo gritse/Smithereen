@@ -243,7 +243,17 @@ class Notifier{
 	// A video attachment finished (or failed) transcoding: swap every placeholder for it on this page for the new markup
 	private static handleMediaReady(m:any){
 		for(var el of document.querySelectorAll("[data-media-file-id=\""+m.fileID+"\"]").unfuck()){
-			(el as HTMLElement).outerHTML=m.html;
+			// The server doesn't know which attachment this is, so the alt text comes from the placeholder
+			var alt=(el as HTMLElement).dataset.alt;
+			var wrap=ce("div", {innerHTML: m.html});
+			var fresh=wrap.firstElementChild as HTMLElement;
+			if(alt && fresh){
+				fresh.dataset.alt=alt;
+				var player=fresh.querySelector("video");
+				if(player)
+					player.setAttribute("aria-label", alt);
+			}
+			el.parentNode.replaceChild(fresh, el);
 		}
 	}
 

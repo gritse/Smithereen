@@ -43,7 +43,7 @@ public class MediaStorage{
 				.executeAsStream(MediaFileRecord::fromResultSet)
 				.forEach(r->{
 					res.put(r.id().id(), r);
-					recordCache.put(r.id().id(), r);
+					cacheIfReady(r);
 				});
 		return res;
 	}
@@ -58,8 +58,17 @@ public class MediaStorage{
 				.where("id=?", id)
 				.executeAndGetSingleObject(MediaFileRecord::fromResultSet);
 		if(r!=null)
-			recordCache.put(id, r);
+			cacheIfReady(r);
 		return r;
+	}
+
+	/**
+	 * A record whose status can still change is never cached, so that a page that read it just before the
+	 * processing queue updated it can't put the stale copy back after the queue's cache removal.
+	 */
+	private static void cacheIfReady(MediaFileRecord r){
+		if(r.status()==MediaFileStatus.READY)
+			recordCache.put(r.id().id(), r);
 	}
 
 	public static MediaFileRecord createMediaFileRecord(MediaFileType type, long fileSize, int ownerID, MediaFileMetadata metadata) throws SQLException{
@@ -81,7 +90,7 @@ public class MediaStorage{
 				new MediaFileID(id, randomID, ownerID, type),
 				fileSize, Instant.now(), metadata, status
 		);
-		recordCache.put(id, mfr);
+		cacheIfReady(mfr);
 		return mfr;
 	}
 

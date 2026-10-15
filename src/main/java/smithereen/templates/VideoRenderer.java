@@ -29,6 +29,8 @@ public final class VideoRenderer{
 			case READY -> {}
 		}
 		sb.append("\" data-media-file-id=\"").append(fileID).append('"');
+		if(StringUtils.isNotEmpty(altText))
+			sb.append(" data-alt=\"").append(TextProcessor.escapeHTML(altText)).append('"');
 		String blurHash=video.getBlurHash();
 		if(StringUtils.isNotEmpty(blurHash))
 			sb.append(String.format(Locale.US, " style=\"background-color: #%06X\"", BlurHash.decodeToSingleColor(blurHash)));

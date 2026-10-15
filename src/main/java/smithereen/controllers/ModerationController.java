@@ -202,7 +202,7 @@ public class ModerationController{
 	}
 
 	public void populateFilesInReportableContent(List<ReportableContentObject> content){
-		HashSet<MediaFileRef> refs=new HashSet<>();
+		ArrayList<MediaFileRef> refs=new ArrayList<>();
 		List<Photo> photos=new ArrayList<>();
 		for(ReportableContentObject rco:content){
 			List<MediaFileRef> attachments=switch(rco){

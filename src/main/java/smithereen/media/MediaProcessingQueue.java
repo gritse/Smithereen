@@ -8,6 +8,8 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -44,6 +46,11 @@ public final class MediaProcessingQueue{
 
 	private final ApplicationContext context;
 	private final ExecutorService executor;
+	/**
+	 * Files queued or being processed, so that a job is never run twice at once (an upload during startup is
+	 * enqueued by the upload and again by {@link #start}).
+	 */
+	private final Set<Long> inFlight=ConcurrentHashMap.newKeySet();
 
 	public MediaProcessingQueue(ApplicationContext context){
 		this.context=context;
@@ -89,7 +96,15 @@ public final class MediaProcessingQueue{
 	}
 
 	public void enqueue(long fileID){
-		executor.submit(()->run(fileID));
+		if(!inFlight.add(fileID))
+			return;
+		executor.submit(()->{
+			try{
+				run(fileID);
+			}finally{
+				inFlight.remove(fileID);
+			}
+		});
 	}
 
 	public void shutDown(){
@@ -125,7 +140,7 @@ public final class MediaProcessingQueue{
 			if(!(record.metadata() instanceof VideoMetadata meta))
 				throw new IllegalStateException("Only videos are processed on the queue, got "+record.id().type());
 			LOG.info("Transcoding video file {} ({} bytes)", fileID, source.length());
-			output=new VideoProcessor().transcode(source, meta.width(), meta.height(), 0);
+			output=new VideoProcessor().transcode(source, meta.width(), meta.height(), meta.frameRate());
 			long size=output.length();
 			MediaFileStorageDriver.getInstance().storeFile(output, record.id(), false);
 			MediaStorage.updateMediaFileStatus(fileID, MediaFileStatus.READY, size);

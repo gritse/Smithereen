@@ -95,7 +95,8 @@ public class RenderAttachmentsFunction implements Function{
 				}
 			}else{
 				int i=0;
-				int graffitiCount=0;
+				// The photo viewer only lists photos, so its index skips graffiti and videos
+				int nonPhotoCount=0;
 				for(SizedAttachment att:sized){
 					MediaLayoutHelper.TiledLayoutResult.Tile tile=tiledLayout.tiles[i];
 					String cellStyle="";
@@ -109,12 +110,12 @@ public class RenderAttachmentsFunction implements Function{
 					}
 					lines.add("<div style=\""+cellStyle+"\">");
 					if(att instanceof PhotoAttachment photo){
-						renderPhotoAttachment(photo, lines, Math.round(Math.max(tile.width*510, tile.height*510)), overrideLinks, i-graffitiCount, photoList, listURL);
+						renderPhotoAttachment(photo, lines, Math.round(Math.max(tile.width*510, tile.height*510)), overrideLinks, i-nonPhotoCount, photoList, listURL);
 					}else if(att instanceof VideoAttachment video){
 						lines.add(VideoRenderer.render(video.video, video.description, lang));
 					}
-					if(att instanceof GraffitiAttachment){
-						graffitiCount++;
+					if(att instanceof GraffitiAttachment || att instanceof VideoAttachment){
+						nonPhotoCount++;
 					}
 					lines.add("</div>");
 					i++;

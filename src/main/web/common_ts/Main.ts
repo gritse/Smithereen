@@ -235,6 +235,7 @@ window.addEventListener("popstate", (ev)=>{
 
 if(!mobile && userConfig.notifier && userConfig.notifier.enabled){
 	Notifier.start();
-	Notifier.startMediaStatusPolling();
 }
+// Pages with videos still being processed ask the server about them, whoever is looking
+Notifier.startMediaStatusPolling();
 

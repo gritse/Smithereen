@@ -54,9 +54,18 @@ public final class StillImageProcessor implements MediaProcessor{
 			LOG.warn("VipsImage error", x);
 			throw MediaValidationException.unreadable();
 		}
-		return flatten(img);
+		try{
+			return flatten(img);
+		}catch(MediaValidationException x){
+			img.release();
+			throw x;
+		}
 	}
 
+	/**
+	 * @return the image flattened onto white, with the original released; or the original itself if it has no alpha.
+	 * On failure the original is left for the caller to release.
+	 */
 	static VipsImage flatten(VipsImage img) throws MediaValidationException{
 		if(!img.hasAlpha())
 			return img;
@@ -65,7 +74,6 @@ public final class StillImageProcessor implements MediaProcessor{
 			img.release();
 			return flat;
 		}catch(IOException x){
-			img.release();
 			LOG.warn("VipsImage error", x);
 			throw MediaValidationException.unreadable();
 		}

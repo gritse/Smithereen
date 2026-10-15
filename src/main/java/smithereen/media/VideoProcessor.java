@@ -45,7 +45,7 @@ public final class VideoProcessor implements MediaProcessor{
 		Prepared prepared=prepare(input, options);
 		try{
 			File out=transcode(input, prepared);
-			return new ProcessedMedia(out, MediaFileType.VIDEO, new VideoMetadata(prepared.width(), prepared.height(), prepared.durationSeconds(), 0, prepared.blurhash()), List.of(prepared.poster()));
+			return new ProcessedMedia(out, MediaFileType.VIDEO, new VideoMetadata(prepared.width(), prepared.height(), prepared.durationSeconds(), 0, prepared.blurhash(), prepared.frameRate()), List.of(prepared.poster()));
 		}catch(IOException | RuntimeException x){
 			prepared.poster().deleteFiles();
 			throw x;
