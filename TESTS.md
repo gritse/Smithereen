@@ -155,7 +155,7 @@ request to `yulia` from her profile, then log in as `yulia` and accept it from `
 
 1. Yulia posts on her own wall: the post appears at the top of admin's `/feed`.
 2. Dmitry (not a friend of admin) posts on Yulia's wall: the post appears in admin's feed with
-   "Дмитрий Орлов → Юлия Куминова" in the header and a "Wall-to-wall" link. It also appears in Yulia's own feed.
+   "dmitry → yulia" (author, arrow, wall owner) in the header and a "Wall-to-wall" link. It also appears in yulia's own feed.
 3. Yulia sets "Who can see others' posts on my wall" to "Only me" at `/settings/privacy`: Dmitry's post
    disappears from admin's feed, Yulia's own post stays. Set it back to "Everyone" and it returns.
 4. Yulia deletes Dmitry's post from her wall: it disappears from admin's feed.
