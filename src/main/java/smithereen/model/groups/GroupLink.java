@@ -5,7 +5,7 @@ import java.net.URI;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.media.MediaFileRef;
 import smithereen.controllers.ObjectLinkResolver;
 import smithereen.model.SizedImage;
 
@@ -15,7 +15,7 @@ public class GroupLink{
 	public URI url;
 	public String title;
 	public ObjectLinkResolver.ObjectTypeAndID object;
-	public SizedImage image;
+	public MediaFileRef image;
 	public int displayOrder;
 	public URI localUrl;
 
@@ -33,14 +33,14 @@ public class GroupLink{
 		}
 		long imageID=res.getLong("image_id");
 		if(imageID!=0){
-			l.image=new LocalImage(imageID);
+			l.image=new MediaFileRef(imageID);
 		}
 
 		return l;
 	}
 
 	public SizedImage getImage(){
-		return image;
+		return image==null ? null : image.image();
 	}
 
 	public String getTitleLangKey(){

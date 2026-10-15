@@ -11,7 +11,7 @@ import io.pebbletemplates.pebble.error.PebbleException;
 import io.pebbletemplates.pebble.extension.Filter;
 import io.pebbletemplates.pebble.template.EvaluationContext;
 import io.pebbletemplates.pebble.template.PebbleTemplate;
-import smithereen.activitypub.objects.Actor;
+import smithereen.model.objects.Actor;
 import smithereen.lang.Lang;
 import smithereen.model.User;
 import smithereen.templates.Templates;

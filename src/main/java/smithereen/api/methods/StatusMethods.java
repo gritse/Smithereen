@@ -3,7 +3,7 @@ package smithereen.api.methods;
 import com.google.gson.annotations.JsonAdapter;
 
 import smithereen.ApplicationContext;
-import smithereen.activitypub.objects.Actor;
+import smithereen.model.objects.Actor;
 import smithereen.api.ApiCallContext;
 import smithereen.model.Group;
 import smithereen.model.apps.ClientAppPermission;

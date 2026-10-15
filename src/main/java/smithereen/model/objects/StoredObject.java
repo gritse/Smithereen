@@ -1,4 +1,4 @@
-package smithereen.activitypub.objects;
+package smithereen.model.objects;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -26,18 +26,17 @@ import smithereen.util.JsonArrayBuilder;
 import smithereen.util.UriBuilder;
 
 /**
- * Base class for JSON-serializable content objects: attachments (images, documents),
- * profile fields and actors (users, groups). Objects are only ever parsed from JSON written by this
- * server itself (e.g. the attachments column), never from the network.
+ * Base class for JSON-serializable objects that are stored as part of other rows: profile fields
+ * ({@link PropertyValue}) and the common part of actors (users, groups). Media attachments are
+ * {@link smithereen.model.media.MediaFileRef}s and are not part of this hierarchy.
+ * Objects are only ever parsed from JSON written by this server itself, never from the network.
  */
-public abstract class ActivityPubObject{
-	protected static final Logger LOG=LoggerFactory.getLogger(ActivityPubObject.class);
+public abstract class StoredObject{
+	protected static final Logger LOG=LoggerFactory.getLogger(StoredObject.class);
 
-	public List<ActivityPubObject> attachment;
+	public List<StoredObject> attachment;
 	public String content;
 	public @Nullable String name;
-	public List<Image> image;
-	public List<Image> icon;
 	public Instant published;
 	public @Nullable String summary;
 	public URI url;
@@ -59,7 +58,7 @@ public abstract class ActivityPubObject{
 
 	public abstract String getType();
 
-	public JsonObject asActivityPubObject(JsonObject obj){
+	public JsonObject toJson(JsonObject obj){
 		if(obj==null)
 			obj=new JsonObject();
 
@@ -72,10 +71,6 @@ public abstract class ActivityPubObject{
 			obj.addProperty("content", content);
 		if(name!=null)
 			obj.addProperty("name", name);
-		if(image!=null && !image.isEmpty())
-			obj.add("image", serializeObjectArrayCompact(image));
-		if(icon!=null && !icon.isEmpty())
-			obj.add("icon", serializeObjectArrayCompact(icon));
 		if(published!=null)
 			obj.addProperty("published", Utils.formatDateAsISO(published));
 		if(summary!=null)
@@ -90,7 +85,7 @@ public abstract class ActivityPubObject{
 		return obj;
 	}
 
-	public static <T extends ActivityPubObject> List<T> parseSingleObjectOrArray(JsonElement o){
+	public static <T extends StoredObject> List<T> parseSingleObjectOrArray(JsonElement o){
 		if(o==null)
 			return null;
 		try{
@@ -162,16 +157,16 @@ public abstract class ActivityPubObject{
 		return result;
 	}
 
-	public static JsonArray serializeObjectArray(List<? extends ActivityPubObject> ar){
+	public static JsonArray serializeObjectArray(List<? extends StoredObject> ar){
 		JsonArray res=new JsonArray();
-		for(ActivityPubObject obj:ar){
-			res.add(obj.asActivityPubObject(new JsonObject()));
+		for(StoredObject obj:ar){
+			res.add(obj.toJson(new JsonObject()));
 		}
 		return res;
 	}
 
-	public static JsonElement serializeObjectArrayCompact(List<? extends ActivityPubObject> ar){
-		return ar.size()==1 ? ar.get(0).asActivityPubObject(null) : serializeObjectArray(ar);
+	public static JsonElement serializeObjectArrayCompact(List<? extends StoredObject> ar){
+		return ar.size()==1 ? ar.get(0).toJson(null) : serializeObjectArray(ar);
 	}
 
 	protected String serializeDuration(long d){
@@ -252,13 +247,11 @@ public abstract class ActivityPubObject{
 		return new JsonArrayBuilder().add(el).build();
 	}
 
-	protected ActivityPubObject parseActivityPubObject(JsonObject obj){
+	protected StoredObject parseJson(JsonObject obj){
 		activityPubID=tryParseURL(optString(obj, "id"));
 		attachment=parseSingleObjectOrArray(obj.get("attachment"));
 		content=optString(obj, "content");
 		name=optString(obj, "name");
-		image=parseSingleObjectOrArray(obj.get("image"));
-		icon=parseSingleObjectOrArray(obj.get("icon"));
 		published=tryParseDate(optString(obj, "published"));
 		summary=optString(obj, "summary");
 		url=tryParseURL(optString(obj, "url"));
@@ -269,7 +262,7 @@ public abstract class ActivityPubObject{
 
 	@Override
 	public String toString(){
-		StringBuilder sb=new StringBuilder("ActivityPubObject{");
+		StringBuilder sb=new StringBuilder("StoredObject{");
 		if(activityPubID!=null){
 			sb.append("id=");
 			sb.append(activityPubID);
@@ -287,14 +280,6 @@ public abstract class ActivityPubObject{
 			sb.append(", name='");
 			sb.append(name);
 			sb.append('\'');
-		}
-		if(image!=null){
-			sb.append(", image=");
-			sb.append(image);
-		}
-		if(icon!=null){
-			sb.append(", icon=");
-			sb.append(icon);
 		}
 		if(published!=null){
 			sb.append(", published=");
@@ -325,14 +310,11 @@ public abstract class ActivityPubObject{
 	/**
 	 * Parse a stored object. Only the types this server writes itself are recognized.
 	 */
-	public static ActivityPubObject parse(JsonObject obj){
+	public static StoredObject parse(JsonObject obj){
 		if(obj==null)
 			return null;
 		String type=Objects.requireNonNull(obj.get("type"), "type must not be null").getAsString();
-		ActivityPubObject res=switch(type){
-			case "Image" -> new Image();
-			case "_LocalImage" -> new LocalImage();
-			case "Document" -> new Document();
+		StoredObject res=switch(type){
 			case "PropertyValue" -> new PropertyValue();
 			default -> {
 				LOG.debug("Unknown object type {}", type);
@@ -340,7 +322,7 @@ public abstract class ActivityPubObject{
 			}
 		};
 		if(res!=null)
-			return res.parseActivityPubObject(obj);
+			return res.parseJson(obj);
 		return null;
 	}
 }

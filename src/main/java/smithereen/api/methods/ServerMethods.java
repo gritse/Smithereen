@@ -16,7 +16,7 @@ import smithereen.ApplicationContext;
 import smithereen.BuildInfo;
 import smithereen.Config;
 import smithereen.Utils;
-import smithereen.activitypub.objects.Actor;
+import smithereen.model.objects.Actor;
 import smithereen.api.ApiCallContext;
 import smithereen.api.model.ApiErrorType;
 import smithereen.api.model.ApiPaginatedList;

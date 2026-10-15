@@ -22,7 +22,7 @@ import java.util.Map;
 import smithereen.ApplicationContext;
 import smithereen.Mailer;
 import smithereen.Utils;
-import smithereen.activitypub.objects.Actor;
+import smithereen.model.objects.Actor;
 import smithereen.exceptions.InternalServerErrorException;
 import smithereen.exceptions.ObjectNotFoundException;
 import smithereen.lang.Lang;

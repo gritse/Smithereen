@@ -22,7 +22,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import smithereen.Utils;
-import smithereen.activitypub.objects.Actor;
+import smithereen.model.objects.Actor;
 import smithereen.model.PaginatedList;
 import spark.Request;
 import spark.utils.StringUtils;

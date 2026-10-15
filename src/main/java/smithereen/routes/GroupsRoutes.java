@@ -26,10 +26,9 @@ import java.util.stream.Collectors;
 import smithereen.ApplicationContext;
 import smithereen.Config;
 import smithereen.Utils;
-import smithereen.activitypub.objects.Actor;
-import smithereen.activitypub.objects.Image;
-import smithereen.activitypub.objects.LocalImage;
-import smithereen.activitypub.objects.PropertyValue;
+import smithereen.model.objects.Actor;
+import smithereen.model.media.MediaFileRef;
+import smithereen.model.objects.PropertyValue;
 import smithereen.controllers.GroupsController;
 import smithereen.controllers.ObjectLinkResolver;
 import smithereen.controllers.WallController;
@@ -401,10 +400,7 @@ public class GroupsRoutes{
 		model.with("profileFields", profileFields);
 
 		try{
-			Photo photo=switch(group.getAvatarImage()){
-				case LocalImage li when li.photoID!=0 -> ctx.getPhotosController().getPhotoIgnoringPrivacy(li.photoID);
-				case null, default -> null;
-			};
+			Photo photo=group.getAvatarPhotoID()!=0 ? ctx.getPhotosController().getPhotoIgnoringPrivacy(group.getAvatarPhotoID()) : null;
 			if(photo!=null){
 				model.with("avatarPvInfo", new PhotoViewerInlineData(0, "albums/"+XTEA.encodeObjectID(photo.albumID, ObfuscatedObjectIDType.PHOTO_ALBUM), photo.image.getURLsForPhotoViewer()))
 						.with("avatarPhoto", photo);
@@ -1107,7 +1103,7 @@ public class GroupsRoutes{
 				.with("actor", actor)
 				.with("objectTitle", objectTitle)
 				.with("pageTitle", res.title())
-				.with("image", res.image())
+				.with("image", res.image()==null ? null : res.image().image())
 				.with("domain", url.getHost())
 				.with("url", url.toString());
 		Object responseObj=wrapForm(req, resp, "group_add_link_form", "/groups/"+group.id+"/finishAddingLink", l.get("group_add_link_title"), "group_do_add_link", model);

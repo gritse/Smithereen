@@ -19,8 +19,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import smithereen.Utils;
-import smithereen.activitypub.objects.ActivityPubObject;
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.objects.StoredObject;
+import smithereen.model.media.MediaFileRef;
 import smithereen.model.MailDialog;
 import smithereen.model.MailMessage;
 import smithereen.model.MessagesPrivacyGrant;
@@ -342,25 +342,6 @@ public class MailStorage{
 	}
 
 	private static void postprocessMessages(Collection<MailMessage> messages) throws SQLException{
-		Set<Long> needFileIDs=messages.stream()
-				.filter(p->p.attachments!=null && !p.attachments.isEmpty())
-				.flatMap(p->p.attachments.stream())
-				.map(att->att instanceof LocalImage li ? li.fileID : 0L)
-				.filter(id->id!=0)
-				.collect(Collectors.toSet());
-		if(needFileIDs.isEmpty())
-			return;
-		Map<Long, MediaFileRecord> mediaFiles=MediaStorage.getMediaFileRecords(needFileIDs);
-		for(MailMessage msg:messages){
-			if(msg.attachments!=null){
-				for(ActivityPubObject attachment:msg.attachments){
-					if(attachment instanceof LocalImage li){
-						MediaFileRecord mfr=mediaFiles.get(li.fileID);
-						if(mfr!=null)
-							li.fillIn(mfr);
-					}
-				}
-			}
-		}
+		MediaFileResolver.resolveAttachments(messages);
 	}
 }

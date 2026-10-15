@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Set;
 
 import smithereen.Utils;
-import smithereen.activitypub.objects.ActivityPubObject;
+import smithereen.model.media.MediaFileRef;
 import smithereen.model.comments.Comment;
 import smithereen.storage.DatabaseUtils;
 import smithereen.text.TextProcessor;
@@ -23,7 +23,7 @@ public abstract sealed class PostLikeObject implements OwnedContentObject, Attac
 	// userID or -groupID
 	public int ownerID;
 	public String text;
-	public List<ActivityPubObject> attachments; // TODO move away from AP objects here
+	public List<MediaFileRef> attachments;
 	public Instant createdAt;
 	public String contentWarning;
 	public Instant updatedAt;
@@ -49,7 +49,7 @@ public abstract sealed class PostLikeObject implements OwnedContentObject, Attac
 		String att=res.getString("attachments");
 		if(att!=null){
 			try{
-				attachments=ActivityPubObject.parseSingleObjectOrArray(JsonParser.parseString(att));
+				attachments=MediaFileRef.parseList(JsonParser.parseString(att));
 			}catch(Exception ignore){}
 		}
 
@@ -76,7 +76,7 @@ public abstract sealed class PostLikeObject implements OwnedContentObject, Attac
 	public String serializeAttachments(){
 		if(attachments==null)
 			return null;
-		return ActivityPubObject.serializeObjectArrayCompact(attachments).toString();
+		return MediaFileRef.serializeListCompact(attachments).toString();
 	}
 
 	public abstract URI getInternalURL();
@@ -114,12 +114,12 @@ public abstract sealed class PostLikeObject implements OwnedContentObject, Attac
 
 	@Override
 	@NotNull
-	public List<ActivityPubObject> getAttachments(){
+	public List<MediaFileRef> getAttachments(){
 		return attachments==null ? List.of() : attachments;
 	}
 
 	@Override
-	public void setAttachments(@NotNull List<ActivityPubObject> attachments){
+	public void setAttachments(@NotNull List<MediaFileRef> attachments){
 		this.attachments=attachments;
 	}
 

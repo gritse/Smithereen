@@ -19,7 +19,7 @@ import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
 import smithereen.Utils;
-import smithereen.activitypub.objects.ActivityPubObject;
+import smithereen.model.media.MediaFileRef;
 import smithereen.model.reports.ReportableContentObject;
 import smithereen.model.reports.ReportableContentObjectID;
 import smithereen.model.reports.ReportableContentObjectType;
@@ -39,7 +39,7 @@ public sealed class MailMessage implements AttachmentHostContentObject, Reportab
 	public @NotNull Set<Integer> cc=Set.of();
 	public @NotNull String text="";
 	public @NotNull String subject="";
-	public @Nullable List<ActivityPubObject> attachments;
+	public @Nullable List<MediaFileRef> attachments;
 	public @NotNull Instant createdAt=Instant.EPOCH;
 	public @Nullable Instant updatedAt;
 	public @NotNull Set<Integer> readReceipts=Set.of();
@@ -59,7 +59,7 @@ public sealed class MailMessage implements AttachmentHostContentObject, Reportab
 		String att=res.getString("attachments");
 		if(att!=null){
 			try{
-				msg.attachments=ActivityPubObject.parseSingleObjectOrArray(JsonParser.parseString(att));
+				msg.attachments=MediaFileRef.parseList(JsonParser.parseString(att));
 			}catch(Exception ignore){}
 		}
 
@@ -90,12 +90,12 @@ public sealed class MailMessage implements AttachmentHostContentObject, Reportab
 
 	@Override
 	@NotNull
-	public List<ActivityPubObject> getAttachments(){
+	public List<MediaFileRef> getAttachments(){
 		return attachments==null ? List.of() : attachments;
 	}
 
 	@Override
-	public void setAttachments(@NotNull List<ActivityPubObject> attachments){
+	public void setAttachments(@NotNull List<MediaFileRef> attachments){
 		this.attachments=attachments;
 	}
 
@@ -143,7 +143,9 @@ public sealed class MailMessage implements AttachmentHostContentObject, Reportab
 		if(jo.has("attachments")){
 			attachments=new ArrayList<>();
 			for(JsonElement jatt:jo.getAsJsonArray("attachments")){
-				attachments.add(ActivityPubObject.parse(jatt.getAsJsonObject()));
+				MediaFileRef ref=MediaFileRef.parse(jatt.getAsJsonObject());
+				if(ref!=null)
+					attachments.add(ref);
 			}
 		}
 	}

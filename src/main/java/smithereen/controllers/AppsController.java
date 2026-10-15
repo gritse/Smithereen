@@ -29,7 +29,7 @@ import java.util.stream.Collectors;
 import smithereen.ApplicationContext;
 import smithereen.LruCache;
 import smithereen.Utils;
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.media.MediaFileRef;
 import smithereen.exceptions.InternalServerErrorException;
 import smithereen.exceptions.ObjectNotFoundException;
 import smithereen.model.Account;
@@ -124,9 +124,9 @@ public class AppsController{
 
 	public long createApp(User self, String name, String description, String logoID, Set<URI> redirectURIs){
 		try{
-			LocalImage logo=null;
+			MediaFileRef logo=null;
 			if(StringUtils.isNotEmpty(logoID)){
-				logo=MediaStorageUtils.getLocalImage(logoID, MediaFileUploadPurpose.APP_LOGO, self.id);
+				logo=MediaStorageUtils.getMediaFileRef(logoID, MediaFileUploadPurpose.APP_LOGO, self.id);
 			}
 			ClientApp app=new ClientApp();
 			app.allowedRedirectURIs=redirectURIs==null ? null : redirectURIs.stream().map(URI::toString).collect(Collectors.toCollection(LinkedHashSet::new));
@@ -142,13 +142,13 @@ public class AppsController{
 
 	public void updateApp(User self, ClientApp app, String name, String description, String logoID, Set<URI> redirectURIs){
 		try{
-			LocalImage logo=app.logo instanceof LocalImage li ? li : null;
+			MediaFileRef logo=app.logo;
 			String existingLogoID=logo!=null ? logo.getLocalID(MediaFileUploadPurpose.APP_LOGO, self.id) : null;
 			if(existingLogoID!=null && !existingLogoID.equals(logoID)){
-				MediaStorage.deleteMediaFileReference(app.id, MediaFileReferenceType.APP_LOGO, ((LocalImage)app.logo).fileID);
+				MediaStorage.deleteMediaFileReference(app.id, MediaFileReferenceType.APP_LOGO, app.logo.fileID);
 			}
 			if(StringUtils.isNotEmpty(logoID)){
-				logo=MediaStorageUtils.getLocalImage(logoID, MediaFileUploadPurpose.APP_LOGO, self.id);
+				logo=MediaStorageUtils.getMediaFileRef(logoID, MediaFileUploadPurpose.APP_LOGO, self.id);
 			}
 			app.allowedRedirectURIs=redirectURIs==null ? null : redirectURIs.stream().map(URI::toString).collect(Collectors.toCollection(LinkedHashSet::new));
 			AppsStorage.updateApp(app.id, name, description, logo, app.serializeExtraFields());

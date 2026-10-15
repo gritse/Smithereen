@@ -12,8 +12,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import smithereen.ApplicationContext;
-import smithereen.activitypub.objects.Actor;
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.objects.Actor;
+import smithereen.model.media.MediaFileRef;
 import smithereen.api.ApiCallContext;
 import smithereen.api.model.ApiErrorType;
 import smithereen.api.model.ApiPaginatedList;
@@ -448,7 +448,7 @@ public class PhotosMethods{
 		if(album.systemType!=null || !actx.permissions.canUploadToPhotoAlbum(album))
 			throw new UserActionNotAllowedException();
 		long fileID=XTEA.decodeObjectID(actx.requireParamString("id"), ObfuscatedObjectIDType.MEDIA_FILE);
-		LocalImage img=MediaStorageUtils.getLocalImage(fileID, actx.requireParamString("hash"), MediaFileUploadPurpose.ALBUM_PHOTO, album.ownerID);
+		MediaFileRef img=MediaStorageUtils.getMediaFileRef(fileID, actx.requireParamString("hash"), MediaFileUploadPurpose.ALBUM_PHOTO, album.ownerID);
 		if(img==null)
 			throw actx.paramError("invalid file");
 		String mutexName="albumFile"+fileID;
@@ -475,7 +475,7 @@ public class PhotosMethods{
 			group=null;
 		}
 		long fileID=XTEA.decodeObjectID(actx.requireParamString("id"), ObfuscatedObjectIDType.MEDIA_FILE);
-		LocalImage img=MediaStorageUtils.getLocalImage(fileID, actx.requireParamString("hash"), MediaFileUploadPurpose.ALBUM_PHOTO, groupID==0 ? actx.self.user.id : -groupID);
+		MediaFileRef img=MediaStorageUtils.getMediaFileRef(fileID, actx.requireParamString("hash"), MediaFileUploadPurpose.ALBUM_PHOTO, groupID==0 ? actx.self.user.id : -groupID);
 		if(img==null)
 			throw actx.paramError("invalid file");
 		String mutexName="avatarFile"+fileID;

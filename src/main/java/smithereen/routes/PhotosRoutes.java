@@ -21,8 +21,8 @@ import java.util.stream.Collectors;
 import smithereen.model.LikeObjectType;
 import smithereen.ApplicationContext;
 import smithereen.Config;
-import smithereen.activitypub.objects.Actor;
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.objects.Actor;
+import smithereen.model.media.MediaFileRef;
 import smithereen.controllers.FriendsController;
 import smithereen.controllers.PhotosController;
 import smithereen.exceptions.BadRequestException;
@@ -236,15 +236,16 @@ public class PhotosRoutes{
 		if(album.systemType!=null || !info.permissions.canUploadToPhotoAlbum(album))
 			throw new UserActionNotAllowedException();
 
-		LocalImage photo=MediaStorageUtils.saveUploadedImage(req, resp, info.account, false, "file", true);
-		long photoID=ctx.getPhotosController().createPhoto(info.account.user, album, photo.fileID, null, null);
+		MediaFileRef uploaded=MediaStorageUtils.saveUploadedImage(req, resp, info.account, false, "file", true);
+		long photoID=ctx.getPhotosController().createPhoto(info.account.user, album, uploaded.fileID, null, null);
+		SizedImage photo=uploaded.image();
 		SizedImage.Type sizeType=SizedImage.Type.PHOTO_THUMB_SMALL;
 		SizedImage.Dimensions size=photo.getDimensionsForSize(sizeType);
 
 		return new JsonObjectBuilder()
 				.add("id", encodeLong(XTEA.obfuscateObjectID(photoID, ObfuscatedObjectIDType.PHOTO)))
 				.add("html", photo.generateHTML(SizedImage.Type.PHOTO_THUMB_MEDIUM, null, null, size.width, size.height, true, null))
-				.add("animated", photo.isAnimated)
+				.add("animated", photo.isAnimated())
 				.build();
 	}
 
@@ -348,8 +349,7 @@ public class PhotosRoutes{
 		PhotoAlbum album=ctx.getPhotosController().getAlbumIgnoringPrivacy(photo.albumID);
 		if(album.systemType==PhotoAlbum.SystemAlbumType.AVATARS){
 			Actor owner=ctx.getWallController().getContentAuthorAndOwner(album).owner();
-			SizedImage ava=owner.getAvatar();
-			isCurrentAva=ava instanceof LocalImage li && li.photoID==photo.id;
+			isCurrentAva=owner.getAvatarPhotoID()==photo.id;
 		}
 		PhotosController.PhotoDeletionResult deletionResult=ctx.getPhotosController().deletePhoto(self.user, photo);
 		if(isAjax(req)){
@@ -732,12 +732,11 @@ public class PhotosRoutes{
 				}
 				if(mfr==null || !MediaFileUploadTokens.verifyToken(idParts[1], mfr.id(), MediaFileUploadPurpose.ATTACHMENT, self.id))
 					throw new ObjectNotFoundException();
-				LocalImage img=new LocalImage();
-				img.fileID=fileID;
+				MediaFileRef img=new MediaFileRef(fileID);
 				img.fillIn(mfr);
 				PhotoAttachment fakeAttachment=new PhotoAttachment();
-				fakeAttachment.image=img;
-				fakeAttachment.setBlurHash(img.getBlurHash());
+				fakeAttachment.image=img.image();
+				fakeAttachment.setBlurHash(img.image().getBlurHash());
 				yield List.of(makePhotoInfoForAttachment(req, fakeAttachment, self, self, Instant.now(), null, 0, EnumSet.of(PhotoViewerPhotoInfo.AllowedAction.EDIT_DESCRIPTION)));
 			}
 			case "newTags" -> {

@@ -14,6 +14,13 @@ public enum MediaFileType{
 		};
 	}
 
+	public MediaKind kind(){
+		return switch(this){
+			case USER_EXPORT_ARCHIVE -> MediaKind.ARCHIVE;
+			default -> MediaKind.STILL_IMAGE;
+		};
+	}
+
 	public String getMimeType(){
 		return switch(this){
 			case USER_EXPORT_ARCHIVE -> "application/zip";

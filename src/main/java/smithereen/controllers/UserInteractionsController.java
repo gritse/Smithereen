@@ -14,8 +14,7 @@ import smithereen.model.LikeObjectType;
 import smithereen.ApplicationContext;
 import smithereen.Config;
 import smithereen.Utils;
-import smithereen.activitypub.objects.Image;
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.media.MediaFileRef;
 import smithereen.exceptions.InternalServerErrorException;
 import smithereen.exceptions.ObjectNotFoundException;
 import smithereen.exceptions.UserActionNotAllowedException;
@@ -73,8 +72,9 @@ public class UserInteractionsController{
 
 			LikeableContentObject syncedObject=null;
 			if(object instanceof Post post){
-				if(post.action==Post.Action.AVATAR_UPDATE && post.attachments!=null &&!post.attachments.isEmpty() && post.attachments.getFirst() instanceof Image img){
-					if(img instanceof LocalImage li && li.photoID!=0){
+				if(post.action==Post.Action.AVATAR_UPDATE && post.attachments!=null &&!post.attachments.isEmpty()){
+					MediaFileRef li=post.attachments.getFirst();
+					if(li.photoID!=0){
 						try{
 							syncedObject=context.getPhotosController().getPhotoIgnoringPrivacy(li.photoID);
 						}catch(ObjectNotFoundException ignore){}

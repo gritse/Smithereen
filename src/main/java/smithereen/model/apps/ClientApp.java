@@ -13,9 +13,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import smithereen.Config;
-import smithereen.activitypub.objects.ActivityPubObject;
-import smithereen.activitypub.objects.Image;
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.objects.StoredObject;
+import smithereen.model.media.MediaFileRef;
 import smithereen.model.SizedImage;
 import smithereen.storage.DatabaseUtils;
 import smithereen.util.JsonArrayBuilder;
@@ -28,7 +27,7 @@ public class ClientApp{
 	public String name;
 	public ClientAppType type;
 	public String description;
-	public Image logo;
+	public MediaFileRef logo;
 	public int developerID;
 	public Instant lastUpdated;
 	public Set<String> allowedRedirectURIs=Set.of();
@@ -45,7 +44,7 @@ public class ClientApp{
 		if(_ava!=null){
 			if(_ava.startsWith("{")){
 				try{
-					a.logo=(Image) ActivityPubObject.parse(JsonParser.parseString(_ava).getAsJsonObject());
+					a.logo=MediaFileRef.parse(JsonParser.parseString(_ava).getAsJsonObject());
 				}catch(Exception ignore){}
 			}
 		}
@@ -78,12 +77,7 @@ public class ClientApp{
 	}
 
 	public SizedImage getLogo(){
-		if(logo==null)
-			return null;
-		if(logo instanceof LocalImage li){
-			return li;
-		}
-		return null;
+		return logo==null ? null : logo.image();
 	}
 
 	public URI getActivityPubID(){

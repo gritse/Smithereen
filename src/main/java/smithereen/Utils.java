@@ -60,7 +60,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.CRC32;
 
-import smithereen.activitypub.objects.Actor;
+import smithereen.model.objects.Actor;
 import smithereen.exceptions.BadRequestException;
 import smithereen.exceptions.FormValidationException;
 import smithereen.exceptions.UserActionNotAllowedException;

@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-import smithereen.activitypub.objects.PropertyValue;
+import smithereen.model.objects.PropertyValue;
 import smithereen.api.ApiCallContext;
 import smithereen.lang.Inflector;
 import smithereen.model.SizedImage;

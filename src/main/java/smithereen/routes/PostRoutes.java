@@ -26,8 +26,8 @@ import java.util.stream.Stream;
 import smithereen.ApplicationContext;
 import smithereen.Config;
 import smithereen.Utils;
-import smithereen.activitypub.objects.Actor;
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.objects.Actor;
+import smithereen.model.media.MediaFileRef;
 import smithereen.controllers.WallController;
 import smithereen.exceptions.BadRequestException;
 import smithereen.exceptions.ObjectNotFoundException;
@@ -281,12 +281,12 @@ public class PostRoutes{
 		if(post.attachments!=null && !post.attachments.isEmpty()){
 			model.with("draftAttachments", post.attachments);
 			model.with("attachAltTexts", post.attachments.stream()
-					.map(att->att instanceof LocalImage li && li.photoID==0 && li.name!=null ? new Pair<>(li.getLocalID(MediaFileUploadPurpose.ATTACHMENT, self.user.id), li.name) : null)
+					.map(li->li.photoID==0 && li.name!=null ? new Pair<>(li.getLocalID(MediaFileUploadPurpose.ATTACHMENT, self.user.id), li.name) : null)
 					.filter(Objects::nonNull)
 					.collect(Collectors.toMap(Pair::first, Pair::second))
 			);
 			Map<String, PhotoViewerInlineData> pvData=post.attachments.stream()
-					.map(att->att instanceof LocalImage li && li.photoID==0 ? new Pair<>(li.getLocalID(MediaFileUploadPurpose.ATTACHMENT, self.user.id), new PhotoViewerInlineData(0, "rawFile/"+li.getLocalID(MediaFileUploadPurpose.ATTACHMENT, self.user.id), li.getURLsForPhotoViewer())) : null)
+					.map(li->li.photoID==0 && li.image()!=null ? new Pair<>(li.getLocalID(MediaFileUploadPurpose.ATTACHMENT, self.user.id), new PhotoViewerInlineData(0, "rawFile/"+li.getLocalID(MediaFileUploadPurpose.ATTACHMENT, self.user.id), li.image().getURLsForPhotoViewer())) : null)
 					.filter(Objects::nonNull)
 					.collect(Collectors.toMap(Pair::first, Pair::second, (a, b)->b));
 			model.with("attachPvData", pvData);

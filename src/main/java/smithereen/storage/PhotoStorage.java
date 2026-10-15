@@ -20,7 +20,7 @@ import java.util.stream.Collectors;
 import smithereen.model.LikeObjectType;
 import smithereen.Config;
 import smithereen.Utils;
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.media.MediaFileRef;
 import smithereen.model.ObfuscatedObjectIDType;
 import smithereen.model.PaginatedList;
 import smithereen.model.PrivacySetting;
@@ -376,17 +376,16 @@ public class PhotoStorage{
 			}
 		}
 		if(!needFileIDs.isEmpty()){
-			Map<Long, MediaFileRecord> mediaFiles=MediaStorage.getMediaFileRecords(needFileIDs);
+			ArrayList<MediaFileRef> refs=new ArrayList<>(localPhotos.size());
 			for(Photo p:localPhotos){
-				MediaFileRecord mfr=mediaFiles.get(p.localFileID);
-				LocalImage li=new LocalImage();
-				li.fileID=p.localFileID;
-				if(mfr!=null){
-					li.fillIn(mfr);
-				}
+				MediaFileRef ref=new MediaFileRef(p.localFileID);
 				if(p.metadata!=null)
-					li.rotation=p.metadata.rotation;
-				p.image=li;
+					ref.rotation=p.metadata.rotation;
+				refs.add(ref);
+			}
+			MediaFileResolver.resolve(refs);
+			for(int i=0;i<localPhotos.size();i++){
+				localPhotos.get(i).image=refs.get(i).image();
 			}
 		}
 	}

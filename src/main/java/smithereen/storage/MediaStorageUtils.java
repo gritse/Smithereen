@@ -28,8 +28,8 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.Part;
 import smithereen.ApplicationContext;
 import smithereen.Utils;
-import smithereen.activitypub.objects.ActivityPubObject;
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.objects.StoredObject;
+import smithereen.model.media.MediaFileRef;
 import smithereen.exceptions.BadRequestException;
 import smithereen.exceptions.InternalServerErrorException;
 import smithereen.exceptions.UserActionNotAllowedException;
@@ -150,25 +150,7 @@ public class MediaStorageUtils{
 		return file.length();
 	}
 
-	public static JsonObject serializeAttachment(ActivityPubObject att){
-		if(att instanceof LocalImage li){
-			JsonObjectBuilder jb=new JsonObjectBuilder()
-					.add("type", "_LocalImage")
-					.add("_fileID", li.fileID);
-			if(li.photoID!=0)
-				jb.add("_photoID", li.photoID);
-			if(li.rotation!=null && li.rotation!=SizedImage.Rotation._0)
-				jb.add("_rot", li.rotation.value());
-			if(li.avaCropRects!=null)
-				jb.add("_crop", Utils.gson.toJsonTree(li.avaCropRects));
-			if(StringUtils.isNotEmpty(li.name))
-				jb.add("name", li.name);
-			return jb.build();
-		}
-		return att.asActivityPubObject(null);
-	}
-
-	public static void fillAttachmentObjects(ApplicationContext context, User self, List<ActivityPubObject> attachObjects, List<String> attachmentIDs, Map<String, String> altTexts, int attachmentCount, int maxAttachments, boolean allowGraffiti) throws SQLException{
+	public static void fillAttachmentObjects(ApplicationContext context, User self, List<MediaFileRef> attachObjects, List<String> attachmentIDs, Map<String, String> altTexts, int attachmentCount, int maxAttachments, boolean allowGraffiti) throws SQLException{
 		for(String id:attachmentIDs){
 			String[] idParts=id.split(":");
 			if(idParts.length!=2)
@@ -187,17 +169,15 @@ public class MediaStorageUtils{
 					LOG.debug("Not attaching photo {} to {}'s post because they can't access it", photoID, self.username);
 					continue;
 				}
-				LocalImage img=new LocalImage();
-				img.fileID=photo.localFileID;
+				MediaFileRef img=new MediaFileRef(photo.localFileID);
 				img.photoID=photoID;
 				if(photo.metadata!=null)
 					img.rotation=photo.metadata.rotation;
-				MediaFileRecord mfr=MediaStorage.getMediaFileRecord(img.fileID);
-				img.fillIn(mfr);
+				MediaFileResolver.resolve(img);
 				attachObjects.add(img);
 			}else{
-				LocalImage img=getLocalImage(id, MediaFileUploadPurpose.ATTACHMENT, self.id);
-				if(img==null || (img.isGraffiti && !allowGraffiti))
+				MediaFileRef img=getMediaFileRef(id, MediaFileUploadPurpose.ATTACHMENT, self.id);
+				if(img==null || (img.isGraffiti() && !allowGraffiti))
 					continue;
 				img.name=altTexts.get(id);
 				attachObjects.add(img);
@@ -208,23 +188,26 @@ public class MediaStorageUtils{
 		}
 	}
 
-	public static LocalImage getLocalImage(String id, MediaFileUploadPurpose expectedPurpose, int expectedOwnerID) throws SQLException{
+	/**
+	 * Looks up an uploaded file by its client-side ID, checking the upload token for the purpose and owner.
+	 * @return the resolved reference, or null if the ID or the token is invalid
+	 */
+	public static MediaFileRef getMediaFileRef(String id, MediaFileUploadPurpose expectedPurpose, int expectedOwnerID) throws SQLException{
 		String[] idParts=id.split(":");
 		if(idParts.length!=2)
 			return null;
 		long fileID=XTEA.decodeObjectID(idParts[0], ObfuscatedObjectIDType.MEDIA_FILE);
 		if(fileID<=0)
 			return null;
-		return getLocalImage(fileID, idParts[1], expectedPurpose, expectedOwnerID);
+		return getMediaFileRef(fileID, idParts[1], expectedPurpose, expectedOwnerID);
 	}
 
-	public static LocalImage getLocalImage(long fileID, String token, MediaFileUploadPurpose expectedPurpose, int expectedOwnerID){
+	public static MediaFileRef getMediaFileRef(long fileID, String token, MediaFileUploadPurpose expectedPurpose, int expectedOwnerID){
 		try{
 			MediaFileRecord mfr=MediaStorage.getMediaFileRecord(fileID);
 			if(mfr==null || !MediaFileUploadTokens.verifyToken(token, mfr.id(), expectedPurpose, expectedOwnerID))
 				return null;
-			LocalImage img=new LocalImage();
-			img.fileID=fileID;
+			MediaFileRef img=new MediaFileRef(fileID);
 			img.fillIn(mfr);
 			return img;
 		}catch(SQLException x){
@@ -254,11 +237,11 @@ public class MediaStorageUtils{
 	/**
 	 * @param allowAnimation whether an animated GIF or WebP is kept animated. If false, uploading one fails with a 415 response.
 	 */
-	public static LocalImage saveUploadedImage(Request req, Response resp, Account self, boolean isGraffiti, String fieldName, boolean allowAnimation){
+	public static MediaFileRef saveUploadedImage(Request req, Response resp, Account self, boolean isGraffiti, String fieldName, boolean allowAnimation){
 		return saveUploadedImage(req, resp, self, isGraffiti, fieldName, 2560, 0, allowAnimation, null);
 	}
 
-	public static LocalImage saveUploadedImage(Request req, Response resp, Account self, boolean isGraffiti, String fieldName, int maxWidthOrSize, int maxHeight, boolean allowAnimation, Consumer<VipsImage> extraValidator){
+	public static MediaFileRef saveUploadedImage(Request req, Response resp, Account self, boolean isGraffiti, String fieldName, int maxWidthOrSize, int maxHeight, boolean allowAnimation, Consumer<VipsImage> extraValidator){
 		Lang l=lang(req);
 		try{
 			req.attribute("org.eclipse.jetty.multipartConfig", new MultipartConfigElement(null, MAX_IMAGE_SIZE, -1L, 0));
@@ -335,13 +318,12 @@ public class MediaStorageUtils{
 					toWrite=img;
 				}
 
-				LocalImage photo=new LocalImage();
 				File resizedFile=File.createTempFile("SmithereenUploadResized", ".webp");
 				int[] outSize={0,0};
 				writeResizedWebpImage(toWrite, maxWidthOrSize, maxHeight, isGraffiti ? MediaStorageUtils.QUALITY_LOSSLESS : 93, resizedFile, outSize);
 				MediaFileMetadata meta=new ImageMetadata(outSize[0], outSize[1], BlurHash.encode(img, 4, 4), null, animated);
 				MediaFileRecord fileRecord=MediaStorage.createMediaFileRecord(isGraffiti ? MediaFileType.IMAGE_GRAFFITI : MediaFileType.IMAGE_PHOTO, resizedFile.length(), self.user.id, meta);
-				photo.fileID=fileRecord.id().id();
+				MediaFileRef photo=new MediaFileRef(fileRecord.id().id());
 				photo.fillIn(fileRecord);
 				MediaFileStorageDriver.getInstance().storeFile(resizedFile, fileRecord.id(), false);
 				return photo;

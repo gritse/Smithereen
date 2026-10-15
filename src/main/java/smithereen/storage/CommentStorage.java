@@ -24,8 +24,8 @@ import java.util.stream.Stream;
 
 import smithereen.Config;
 import smithereen.Utils;
-import smithereen.activitypub.objects.ActivityPubObject;
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.objects.StoredObject;
+import smithereen.model.media.MediaFileRef;
 import smithereen.model.ObfuscatedObjectIDType;
 import smithereen.model.PaginatedList;
 import smithereen.model.PostSource;
@@ -560,26 +560,7 @@ public class CommentStorage{
 	}
 
 	private static void postprocessComments(Collection<Comment> posts) throws SQLException{
-		Set<Long> needFileIDs=posts.stream()
-				.filter(p->p.attachments!=null && !p.attachments.isEmpty())
-				.flatMap(p->p.attachments.stream())
-				.map(att->att instanceof LocalImage li ? li.fileID : 0L)
-				.filter(id->id!=0)
-				.collect(Collectors.toSet());
-		if(needFileIDs.isEmpty())
-			return;
-		Map<Long, MediaFileRecord> mediaFiles=MediaStorage.getMediaFileRecords(needFileIDs);
-		for(Comment post:posts){
-			if(post.attachments!=null){
-				for(ActivityPubObject attachment:post.attachments){
-					if(attachment instanceof LocalImage li){
-						MediaFileRecord mfr=mediaFiles.get(li.fileID);
-						if(mfr!=null)
-							li.fillIn(mfr);
-					}
-				}
-			}
-		}
+		MediaFileResolver.resolveAttachments(posts);
 	}
 
 	private record UpdateCommentBookmarksRunnable(CommentParentObjectID parentID) implements Runnable{

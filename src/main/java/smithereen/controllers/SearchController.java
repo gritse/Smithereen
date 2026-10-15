@@ -20,8 +20,8 @@ import java.util.regex.Matcher;
 
 import smithereen.ApplicationContext;
 import smithereen.Config;
-import smithereen.activitypub.objects.ActivityPubObject;
-import smithereen.activitypub.objects.Actor;
+import smithereen.model.objects.StoredObject;
+import smithereen.model.objects.Actor;
 import smithereen.exceptions.BadRequestException;
 import smithereen.exceptions.InternalServerErrorException;
 import smithereen.exceptions.ObjectNotFoundException;

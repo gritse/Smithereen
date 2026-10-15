@@ -10,7 +10,7 @@ import java.util.EnumSet;
 import java.util.Map;
 
 import smithereen.Utils;
-import smithereen.activitypub.objects.Actor;
+import smithereen.model.objects.Actor;
 import smithereen.lang.Lang;
 import smithereen.model.Group;
 import smithereen.model.ObfuscatedObjectIDType;

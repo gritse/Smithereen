@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
 
 import smithereen.Config;
 import smithereen.Utils;
-import smithereen.activitypub.objects.Actor;
+import smithereen.model.objects.Actor;
 import smithereen.controllers.ObjectLinkResolver;
 import smithereen.model.ObfuscatedObjectIDType;
 import smithereen.model.admin.UserRole;

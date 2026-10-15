@@ -2,7 +2,7 @@ package smithereen.api.model;
 
 import java.util.Map;
 
-import smithereen.activitypub.objects.Actor;
+import smithereen.model.objects.Actor;
 import smithereen.api.ApiCallContext;
 import smithereen.model.ObfuscatedObjectIDType;
 import smithereen.model.apps.ClientAppPermission;

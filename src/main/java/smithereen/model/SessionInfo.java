@@ -5,7 +5,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Locale;
 
-import smithereen.activitypub.objects.ActivityPubObject;
+import smithereen.model.media.MediaFileRef;
 
 public class SessionInfo{
 	public Account account;
@@ -13,7 +13,7 @@ public class SessionInfo{
 	public PageHistory history=new PageHistory();
 	public String csrfToken;
 	public ZoneId timeZone;
-	public ArrayList<ActivityPubObject> postDraftAttachments=new ArrayList<>();
+	public ArrayList<MediaFileRef> postDraftAttachments=new ArrayList<>();
 	public UserPermissions permissions;
 	public long userAgentHash;
 	public InetAddress ip;

@@ -12,13 +12,14 @@ import java.util.List;
 import java.util.Objects;
 
 import smithereen.Config;
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.media.StoredImage;
+import smithereen.model.media.StoredMedia;
 import smithereen.model.media.SizedImageURLs;
 import smithereen.storage.ImgProxy;
 import smithereen.text.TextProcessor;
 import spark.utils.StringUtils;
 
-public sealed interface SizedImage extends BlurHashable permits LocalImage{
+public sealed interface SizedImage extends StoredMedia, BlurHashable permits StoredImage{
 
 	@Nullable
 	@Contract("_, _, _, true, _ -> !null")
@@ -47,15 +48,14 @@ public sealed interface SizedImage extends BlurHashable permits LocalImage{
 	default List<SizedImageURLs> getURLsForPhotoViewer(){
 		ArrayList<SizedImageURLs> urls=new ArrayList<>();
 		Dimensions origSize=getOriginalDimensions();
-		boolean isLocal=this instanceof LocalImage;
 		if(isAnimated()){
-			String url=Objects.toString(getUriForSizeAndFormat(Type.PHOTO_ORIGINAL, Format.WEBP, false, isLocal, false));
+			String url=Objects.toString(getUriForSizeAndFormat(Type.PHOTO_ORIGINAL, Format.WEBP, false, true, false));
 			urls.add(new SizedImageURLs(Type.PHOTO_ORIGINAL.suffix, origSize.width, origSize.height, url, url));
 			return urls;
 		}
 		for(Type t:List.of(Type.PHOTO_SMALL, Type.PHOTO_MEDIUM, Type.PHOTO_LARGE, Type.PHOTO_ORIGINAL)){
 			Dimensions size=getDimensionsForSize(t);
-			urls.add(new SizedImageURLs(t.suffix, size.width, size.height, Objects.toString(getUriForSizeAndFormat(t, Format.WEBP, false, isLocal, false)), Objects.toString(getUriForSizeAndFormat(t, Format.JPEG, false, isLocal, false))));
+			urls.add(new SizedImageURLs(t.suffix, size.width, size.height, Objects.toString(getUriForSizeAndFormat(t, Format.WEBP, false, true, false)), Objects.toString(getUriForSizeAndFormat(t, Format.JPEG, false, true, false))));
 			if(size.width>=origSize.width && size.height>=origSize.height)
 				break;
 		}

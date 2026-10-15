@@ -26,9 +26,9 @@ import java.util.stream.Stream;
 import smithereen.model.LikeObjectType;
 import smithereen.ApplicationContext;
 import smithereen.Config;
-import smithereen.activitypub.objects.ActivityPubObject;
-import smithereen.activitypub.objects.Actor;
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.objects.StoredObject;
+import smithereen.model.objects.Actor;
+import smithereen.model.media.MediaFileRef;
 import smithereen.exceptions.BadRequestException;
 import smithereen.exceptions.InternalServerErrorException;
 import smithereen.exceptions.ObjectNotFoundException;
@@ -129,15 +129,15 @@ public class CommentsController{
 			int attachmentCount=0;
 			String attachments=null;
 			if(!attachmentIDs.isEmpty()){
-				ArrayList<ActivityPubObject> attachObjects=new ArrayList<>();
+				ArrayList<MediaFileRef> attachObjects=new ArrayList<>();
 				MediaStorageUtils.fillAttachmentObjects(context, self, attachObjects, attachmentIDs, attachAltTexts, attachmentCount, maxAttachments, false);
 				if(!attachObjects.isEmpty()){
 					if(attachObjects.size()==1){
-						attachments=MediaStorageUtils.serializeAttachment(attachObjects.getFirst()).toString();
+						attachments=attachObjects.getFirst().toJson().toString();
 					}else{
 						JsonArray ar=new JsonArray();
-						for(ActivityPubObject o:attachObjects){
-							ar.add(MediaStorageUtils.serializeAttachment(o));
+						for(MediaFileRef o:attachObjects){
+							ar.add(o.toJson());
 						}
 						attachments=ar.toString();
 					}
@@ -162,10 +162,8 @@ public class CommentsController{
 			Comment comment=Objects.requireNonNull(CommentStorage.getComment(id));
 
 			if(comment.attachments!=null){
-				for(ActivityPubObject att:comment.attachments){
-					if(att instanceof LocalImage li){
-						MediaStorage.createMediaFileReference(li.fileID, comment.id, MediaFileReferenceType.COMMENT_ATTACHMENT, comment.getOwnerID());
-					}
+				for(MediaFileRef li:comment.attachments){
+					MediaStorage.createMediaFileReference(li.fileID, comment.id, MediaFileReferenceType.COMMENT_ATTACHMENT, comment.getOwnerID());
 				}
 			}
 
@@ -364,41 +362,37 @@ public class CommentsController{
 			int maxAttachments=comment.parentObjectID.type().getMaxAttachments();
 			int attachmentCount=0;
 			String attachments=null;
-			ArrayList<ActivityPubObject> attachObjects=new ArrayList<>();
+			ArrayList<MediaFileRef> attachObjects=new ArrayList<>();
 
 			ArrayList<String> newlyAddedAttachments=new ArrayList<>(attachmentIDs);
 			if(comment.attachments!=null){
-				for(ActivityPubObject att:comment.attachments){
-					if(att instanceof LocalImage li){
-						String localID=li.getLocalID(MediaFileUploadPurpose.ATTACHMENT, self.id);
-						if(!newlyAddedAttachments.remove(localID)){
-							LOG.debug("Deleting attachment: {}", localID);
-							MediaStorage.deleteMediaFileReference(comment.id, MediaFileReferenceType.COMMENT_ATTACHMENT, li.fileID);
-						}else{
-							li.name=attachAltTexts.get(localID);
-							attachObjects.add(li);
-						}
+				for(MediaFileRef li:comment.attachments){
+					String localID=li.getLocalID(MediaFileUploadPurpose.ATTACHMENT, self.id);
+					if(!newlyAddedAttachments.remove(localID)){
+						LOG.debug("Deleting attachment: {}", localID);
+						MediaStorage.deleteMediaFileReference(comment.id, MediaFileReferenceType.COMMENT_ATTACHMENT, li.fileID);
 					}else{
-						attachObjects.add(att);
+						li.name=attachAltTexts.get(localID);
+						attachObjects.add(li);
 					}
 				}
 			}
 
 			if(!newlyAddedAttachments.isEmpty()){
 				MediaStorageUtils.fillAttachmentObjects(context, self, attachObjects, newlyAddedAttachments, attachAltTexts, attachmentCount, maxAttachments, false);
-				for(ActivityPubObject att:attachObjects){
-					if(att instanceof LocalImage li && newlyAddedAttachments.contains(li.getLocalID(MediaFileUploadPurpose.ATTACHMENT, self.id))){
+				for(MediaFileRef li:attachObjects){
+					if(newlyAddedAttachments.contains(li.getLocalID(MediaFileUploadPurpose.ATTACHMENT, self.id))){
 						MediaStorage.createMediaFileReference(li.fileID, comment.id, MediaFileReferenceType.COMMENT_ATTACHMENT, comment.ownerID);
 					}
 				}
 			}
 			if(!attachObjects.isEmpty()){
 				if(attachObjects.size()==1){
-					attachments=MediaStorageUtils.serializeAttachment(attachObjects.getFirst()).toString();
+					attachments=attachObjects.getFirst().toJson().toString();
 				}else{
 					JsonArray ar=new JsonArray();
-					for(ActivityPubObject o:attachObjects){
-						ar.add(MediaStorageUtils.serializeAttachment(o));
+					for(MediaFileRef o:attachObjects){
+						ar.add(o.toJson());
 					}
 					attachments=ar.toString();
 				}

@@ -28,9 +28,9 @@ import java.util.stream.Collectors;
 
 import smithereen.Config;
 import smithereen.Utils;
-import smithereen.activitypub.objects.ActivityPubObject;
-import smithereen.activitypub.objects.Actor;
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.objects.StoredObject;
+import smithereen.model.objects.Actor;
+import smithereen.model.media.MediaFileRef;
 import smithereen.controllers.WallController;
 import smithereen.exceptions.ObjectNotFoundException;
 import smithereen.model.Group;
@@ -815,26 +815,7 @@ public class PostStorage{
 	}
 
 	private static void postprocessPosts(Collection<Post> posts) throws SQLException{
-		Set<Long> needFileIDs=posts.stream()
-				.filter(p->p.attachments!=null && !p.attachments.isEmpty())
-				.flatMap(p->p.attachments.stream())
-				.map(att->att instanceof LocalImage li ? li.fileID : 0L)
-				.filter(id->id!=0)
-				.collect(Collectors.toSet());
-		if(needFileIDs.isEmpty())
-			return;
-		Map<Long, MediaFileRecord> mediaFiles=MediaStorage.getMediaFileRecords(needFileIDs);
-		for(Post post:posts){
-			if(post.attachments!=null){
-				for(ActivityPubObject attachment:post.attachments){
-					if(attachment instanceof LocalImage li){
-						MediaFileRecord mfr=mediaFiles.get(li.fileID);
-						if(mfr!=null)
-							li.fillIn(mfr);
-					}
-				}
-			}
-		}
+		MediaFileResolver.resolveAttachments(posts);
 	}
 
 	public static List<Integer> getRepostedUsers(int postID, int count) throws SQLException{

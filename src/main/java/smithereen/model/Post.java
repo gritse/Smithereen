@@ -17,8 +17,8 @@ import java.util.Set;
 
 import smithereen.Config;
 import smithereen.Utils;
-import smithereen.activitypub.objects.ActivityPubObject;
-import smithereen.activitypub.objects.Actor;
+import smithereen.model.media.MediaFileRef;
+import smithereen.model.objects.Actor;
 import smithereen.model.notifications.Notification;
 import smithereen.model.reports.ReportableContentObject;
 import smithereen.model.reports.ReportableContentObjectID;
@@ -163,7 +163,9 @@ public sealed class Post extends PostLikeObject implements ReportableContentObje
 		if(jo.has("attachments")){
 			attachments=new ArrayList<>();
 			for(JsonElement jatt:jo.getAsJsonArray("attachments")){
-				attachments.add(ActivityPubObject.parse(jatt.getAsJsonObject()));
+				MediaFileRef ref=MediaFileRef.parse(jatt.getAsJsonObject());
+				if(ref!=null)
+					attachments.add(ref);
 			}
 		}
 		if(jo.has("pollQuestion")){

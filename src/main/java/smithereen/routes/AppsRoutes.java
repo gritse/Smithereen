@@ -8,7 +8,7 @@ import java.util.Map;
 import java.util.Set;
 
 import smithereen.ApplicationContext;
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.media.MediaFileRef;
 import smithereen.exceptions.BadRequestException;
 import smithereen.exceptions.UserActionNotAllowedException;
 import smithereen.exceptions.UserErrorException;
@@ -110,7 +110,7 @@ public class AppsRoutes{
 		if(!isAjax(req))
 			throw new BadRequestException();
 		Lang l=lang(req);
-		LocalImage img=MediaStorageUtils.saveUploadedImage(req, resp, self, false, "file", 400, 0, false, vi->{
+		MediaFileRef img=MediaStorageUtils.saveUploadedImage(req, resp, self, false, "file", 400, 0, false, vi->{
 			if(vi.getWidth()!=vi.getHeight())
 				Spark.halt(422, l.get("err_app_logo_not_square"));
 			if(vi.getWidth()<200)
@@ -120,7 +120,7 @@ public class AppsRoutes{
 				.hide("logoLoader")
 				.show("logoUploadText")
 				.setInputValue("logoIdField", img.getLocalID(MediaFileUploadPurpose.APP_LOGO, self.user.id))
-				.setContent("logoImageW", img.generateAvatarHTML(SizedImage.Type.AVA_SQUARE_MEDIUM, 75, 75, List.of(), List.of()));
+				.setContent("logoImageW", img.image().generateAvatarHTML(SizedImage.Type.AVA_SQUARE_MEDIUM, 75, 75, List.of(), List.of()));
 	}
 
 	public static Object appPage(Request req, Response resp){

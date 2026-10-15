@@ -28,9 +28,9 @@ import java.util.zip.ZipOutputStream;
 
 import smithereen.ApplicationContext;
 import smithereen.Utils;
-import smithereen.activitypub.objects.ActivityPubObject;
-import smithereen.activitypub.objects.Actor;
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.objects.StoredObject;
+import smithereen.model.objects.Actor;
+import smithereen.model.media.MediaFileRef;
 import smithereen.exceptions.InternalServerErrorException;
 import smithereen.model.Account;
 import smithereen.model.Group;
@@ -297,34 +297,31 @@ public class UserDataExportWorker{
 				.add("privacySettings", Utils.gson.toJsonTree(user.privacySettings));
 		if(user.status!=null && !user.status.isExpired())
 			b.add("status", user.status.text());
-		if(user.getAvatarImage() instanceof LocalImage li)
-			b.add("avatar", serializeAttachment(li, filesToInclude));
+		if(user.avatar!=null)
+			b.add("avatar", serializeAttachment(user.avatar, filesToInclude));
 		return b.build();
 	}
 
-	private JsonObject serializeAttachment(ActivityPubObject att, Set<MediaFileID> filesToInclude){
+	private JsonObject serializeAttachment(MediaFileRef att, Set<MediaFileID> filesToInclude){
 		JsonObjectBuilder b=new JsonObjectBuilder()
-				.add("type", att.getType())
+				.add("type", MediaFileRef.JSON_TYPE)
 				.add("description", att.name)
-				.add("mediaType", att.mediaType);
-		if(att instanceof LocalImage li){
-			b.add("width", li.width).add("height", li.height);
-			if(li.fileRecord!=null){
-				filesToInclude.add(li.fileRecord.id());
-				b.add("file", getMediaFileName(li.fileRecord.id()));
-			}
-			if(li.photoID!=0)
-				b.add("photoID", li.photoID);
-		}else if(att.url!=null){
-			b.add("url", att.url.toString());
+				.add("mediaType", att.fileRecord!=null ? att.fileRecord.id().type().getMimeType() : null)
+				.add("width", att.getWidth())
+				.add("height", att.getHeight());
+		if(att.fileRecord!=null){
+			filesToInclude.add(att.fileRecord.id());
+			b.add("file", getMediaFileName(att.fileRecord.id()));
 		}
+		if(att.photoID!=0)
+			b.add("photoID", att.photoID);
 		return b.build();
 	}
 
-	private JsonArrayBuilder serializeAttachments(List<ActivityPubObject> attachments, Set<MediaFileID> filesToInclude){
+	private JsonArrayBuilder serializeAttachments(List<MediaFileRef> attachments, Set<MediaFileID> filesToInclude){
 		JsonArrayBuilder ab=new JsonArrayBuilder();
 		if(attachments!=null){
-			for(ActivityPubObject att:attachments){
+			for(MediaFileRef att:attachments){
 				ab.add(serializeAttachment(att, filesToInclude));
 			}
 		}
@@ -427,8 +424,8 @@ public class UserDataExportWorker{
 				.add("albumID", Utils.encodeLong(smithereen.util.XTEA.obfuscateObjectID(photo.albumID, smithereen.model.ObfuscatedObjectIDType.PHOTO_ALBUM)))
 				.add("description", photo.description)
 				.add("createdAt", photo.createdAt==null ? 0 : photo.createdAt.getEpochSecond());
-		if(photo.image instanceof LocalImage li)
-			b.add("file", serializeAttachment(li, filesToInclude));
+		if(photo.image!=null)
+			b.add("file", serializeAttachment(photo.image.ref(), filesToInclude));
 		return b.build();
 	}
 

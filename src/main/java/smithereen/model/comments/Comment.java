@@ -14,7 +14,7 @@ import java.util.Set;
 
 import smithereen.model.LikeObjectType;
 import smithereen.Utils;
-import smithereen.activitypub.objects.ActivityPubObject;
+import smithereen.model.media.MediaFileRef;
 import smithereen.model.LikeableContentObject;
 import smithereen.model.ObfuscatedObjectIDType;
 import smithereen.model.PostLikeObject;
@@ -138,7 +138,9 @@ public sealed class Comment extends PostLikeObject implements CommentReplyParent
 		if(jo.has("attachments")){
 			attachments=new ArrayList<>();
 			for(JsonElement jatt:jo.getAsJsonArray("attachments")){
-				attachments.add(ActivityPubObject.parse(jatt.getAsJsonObject()));
+				MediaFileRef ref=MediaFileRef.parse(jatt.getAsJsonObject());
+				if(ref!=null)
+					attachments.add(ref);
 			}
 		}
 		if(jo.has("cw"))

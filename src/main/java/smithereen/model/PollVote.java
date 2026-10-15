@@ -1,8 +1,8 @@
 package smithereen.model;
 
-import smithereen.activitypub.objects.ActivityPubObject;
+import smithereen.model.objects.StoredObject;
 
-public class PollVote extends ActivityPubObject{
+public class PollVote extends StoredObject{
 	@Override
 	public String getType(){
 		return "Note";

@@ -15,8 +15,8 @@ import java.util.List;
 
 import smithereen.Config;
 import smithereen.Utils;
-import smithereen.activitypub.objects.Actor;
-import smithereen.activitypub.objects.PropertyValue;
+import smithereen.model.objects.Actor;
+import smithereen.model.objects.PropertyValue;
 import smithereen.model.groups.GroupBanInfo;
 import smithereen.model.groups.GroupBanStatus;
 import smithereen.model.groups.GroupFeatureState;

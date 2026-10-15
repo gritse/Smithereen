@@ -43,11 +43,9 @@ import smithereen.BuildInfo;
 import smithereen.Config;
 import smithereen.LruCache;
 import smithereen.Utils;
-import smithereen.activitypub.objects.ActivityPubObject;
-import smithereen.activitypub.objects.Actor;
-import smithereen.activitypub.objects.Document;
-import smithereen.activitypub.objects.Image;
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.objects.StoredObject;
+import smithereen.model.objects.Actor;
+import smithereen.model.media.MediaFileRef;
 import smithereen.api.methods.ApiUtils;
 import smithereen.controllers.ObjectLinkResolver;
 import smithereen.exceptions.BadRequestException;
@@ -149,15 +147,16 @@ public class SystemRoutes{
 	}
 
 	private static Object uploadPhotoAttachment(Request req, Response resp, Account self, boolean isGraffiti){
-		LocalImage photo=MediaStorageUtils.saveUploadedImage(req, resp, self, isGraffiti, "file", !isGraffiti);
+		MediaFileRef uploaded=MediaStorageUtils.saveUploadedImage(req, resp, self, isGraffiti, "file", !isGraffiti);
 		if(isAjax(req)){
 			resp.type("application/json");
-			String localID=photo.getLocalID(MediaFileUploadPurpose.ATTACHMENT, self.user.id);
+			String localID=uploaded.getLocalID(MediaFileUploadPurpose.ATTACHMENT, self.user.id);
+			SizedImage photo=uploaded.image();
 			PhotoViewerInlineData pvData=new PhotoViewerInlineData(0, "rawFile/"+localID, photo.getURLsForPhotoViewer());
 			return new JsonObjectBuilder()
 					.add("id", localID)
-					.add("width", photo.width)
-					.add("height", photo.height)
+					.add("width", uploaded.getWidth())
+					.add("height", uploaded.getHeight())
 					.add("thumbs", new JsonObjectBuilder()
 							.add("jpeg", photo.getUriForSizeAndFormat(SizedImage.Type.PHOTO_THUMB_SMALL, SizedImage.Format.JPEG).toString())
 							.add("webp", photo.getUriForSizeAndFormat(SizedImage.Type.PHOTO_THUMB_SMALL, SizedImage.Format.WEBP).toString())

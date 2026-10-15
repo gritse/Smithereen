@@ -21,9 +21,9 @@ import java.util.stream.Collectors;
 
 import smithereen.Config;
 import smithereen.Utils;
-import smithereen.activitypub.objects.ActivityPubObject;
-import smithereen.activitypub.objects.Actor;
-import smithereen.activitypub.objects.PropertyValue;
+import smithereen.model.objects.StoredObject;
+import smithereen.model.objects.Actor;
+import smithereen.model.objects.PropertyValue;
 import smithereen.model.feed.FriendsNewsfeedTypeFilter;
 import smithereen.storage.DatabaseUtils;
 import smithereen.storage.utils.Pair;
@@ -292,7 +292,7 @@ public class User extends Actor{
 		JsonObject o=new JsonObject();
 		JsonArray custom=null;
 		if(attachment!=null){
-			for(ActivityPubObject att:attachment){
+			for(StoredObject att:attachment){
 				if(att instanceof PropertyValue pv){
 					if(pv.parsed)
 						continue;

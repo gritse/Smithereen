@@ -12,7 +12,7 @@ import java.util.stream.Collectors;
 
 import smithereen.ApplicationContext;
 import smithereen.Utils;
-import smithereen.activitypub.objects.Actor;
+import smithereen.model.objects.Actor;
 import smithereen.api.ApiCallContext;
 import smithereen.api.model.ApiErrorType;
 import smithereen.api.model.ApiPaginatedList;

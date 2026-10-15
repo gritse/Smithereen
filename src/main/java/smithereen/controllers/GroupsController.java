@@ -35,7 +35,7 @@ import smithereen.ApplicationContext;
 import smithereen.Config;
 import smithereen.LruCache;
 import smithereen.Utils;
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.media.MediaFileRef;
 import smithereen.exceptions.BadRequestException;
 import smithereen.exceptions.InternalServerErrorException;
 import smithereen.exceptions.ObjectNotFoundException;

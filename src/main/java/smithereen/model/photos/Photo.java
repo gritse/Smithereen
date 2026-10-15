@@ -14,7 +14,7 @@ import java.util.Set;
 import smithereen.model.LikeObjectType;
 import smithereen.Config;
 import smithereen.Utils;
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.media.MediaFileRef;
 import smithereen.model.BlurHashable;
 import smithereen.model.LikeableContentObject;
 import smithereen.model.ObfuscatedObjectIDType;
@@ -130,15 +130,15 @@ public sealed class Photo implements SizedAttachment, OwnedContentObject, Likeab
 	@Nullable
 	@Override
 	public String getBlurHash(){
-		if(image instanceof LocalImage li)
-			return li.getBlurHash();
+		if(image!=null)
+			return image.getBlurHash();
 		return metadata.blurhash;
 	}
 
 	@Override
 	public void setBlurHash(@Nullable String blurHash){
-		if(image instanceof LocalImage li){
-			li.setBlurHash(blurHash);
+		if(image!=null){
+			image.setBlurHash(blurHash);
 		}else{
 			metadata.blurhash=blurHash;
 		}

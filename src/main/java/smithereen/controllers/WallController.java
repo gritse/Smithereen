@@ -28,9 +28,9 @@ import java.util.stream.Stream;
 import smithereen.ApplicationContext;
 import smithereen.Config;
 import smithereen.LruCache;
-import smithereen.activitypub.objects.ActivityPubObject;
-import smithereen.activitypub.objects.Actor;
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.objects.StoredObject;
+import smithereen.model.objects.Actor;
+import smithereen.model.media.MediaFileRef;
 import smithereen.exceptions.BadRequestException;
 import smithereen.exceptions.InternalServerErrorException;
 import smithereen.exceptions.ObjectNotFoundException;
@@ -186,15 +186,15 @@ public class WallController{
 			int attachmentCount=poll!=null ? 1 : 0;
 			String attachments=null;
 			if(!attachmentIDs.isEmpty()){
-				ArrayList<ActivityPubObject> attachObjects=new ArrayList<>();
+				ArrayList<MediaFileRef> attachObjects=new ArrayList<>();
 				MediaStorageUtils.fillAttachmentObjects(context, author, attachObjects, attachmentIDs, attachAltTexts, attachmentCount, maxAttachments, inReplyTo==null);
 				if(!attachObjects.isEmpty()){
 					if(attachObjects.size()==1){
-						attachments=MediaStorageUtils.serializeAttachment(attachObjects.getFirst()).toString();
+						attachments=attachObjects.getFirst().toJson().toString();
 					}else{
 						JsonArray ar=new JsonArray();
-						for(ActivityPubObject o:attachObjects){
-							ar.add(MediaStorageUtils.serializeAttachment(o));
+						for(MediaFileRef o:attachObjects){
+							ar.add(o.toJson());
 						}
 						attachments=ar.toString();
 					}
@@ -291,10 +291,8 @@ public class WallController{
 				throw new IllegalStateException("?!");
 
 			if(post.attachments!=null){
-				for(ActivityPubObject att:post.attachments){
-					if(att instanceof LocalImage li){
-						MediaStorage.createMediaFileReference(li.fileID, post.id, MediaFileReferenceType.WALL_ATTACHMENT, post.getOwnerID());
-					}
+				for(MediaFileRef li:post.attachments){
+					MediaStorage.createMediaFileReference(li.fileID, post.id, MediaFileReferenceType.WALL_ATTACHMENT, post.getOwnerID());
 				}
 			}
 
@@ -446,41 +444,37 @@ public class WallController{
 			int maxAttachments=parent!=null ? 2 : 10;
 			int attachmentCount=poll!=null ? 1 : 0;
 			String attachments=null;
-			ArrayList<ActivityPubObject> attachObjects=new ArrayList<>();
+			ArrayList<MediaFileRef> attachObjects=new ArrayList<>();
 
 			ArrayList<String> newlyAddedAttachments=new ArrayList<>(attachmentIDs);
 			if(post.attachments!=null){
-				for(ActivityPubObject att:post.attachments){
-					if(att instanceof LocalImage li){
-						String localID=li.getLocalID(MediaFileUploadPurpose.ATTACHMENT, self.id);
-						if(!newlyAddedAttachments.remove(localID)){
-							LOG.debug("Deleting attachment: {}", localID);
-							MediaStorage.deleteMediaFileReference(post.id, MediaFileReferenceType.WALL_ATTACHMENT, li.fileID);
-						}else{
-							li.name=attachAltTexts.get(localID);
-							attachObjects.add(li);
-						}
+				for(MediaFileRef li:post.attachments){
+					String localID=li.getLocalID(MediaFileUploadPurpose.ATTACHMENT, self.id);
+					if(!newlyAddedAttachments.remove(localID)){
+						LOG.debug("Deleting attachment: {}", localID);
+						MediaStorage.deleteMediaFileReference(post.id, MediaFileReferenceType.WALL_ATTACHMENT, li.fileID);
 					}else{
-						attachObjects.add(att);
+						li.name=attachAltTexts.get(localID);
+						attachObjects.add(li);
 					}
 				}
 			}
 
 			if(!newlyAddedAttachments.isEmpty()){
 				MediaStorageUtils.fillAttachmentObjects(context, self, attachObjects, newlyAddedAttachments, attachAltTexts, attachmentCount, maxAttachments, post.getReplyLevel()==0);
-				for(ActivityPubObject att:attachObjects){
-					if(att instanceof LocalImage li && newlyAddedAttachments.contains(li.getLocalID(MediaFileUploadPurpose.ATTACHMENT, self.id))){
+				for(MediaFileRef li:attachObjects){
+					if(newlyAddedAttachments.contains(li.getLocalID(MediaFileUploadPurpose.ATTACHMENT, self.id))){
 						MediaStorage.createMediaFileReference(li.fileID, post.id, MediaFileReferenceType.WALL_ATTACHMENT, post.ownerID);
 					}
 				}
 			}
 			if(!attachObjects.isEmpty()){
 				if(attachObjects.size()==1){
-					attachments=MediaStorageUtils.serializeAttachment(attachObjects.getFirst()).toString();
+					attachments=attachObjects.getFirst().toJson().toString();
 				}else{
 					JsonArray ar=new JsonArray();
-					for(ActivityPubObject o:attachObjects){
-						ar.add(MediaStorageUtils.serializeAttachment(o));
+					for(MediaFileRef o:attachObjects){
+						ar.add(o.toJson());
 					}
 					attachments=ar.toString();
 				}

@@ -21,10 +21,9 @@ import java.util.stream.Collectors;
 import smithereen.ApplicationContext;
 import smithereen.Config;
 import smithereen.Utils;
-import smithereen.activitypub.objects.Actor;
-import smithereen.activitypub.objects.Image;
-import smithereen.activitypub.objects.LocalImage;
-import smithereen.activitypub.objects.PropertyValue;
+import smithereen.model.objects.Actor;
+import smithereen.model.media.MediaFileRef;
+import smithereen.model.objects.PropertyValue;
 import smithereen.controllers.FriendsController;
 import smithereen.controllers.ObjectLinkResolver;
 import smithereen.controllers.WallController;
@@ -403,10 +402,7 @@ public class ProfileRoutes{
 		Templates.addJsLangForNewPostForm(req);
 
 		try{
-			Photo photo=switch(user.getAvatarImage()){
-				case LocalImage li when li.photoID!=0 -> ctx.getPhotosController().getPhotoIgnoringPrivacy(li.photoID);
-				case null, default -> null;
-			};
+			Photo photo=user.getAvatarPhotoID()!=0 ? ctx.getPhotosController().getPhotoIgnoringPrivacy(user.getAvatarPhotoID()) : null;
 			if(photo!=null){
 				model.with("avatarPvInfo", new PhotoViewerInlineData(0, "albums/"+XTEA.encodeObjectID(photo.albumID, ObfuscatedObjectIDType.PHOTO_ALBUM), photo.image.getURLsForPhotoViewer()))
 						.with("avatarPhoto", photo);

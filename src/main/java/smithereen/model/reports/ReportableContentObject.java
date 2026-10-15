@@ -6,8 +6,8 @@ import com.google.gson.JsonObject;
 import java.util.List;
 import java.util.Set;
 
-import smithereen.activitypub.objects.ActivityPubObject;
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.objects.StoredObject;
+import smithereen.model.media.MediaFileRef;
 import smithereen.model.MailMessage;
 import smithereen.model.OwnedContentObject;
 import smithereen.model.Post;
@@ -21,13 +21,11 @@ public sealed interface ReportableContentObject extends OwnedContentObject permi
 	void fillFromReport(int reportID, JsonObject jo);
 	ReportableContentObjectID getReportableObjectID();
 
-	static JsonArray serializeMediaAttachments(List<ActivityPubObject> attachments, Set<Long> outFileIDs){
+	static JsonArray serializeMediaAttachments(List<MediaFileRef> attachments, Set<Long> outFileIDs){
 		JsonArrayBuilder jb=new JsonArrayBuilder();
-		for(ActivityPubObject att:attachments){
-			jb.add(MediaStorageUtils.serializeAttachment(att));
-			if(att instanceof LocalImage li){
-				outFileIDs.add(li.fileID);
-			}
+		for(MediaFileRef att:attachments){
+			jb.add(att.toJson());
+			outFileIDs.add(att.fileID);
 		}
 		return jb.build();
 	}

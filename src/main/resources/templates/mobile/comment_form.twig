@@ -9,7 +9,7 @@
 			{%set attachIDs=""%}
 			{%for attachment in draftAttachments%}
 				<div class="attachment" id="attachment_{{attachment.getLocalID('ATTACHMENT', currentUser.id)}}" data-id="{{attachment.getLocalID('ATTACHMENT', currentUser.id)}}">
-					{{attachment.sizes | photoPicture('xs')}}
+					{{ attachment | pictureForPhoto('s') }}
 					<a href="/system/deleteDraftAttachment?id={{attachment.getLocalID('ATTACHMENT', currentUser.id)}}&csrf={{csrf}}" class="deleteBtn" title="{{L('delete')}}"></a>
 					{%set attachIDs=attachIDs+attachment.getLocalID('ATTACHMENT', currentUser.id)%}
 					{%if not loop.last%}{%set attachIDs=attachIDs+","%}{%endif%}

@@ -35,8 +35,8 @@ import java.util.stream.IntStream;
 import smithereen.Config;
 import smithereen.LruCache;
 import smithereen.Utils;
-import smithereen.activitypub.objects.Actor;
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.objects.Actor;
+import smithereen.model.media.MediaFileRef;
 import smithereen.controllers.GroupsController;
 import smithereen.controllers.ObjectLinkResolver;
 import smithereen.model.Group;
@@ -132,11 +132,7 @@ public class GroupStorage{
 				.where("id=?", id)
 				.executeAndGetSingleObject(Group::fromResultSet);
 		if(g!=null){
-			if(g.icon!=null && !g.icon.isEmpty() && g.icon.getFirst() instanceof LocalImage li){
-				MediaFileRecord mfr=MediaStorage.getMediaFileRecord(li.fileID);
-				if(mfr!=null)
-					li.fillIn(mfr);
-			}
+			MediaFileResolver.resolve(g.avatar);
 			putIntoCache(g);
 		}
 		return g;
@@ -152,11 +148,7 @@ public class GroupStorage{
 				.where("username=?", username)
 				.executeAndGetSingleObject(Group::fromResultSet);
 		if(g!=null){
-			if(g.icon!=null && !g.icon.isEmpty() && g.icon.getFirst() instanceof LocalImage li){
-				MediaFileRecord mfr=MediaStorage.getMediaFileRecord(li.fileID);
-				if(mfr!=null)
-					li.fillIn(mfr);
-			}
+			MediaFileResolver.resolve(g.avatar);
 			putIntoCache(g);
 		}
 		return g;
@@ -237,21 +229,7 @@ public class GroupStorage{
 				.whereIn("id", ids)
 				.executeAsStream(Group::fromResultSet)
 				.collect(Collectors.toMap(g->g.id, Function.identity())));
-		Set<Long> needAvatars=result.values().stream()
-				.map(g->g.icon!=null && !g.icon.isEmpty() && g.icon.getFirst() instanceof LocalImage li ? li : null)
-				.filter(li->li!=null && li.fileRecord==null)
-				.map(li->li.fileID)
-				.collect(Collectors.toSet());
-		if(!needAvatars.isEmpty()){
-			Map<Long, MediaFileRecord> records=MediaStorage.getMediaFileRecords(needAvatars);
-			for(Group group:result.values()){
-				if(group.icon!=null && !group.icon.isEmpty() && group.icon.getFirst() instanceof LocalImage li && li.fileRecord==null){
-					MediaFileRecord mfr=records.get(li.fileID);
-					if(mfr!=null)
-						li.fillIn(mfr);
-				}
-			}
-		}
+		MediaFileResolver.resolveAvatars(result.values());
 		for(Group g:result.values()){
 			putIntoCache(g);
 		}
@@ -1092,21 +1070,7 @@ public class GroupStorage{
 					.orderBy("display_order ASC")
 					.executeAsStream(GroupLink::fromResultSet)
 					.toList();
-			Set<Long> needFiles=links.stream()
-					.map(l->l.image instanceof LocalImage li ? li : null)
-					.filter(Objects::nonNull)
-					.map(li->li.fileID)
-					.collect(Collectors.toSet());
-			if(!needFiles.isEmpty()){
-				Map<Long, MediaFileRecord> files=MediaStorage.getMediaFileRecords(needFiles);
-				for(GroupLink link:links){
-					if(link.image instanceof LocalImage li){
-						MediaFileRecord mfr=files.get(li.fileID);
-						if(mfr!=null)
-							li.fillIn(mfr);
-					}
-				}
-			}
+			MediaFileResolver.resolve(links.stream().map(l->l.image).filter(Objects::nonNull).toList());
 			return links;
 		}
 	}
@@ -1116,13 +1080,8 @@ public class GroupStorage{
 				.selectFrom("group_links")
 				.where("group_id=? AND id=?", groupID, linkID)
 				.executeAndGetSingleObject(GroupLink::fromResultSet);
-		if(link!=null){
-			if(link.image instanceof LocalImage li){
-				MediaFileRecord mfr=MediaStorage.getMediaFileRecord(li.fileID);
-				if(mfr!=null)
-					li.fillIn(mfr);
-			}
-		}
+		if(link!=null)
+			MediaFileResolver.resolve(link.image);
 		return link;
 	}
 

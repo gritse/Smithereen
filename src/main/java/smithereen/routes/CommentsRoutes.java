@@ -19,7 +19,7 @@ import static smithereen.Utils.*;
 
 import smithereen.ApplicationContext;
 import smithereen.Utils;
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.media.MediaFileRef;
 import smithereen.exceptions.BadRequestException;
 import smithereen.exceptions.ObjectNotFoundException;
 import smithereen.exceptions.UserActionNotAllowedException;
@@ -310,12 +310,12 @@ public class CommentsRoutes{
 		if(comment.attachments!=null && !comment.attachments.isEmpty()){
 			model.with("draftAttachments", comment.attachments);
 			model.with("attachAltTexts", comment.attachments.stream()
-					.map(att->att instanceof LocalImage li && li.photoID==0 ? new Pair<>(li.getLocalID(MediaFileUploadPurpose.ATTACHMENT, self.user.id), li.name) : null)
+					.map(li->li.photoID==0 ? new Pair<>(li.getLocalID(MediaFileUploadPurpose.ATTACHMENT, self.user.id), li.name) : null)
 					.filter(Objects::nonNull)
 					.collect(Collectors.toMap(Pair::first, Pair::second))
 			);
 			Map<String, PhotoViewerInlineData> pvData=comment.attachments.stream()
-					.map(att->att instanceof LocalImage li && li.photoID==0 ? new Pair<>(li.getLocalID(MediaFileUploadPurpose.ATTACHMENT, self.user.id), new PhotoViewerInlineData(0, "rawFile/"+li.getLocalID(MediaFileUploadPurpose.ATTACHMENT, self.user.id), li.getURLsForPhotoViewer())) : null)
+					.map(li->li.photoID==0 && li.image()!=null ? new Pair<>(li.getLocalID(MediaFileUploadPurpose.ATTACHMENT, self.user.id), new PhotoViewerInlineData(0, "rawFile/"+li.getLocalID(MediaFileUploadPurpose.ATTACHMENT, self.user.id), li.image().getURLsForPhotoViewer())) : null)
 					.filter(Objects::nonNull)
 					.collect(Collectors.toMap(Pair::first, Pair::second, (a, b)->b));
 			model.with("attachPvData", pvData);

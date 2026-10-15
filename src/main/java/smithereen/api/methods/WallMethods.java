@@ -8,8 +8,8 @@ import java.util.Map;
 
 import smithereen.ApplicationContext;
 import smithereen.Utils;
-import smithereen.activitypub.objects.Actor;
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.objects.Actor;
+import smithereen.model.media.MediaFileRef;
 import smithereen.api.ApiCallContext;
 import smithereen.api.model.ApiErrorType;
 import smithereen.api.model.ApiGroup;
@@ -274,12 +274,12 @@ public class WallMethods{
 							"type", "photo",
 							"photo_id", XTEA.encodeObjectID(pa.photoID, ObfuscatedObjectIDType.PHOTO)
 					));
-				}else if(pa.image instanceof LocalImage li && li.fileRecord!=null){
+				}else if(pa.image!=null && pa.image.record()!=null){
 					Map<String, Object> sa=new HashMap<>();
 					sa.put("type", "image");
-					sa.put("file_id", XTEA.encodeObjectID(li.fileID, ObfuscatedObjectIDType.MEDIA_FILE));
-					sa.put("file_hash", MediaFileUploadTokens.getToken(li.fileRecord.id(), MediaFileUploadPurpose.ATTACHMENT, actx.self.user.id));
-					sa.put("text", li.name);
+					sa.put("file_id", XTEA.encodeObjectID(pa.image.fileID(), ObfuscatedObjectIDType.MEDIA_FILE));
+					sa.put("file_hash", MediaFileUploadTokens.getToken(pa.image.record().id(), MediaFileUploadPurpose.ATTACHMENT, actx.self.user.id));
+					sa.put("text", pa.image.ref().name);
 					attachments.add(sa);
 				}
 			}

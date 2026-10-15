@@ -34,9 +34,9 @@ import smithereen.LruCache;
 import smithereen.Mailer;
 import smithereen.SmithereenApplication;
 import smithereen.Utils;
-import smithereen.activitypub.objects.ActivityPubObject;
-import smithereen.activitypub.objects.Actor;
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.objects.StoredObject;
+import smithereen.model.objects.Actor;
+import smithereen.model.media.MediaFileRef;
 import smithereen.exceptions.BadRequestException;
 import smithereen.exceptions.InternalServerErrorException;
 import smithereen.exceptions.ObjectNotFoundException;
@@ -84,6 +84,7 @@ import smithereen.model.viewmodel.AdminUserViewModel;
 import smithereen.model.viewmodel.UserRoleViewModel;
 import smithereen.storage.DatabaseUtils;
 import smithereen.storage.GroupStorage;
+import smithereen.storage.MediaFileResolver;
 import smithereen.storage.MediaStorage;
 import smithereen.storage.ModerationStorage;
 import smithereen.storage.PhotoStorage;
@@ -201,10 +202,10 @@ public class ModerationController{
 	}
 
 	public void populateFilesInReportableContent(List<ReportableContentObject> content){
-		HashSet<LocalImage> localImages=new HashSet<>();
+		HashSet<MediaFileRef> refs=new HashSet<>();
 		List<Photo> photos=new ArrayList<>();
 		for(ReportableContentObject rco:content){
-			List<ActivityPubObject> attachments=switch(rco){
+			List<MediaFileRef> attachments=switch(rco){
 				case Post p -> p.getAttachments();
 				case MailMessage m -> m.getAttachments();
 				case Photo p -> {
@@ -215,22 +216,10 @@ public class ModerationController{
 			};
 			if(attachments==null)
 				continue;
-			for(ActivityPubObject att: attachments){
-				if(att instanceof LocalImage li){
-					localImages.add(li);
-				}
-			}
+			refs.addAll(attachments);
 		}
 		try{
-			Set<Long> fileIDs=localImages.stream().map(li->li.fileID).collect(Collectors.toSet());
-			if(!fileIDs.isEmpty()){
-				Map<Long, MediaFileRecord> files=MediaStorage.getMediaFileRecords(fileIDs);
-				for(LocalImage li: localImages){
-					MediaFileRecord mfr=files.get(li.fileID);
-					if(mfr!=null)
-						li.fillIn(mfr);
-				}
-			}
+			MediaFileResolver.resolve(refs);
 			if(!photos.isEmpty()){
 				PhotoStorage.postprocessPhotos(photos);
 			}

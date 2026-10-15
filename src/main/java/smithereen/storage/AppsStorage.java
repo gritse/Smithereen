@@ -24,8 +24,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import smithereen.Utils;
-import smithereen.activitypub.objects.Actor;
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.objects.Actor;
+import smithereen.model.media.MediaFileRef;
 import smithereen.model.apps.AppAuthCode;
 import smithereen.model.apps.AppAccessGrant;
 import smithereen.model.apps.AppAccessToken;
@@ -62,8 +62,8 @@ public class AppsStorage{
 		return apps;
 	}
 
-	public static long createApp(int userID, String name, String description, LocalImage logo, String extraFields) throws SQLException{
-		JsonObject serializedLogo=logo==null ? null : MediaStorageUtils.serializeAttachment(logo);
+	public static long createApp(int userID, String name, String description, MediaFileRef logo, String extraFields) throws SQLException{
+		JsonObject serializedLogo=logo==null ? null : logo.toJson();
 		return new SQLQueryBuilder()
 				.insertInto("api_applications")
 				.value("name", name)
@@ -74,8 +74,8 @@ public class AppsStorage{
 				.executeAndGetIDLong();
 	}
 
-	public static void updateApp(long id, String name, String description, LocalImage logo, String extraFields) throws SQLException{
-		JsonObject serializedLogo=logo==null ? null : MediaStorageUtils.serializeAttachment(logo);
+	public static void updateApp(long id, String name, String description, MediaFileRef logo, String extraFields) throws SQLException{
+		JsonObject serializedLogo=logo==null ? null : logo.toJson();
 		new SQLQueryBuilder()
 				.update("api_applications")
 				.where("id=?", id)
@@ -97,21 +97,7 @@ public class AppsStorage{
 	}
 
 	private static void postprocessApps(Collection<ClientApp> apps) throws SQLException{
-		Set<Long> needFiles=apps.stream()
-				.map(a->a.logo instanceof LocalImage li ? li : null)
-				.filter(Objects::nonNull)
-				.map(li->li.fileID)
-				.collect(Collectors.toSet());
-		if(needFiles.isEmpty())
-			return;
-		Map<Long, MediaFileRecord> fileRecords=MediaStorage.getMediaFileRecords(needFiles);
-		for(ClientApp a:apps){
-			if(a.logo instanceof LocalImage li){
-				MediaFileRecord mfr=fileRecords.get(li.fileID);
-				if(mfr!=null)
-					li.fillIn(mfr);
-			}
-		}
+		MediaFileResolver.resolve(apps.stream().map(a->a.logo).filter(Objects::nonNull).toList());
 	}
 
 	public static long getAppIdByUsername(@NotNull String username) throws SQLException{

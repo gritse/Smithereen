@@ -24,9 +24,9 @@ import java.util.stream.Collectors;
 
 import smithereen.ApplicationContext;
 import smithereen.Utils;
-import smithereen.activitypub.objects.ActivityPubObject;
-import smithereen.activitypub.objects.Actor;
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.objects.StoredObject;
+import smithereen.model.objects.Actor;
+import smithereen.model.media.MediaFileRef;
 import smithereen.exceptions.BadRequestException;
 import smithereen.exceptions.InternalServerErrorException;
 import smithereen.exceptions.ObjectNotFoundException;
@@ -125,16 +125,16 @@ public class MailController{
 			}
 			int maxAttachments=10;
 			String attachments=null;
-			ArrayList<ActivityPubObject> attachObjects=new ArrayList<>();
+			ArrayList<MediaFileRef> attachObjects=new ArrayList<>();
 			if(!attachmentIDs.isEmpty()){
 				MediaStorageUtils.fillAttachmentObjects(context, self, attachObjects, attachmentIDs, attachAltTexts, 0, maxAttachments, false);
 				if(!attachObjects.isEmpty()){
 					if(attachObjects.size()==1){
-						attachments=MediaStorageUtils.serializeAttachment(attachObjects.get(0)).toString();
+						attachments=attachObjects.get(0).toJson().toString();
 					}else{
 						JsonArray ar=new JsonArray();
-						for(ActivityPubObject o:attachObjects){
-							ar.add(MediaStorageUtils.serializeAttachment(o));
+						for(MediaFileRef o:attachObjects){
+							ar.add(o.toJson());
 						}
 						attachments=ar.toString();
 					}
@@ -170,11 +170,9 @@ public class MailController{
 				}
 			}
 
-			for(ActivityPubObject att:attachObjects){
-				if(att instanceof LocalImage li){
-					for(Map.Entry<Integer, Long> mid:allMessageIDs.entrySet()){
-						MediaStorage.createMediaFileReference(li.fileID, mid.getValue(), MediaFileReferenceType.MAIL_ATTACHMENT, mid.getKey());
-					}
+			for(MediaFileRef li:attachObjects){
+				for(Map.Entry<Integer, Long> mid:allMessageIDs.entrySet()){
+					MediaStorage.createMediaFileReference(li.fileID, mid.getValue(), MediaFileReferenceType.MAIL_ATTACHMENT, mid.getKey());
 				}
 			}
 			for(User user:to){

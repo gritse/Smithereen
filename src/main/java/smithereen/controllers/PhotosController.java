@@ -28,10 +28,10 @@ import smithereen.ApplicationContext;
 import smithereen.Config;
 import smithereen.LruCache;
 import smithereen.Utils;
-import smithereen.activitypub.objects.ActivityPubObject;
-import smithereen.activitypub.objects.Actor;
-import smithereen.activitypub.objects.Image;
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.objects.StoredObject;
+import smithereen.model.objects.Actor;
+import smithereen.model.media.MediaFileRef;
+import smithereen.model.media.MediaKind;
 import smithereen.exceptions.BadRequestException;
 import smithereen.exceptions.InternalServerErrorException;
 import smithereen.exceptions.ObjectNotFoundException;
@@ -627,7 +627,7 @@ public class PhotosController{
 		albumCache.put(album.id, album);
 
 		// If they deleted their current avatar, find the newest photo in the avatars album and set it as the avatar
-		if(owner.icon!=null && !owner.icon.isEmpty() && owner.icon.getFirst() instanceof LocalImage li && li.photoID==photo.id){
+		if(owner.getAvatarPhotoID()==photo.id){
 			if(album.systemType!=PhotoAlbum.SystemAlbumType.AVATARS)
 				throw new InternalServerErrorException("Huh?!");
 			try{
@@ -753,13 +753,7 @@ public class PhotosController{
 	}
 
 	public Photo saveImageToAlbum(User self, SizedImage image){
-		long fileID;
-		if(image instanceof LocalImage li){
-			fileID=li.fileID;
-		}else{
-			throw new IllegalArgumentException("Only local images can be saved to albums");
-		}
-		return saveFileToAlbum(self, fileID);
+		return saveFileToAlbum(self, image.fileID());
 	}
 
 	private Photo saveFileToAlbum(User self, long fileID){
@@ -859,12 +853,12 @@ public class PhotosController{
 			}
 
 			photo.metadata.rotation=rotation;
-			if(photo.image instanceof LocalImage li)
-				li.rotation=rotation;
+			if(photo.image!=null)
+				photo.image.ref().rotation=rotation;
 			PhotoStorage.updatePhotoMetadata(photo.id, photo.metadata);
 
 			Actor owner=context.getWallController().getContentAuthorAndOwner(photo).owner();
-			if(owner.getAvatar() instanceof LocalImage li && li.photoID==photo.id){
+			if(owner.getAvatarPhotoID()==photo.id){
 				setPhotoToAvatar(owner, photo);
 			}
 		}catch(SQLException x){
@@ -872,21 +866,21 @@ public class PhotosController{
 		}
 	}
 
-	public long updateAvatar(Account self, @Nullable Group group, LocalImage img, AvatarCropRects crop, ClientApp app){
+	public long updateAvatar(Account self, @Nullable Group group, MediaFileRef img, AvatarCropRects crop, ClientApp app){
 		if(group!=null)
 			context.getGroupsController().enforceUserAdminLevel(group, self.user, Group.AdminLevel.ADMIN);
 
-		if(img.isAnimated)
+		if(img.kind()!=MediaKind.STILL_IMAGE)
 			throw new UserErrorException("err_file_upload_animated_not_allowed");
 
 		Actor owner=group==null ? self.user : group;
 		int imgW, imgH;
 		if(img.rotation==SizedImage.Rotation._90 || img.rotation==SizedImage.Rotation._270){
-			imgW=img.height;
-			imgH=img.width;
+			imgW=img.getHeight();
+			imgH=img.getWidth();
 		}else{
-			imgW=img.width;
-			imgH=img.height;
+			imgW=img.getWidth();
+			imgH=img.getHeight();
 		}
 
 		if(crop==null){
@@ -929,15 +923,14 @@ public class PhotosController{
 
 	public void setPhotoToAvatar(Actor owner, Photo photo){
 		try{
-			if(!(photo.image instanceof LocalImage li))
+			if(photo.image==null || photo.image.record()==null)
 				throw new IllegalArgumentException();
-			LocalImage ava=new LocalImage();
-			ava.fileID=li.fileID;
-			ava.fillIn(li.fileRecord);
-			ava.rotation=li.rotation;
+			MediaFileRef ava=new MediaFileRef(photo.image.fileID());
+			ava.fillIn(photo.image.record());
+			ava.rotation=photo.image.ref().rotation;
 			ava.photoID=photo.id;
 			ava.avaCropRects=photo.metadata.cropRects;
-			String serializedAva=MediaStorageUtils.serializeAttachment(ava).toString();
+			String serializedAva=ava.toJson().toString();
 
 			MediaStorage.deleteMediaFileReferences(owner.getLocalID(), owner instanceof Group ? MediaFileReferenceType.GROUP_AVATAR : MediaFileReferenceType.USER_AVATAR);
 
@@ -978,8 +971,8 @@ public class PhotosController{
 		rotation=SizedImage.Rotation.valueOf(((meta.rotation==null ? SizedImage.Rotation._0 : meta.rotation).value()+rotation.value())%360);
 		meta.cropRects=crop;
 		meta.rotation=rotation;
-		if(photo.image instanceof LocalImage li)
-			li.rotation=rotation;
+		if(photo.image!=null)
+			photo.image.ref().rotation=rotation;
 		photo.metadata=meta;
 		try{
 			PhotoStorage.updatePhotoMetadata(photo.id, meta);
@@ -987,7 +980,7 @@ public class PhotosController{
 			throw new InternalServerErrorException(x);
 		}
 		Actor owner=context.getWallController().getContentAuthorAndOwner(photo).owner();
-		if(owner.getAvatar() instanceof LocalImage li && li.photoID==photo.id)
+		if(owner.getAvatarPhotoID()==photo.id)
 			setPhotoToAvatar(owner, photo);
 	}
 
@@ -1154,7 +1147,7 @@ public class PhotosController{
 
 	public Map<Integer, Photo> getUserProfilePhotos(Collection<User> users){
 		Set<Long> needPhotos=users.stream()
-				.map(u->u.getAvatarImage() instanceof LocalImage li && li.photoID!=0 ? li.photoID : null)
+				.map(u->u.getAvatarPhotoID()!=0 ? u.getAvatarPhotoID() : null)
 				.filter(Objects::nonNull)
 				.collect(Collectors.toSet());
 		if(needPhotos.isEmpty())
@@ -1165,7 +1158,7 @@ public class PhotosController{
 
 	public Map<Integer, Photo> getGroupProfilePhotos(Collection<Group> groups){
 		Set<Long> needPhotos=groups.stream()
-				.map(g->g.getAvatarImage() instanceof LocalImage li && li.photoID!=0 ? li.photoID : null)
+				.map(g->g.getAvatarPhotoID()!=0 ? g.getAvatarPhotoID() : null)
 				.filter(Objects::nonNull)
 				.collect(Collectors.toSet());
 		if(needPhotos.isEmpty())

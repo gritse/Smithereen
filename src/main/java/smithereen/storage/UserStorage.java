@@ -33,8 +33,8 @@ import java.util.stream.Collectors;
 import smithereen.Config;
 import smithereen.LruCache;
 import smithereen.Utils;
-import smithereen.activitypub.objects.Actor;
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.objects.Actor;
+import smithereen.model.media.MediaFileRef;
 import smithereen.controllers.FriendsController;
 import smithereen.model.Account;
 import smithereen.model.PaginatedList;
@@ -86,11 +86,7 @@ public class UserStorage{
 				.where("id=?", id)
 				.executeAndGetSingleObject(User::fromResultSet);
 		if(user!=null){
-			if(user.icon!=null && !user.icon.isEmpty() && user.icon.getFirst() instanceof LocalImage li){
-				MediaFileRecord mfr=MediaStorage.getMediaFileRecord(li.fileID);
-				if(mfr!=null)
-					li.fillIn(mfr);
-			}
+			MediaFileResolver.resolve(user.avatar);
 			putIntoCache(user);
 		}else if(wantDeleted){
 			user=new SQLQueryBuilder()
@@ -140,21 +136,7 @@ public class UserStorage{
 					.whereIn("id", ids)
 					.executeAsStream(User::fromResultSet)
 					.forEach(u->result.put(u.id, u));
-			Set<Long> needAvatars=result.values().stream()
-					.map(u->u.icon!=null && !u.icon.isEmpty() && u.icon.getFirst() instanceof LocalImage li ? li : null)
-					.filter(li->li!=null && li.fileRecord==null)
-					.map(li->li.fileID)
-					.collect(Collectors.toSet());
-			if(!needAvatars.isEmpty()){
-				Map<Long, MediaFileRecord> records=MediaStorage.getMediaFileRecords(needAvatars);
-				for(User user:result.values()){
-					if(user.icon!=null && !user.icon.isEmpty() && user.icon.getFirst() instanceof LocalImage li && li.fileRecord==null){
-						MediaFileRecord mfr=records.get(li.fileID);
-						if(mfr!=null)
-							li.fillIn(mfr);
-					}
-				}
-			}
+			MediaFileResolver.resolveAvatars(result.values());
 			for(int id:ids){
 				User u=result.get(id);
 				if(u!=null)
@@ -210,11 +192,7 @@ public class UserStorage{
 				.where("username=?", username)
 				.executeAndGetSingleObject(User::fromResultSet);
 		if(user!=null){
-			if(user.icon!=null && !user.icon.isEmpty() && user.icon.getFirst() instanceof LocalImage li){
-				MediaFileRecord mfr=MediaStorage.getMediaFileRecord(li.fileID);
-				if(mfr!=null)
-					li.fillIn(mfr);
-			}
+			MediaFileResolver.resolve(user.avatar);
 			putIntoCache(user);
 		}
 		return user;

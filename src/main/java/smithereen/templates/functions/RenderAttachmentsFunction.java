@@ -17,7 +17,7 @@ import io.pebbletemplates.pebble.extension.escaper.SafeString;
 import io.pebbletemplates.pebble.template.EvaluationContext;
 import io.pebbletemplates.pebble.template.PebbleTemplate;
 import smithereen.Utils;
-import smithereen.activitypub.objects.Actor;
+import smithereen.model.objects.Actor;
 import smithereen.lang.Lang;
 import smithereen.model.AttachmentHostContentObject;
 import smithereen.model.Group;

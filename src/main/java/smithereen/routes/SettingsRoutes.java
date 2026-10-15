@@ -33,8 +33,8 @@ import smithereen.ApplicationContext;
 import smithereen.Config;
 import smithereen.Mailer;
 import smithereen.Utils;
-import smithereen.activitypub.objects.Actor;
-import smithereen.activitypub.objects.LocalImage;
+import smithereen.model.objects.Actor;
+import smithereen.model.media.MediaFileRef;
 import smithereen.controllers.FriendsController;
 import smithereen.controllers.UsersController;
 import smithereen.exceptions.BadRequestException;
@@ -223,7 +223,7 @@ public class SettingsRoutes{
 			rotation=null;
 		}
 
-		LocalImage img=MediaStorageUtils.saveUploadedImage(req, resp, self, false, "file", false);
+		MediaFileRef img=MediaStorageUtils.saveUploadedImage(req, resp, self, false, "file", false);
 		img.rotation=rotation;
 		try{
 			ctx.getPhotosController().updateAvatar(self, group, img, cropRects, null);
@@ -335,9 +335,9 @@ public class SettingsRoutes{
 			owner=group;
 		}
 
-		if(owner.getAvatar() instanceof LocalImage li){
-			if(li.photoID!=0)
-				ctx.getPhotosController().deletePhoto(self.user, ctx.getPhotosController().getPhotoIgnoringPrivacy(li.photoID));
+		if(owner.avatar!=null){
+			if(owner.avatar.photoID!=0)
+				ctx.getPhotosController().deletePhoto(self.user, ctx.getPhotosController().getPhotoIgnoringPrivacy(owner.avatar.photoID));
 			else
 				ctx.getPhotosController().deleteAvatar(owner);
 		}
