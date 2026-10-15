@@ -170,7 +170,7 @@ public final class MediaFileRef{
 	}
 
 	/**
-	 * @return the resolved media. Before resolution, a placeholder still image that renders as a broken picture.
+	 * @return the resolved media. Before resolution, or for a file that is not media, a placeholder still image that renders as a broken picture.
 	 */
 	@NotNull
 	public StoredMedia media(){

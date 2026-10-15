@@ -54,13 +54,16 @@ public sealed interface StoredMedia permits SizedImage, Video{
 		return record==null ? 0 : record.metadata().height();
 	}
 
-	@NotNull
+	/**
+	 * @return the media object for the file's kind, or null for files that are not media (export archives)
+	 */
+	@Nullable
 	static StoredMedia create(@NotNull MediaFileRef ref, @NotNull MediaFileRecord record){
 		return switch(record.id().type().kind()){
 			case STILL_IMAGE -> new StillImage(ref, record);
 			case ANIMATED_IMAGE -> new AnimatedImage(ref, record);
 			case VIDEO -> new Video(ref, record);
-			case ARCHIVE -> throw new IllegalArgumentException("File "+record.id()+" is not media");
+			case ARCHIVE -> null;
 		};
 	}
 }
