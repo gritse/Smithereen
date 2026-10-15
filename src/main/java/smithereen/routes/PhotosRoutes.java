@@ -22,6 +22,7 @@ import smithereen.model.LikeObjectType;
 import smithereen.ApplicationContext;
 import smithereen.Config;
 import smithereen.model.objects.Actor;
+import smithereen.media.ProcessingOptions;
 import smithereen.model.media.MediaFileRef;
 import smithereen.controllers.FriendsController;
 import smithereen.controllers.PhotosController;
@@ -236,7 +237,7 @@ public class PhotosRoutes{
 		if(album.systemType!=null || !info.permissions.canUploadToPhotoAlbum(album))
 			throw new UserActionNotAllowedException();
 
-		MediaFileRef uploaded=MediaStorageUtils.saveUploadedImage(req, resp, info.account, false, "file", true);
+		MediaFileRef uploaded=MediaStorageUtils.saveUploadedMedia(req, resp, info.account, "file", MediaFileUploadPurpose.ALBUM_PHOTO, ProcessingOptions.DEFAULT);
 		long photoID=ctx.getPhotosController().createPhoto(info.account.user, album, uploaded.fileID, null, null);
 		SizedImage photo=uploaded.image();
 		SizedImage.Type sizeType=SizedImage.Type.PHOTO_THUMB_SMALL;
@@ -245,7 +246,7 @@ public class PhotosRoutes{
 		return new JsonObjectBuilder()
 				.add("id", encodeLong(XTEA.obfuscateObjectID(photoID, ObfuscatedObjectIDType.PHOTO)))
 				.add("html", photo.generateHTML(SizedImage.Type.PHOTO_THUMB_MEDIUM, null, null, size.width, size.height, true, null))
-				.add("animated", photo.isAnimated())
+				.add("canRotate", photo.kind().canRotate())
 				.build();
 	}
 
@@ -433,7 +434,7 @@ public class PhotosRoutes{
 		if(ctx.getPhotosController().canManagePhoto(self, photo)){
 			allowedActions.add(PhotoViewerPhotoInfo.AllowedAction.DELETE);
 			allowedActions.add(PhotoViewerPhotoInfo.AllowedAction.EDIT_DESCRIPTION);
-			if(photo.image==null || !photo.image.isAnimated())
+			if(photo.image==null || photo.image.kind().canRotate())
 				allowedActions.add(PhotoViewerPhotoInfo.AllowedAction.ROTATE);
 			allowedActions.add(PhotoViewerPhotoInfo.AllowedAction.ADD_TAGS);
 			allowedActions.add(PhotoViewerPhotoInfo.AllowedAction.MANAGE_TAGS);

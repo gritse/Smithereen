@@ -30,13 +30,6 @@ public sealed interface SizedImage extends StoredMedia, BlurHashable permits Sto
 
 	URI getOriginalURI();
 
-	/**
-	 * @return true if this is an animated image. Animated images are served as one file regardless of the requested size and format.
-	 */
-	default boolean isAnimated(){
-		return false;
-	}
-
 	default Dimensions getDimensionsForSize(Type size, Dimensions dimensions){
 		return size.getResizedDimensions(dimensions);
 	}
@@ -48,7 +41,7 @@ public sealed interface SizedImage extends StoredMedia, BlurHashable permits Sto
 	default List<SizedImageURLs> getURLsForPhotoViewer(){
 		ArrayList<SizedImageURLs> urls=new ArrayList<>();
 		Dimensions origSize=getOriginalDimensions();
-		if(isAnimated()){
+		if(!kind().hasResizedVariants()){
 			String url=Objects.toString(getUriForSizeAndFormat(Type.PHOTO_ORIGINAL, Format.WEBP, false, true, false));
 			urls.add(new SizedImageURLs(Type.PHOTO_ORIGINAL.suffix, origSize.width, origSize.height, url, url));
 			return urls;
@@ -78,8 +71,8 @@ public sealed interface SizedImage extends StoredMedia, BlurHashable permits Sto
 
 	default String generateHTML(Type size, List<String> additionalClasses, List<String> extraAttrs, int width, int height, boolean add2x, String altText){
 		StringBuilder sb=new StringBuilder("<picture>");
-		if(!isAnimated()){
-			// An animated image has one URL for every size and format, so <source>s would be redundant
+		if(kind().hasResizedVariants()){
+			// A kind without variants has one URL for every size and format, so <source>s would be redundant
 			appendHtmlForFormat(size, Format.WEBP, sb, add2x);
 			appendHtmlForFormat(size, Format.JPEG, sb, add2x);
 		}

@@ -70,9 +70,4 @@ public abstract sealed class StoredImage implements SizedImage permits StillImag
 	public void setBlurHash(@Nullable String blurHash){
 		this.blurHash=blurHash;
 	}
-
-	@Override
-	public boolean isAnimated(){
-		return kind()==MediaKind.ANIMATED_IMAGE;
-	}
 }

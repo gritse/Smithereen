@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Set;
 
 import smithereen.ApplicationContext;
+import smithereen.media.ProcessingOptions;
 import smithereen.model.media.MediaFileRef;
 import smithereen.exceptions.BadRequestException;
 import smithereen.exceptions.UserActionNotAllowedException;
@@ -22,7 +23,6 @@ import smithereen.storage.MediaStorageUtils;
 import smithereen.templates.RenderedTemplateResponse;
 import spark.Request;
 import spark.Response;
-import spark.Spark;
 import spark.utils.StringUtils;
 
 import static smithereen.Utils.*;
@@ -109,13 +109,7 @@ public class AppsRoutes{
 	public static Object uploadAppLogo(Request req, Response resp, Account self, ApplicationContext ctx){
 		if(!isAjax(req))
 			throw new BadRequestException();
-		Lang l=lang(req);
-		MediaFileRef img=MediaStorageUtils.saveUploadedImage(req, resp, self, false, "file", 400, 0, false, vi->{
-			if(vi.getWidth()!=vi.getHeight())
-				Spark.halt(422, l.get("err_app_logo_not_square"));
-			if(vi.getWidth()<200)
-				Spark.halt(422, l.get("err_app_logo_too_small", Map.of("size", 200)));
-		});
+		MediaFileRef img=MediaStorageUtils.saveUploadedMedia(req, resp, self, "file", MediaFileUploadPurpose.APP_LOGO, ProcessingOptions.APP_LOGO);
 		return new WebDeltaResponse(resp)
 				.hide("logoLoader")
 				.show("logoUploadText")

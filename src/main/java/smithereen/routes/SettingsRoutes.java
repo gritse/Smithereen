@@ -34,7 +34,9 @@ import smithereen.Config;
 import smithereen.Mailer;
 import smithereen.Utils;
 import smithereen.model.objects.Actor;
+import smithereen.media.ProcessingOptions;
 import smithereen.model.media.MediaFileRef;
+import smithereen.model.media.MediaFileUploadPurpose;
 import smithereen.controllers.FriendsController;
 import smithereen.controllers.UsersController;
 import smithereen.exceptions.BadRequestException;
@@ -223,7 +225,7 @@ public class SettingsRoutes{
 			rotation=null;
 		}
 
-		MediaFileRef img=MediaStorageUtils.saveUploadedImage(req, resp, self, false, "file", false);
+		MediaFileRef img=MediaStorageUtils.saveUploadedMedia(req, resp, self, "file", MediaFileUploadPurpose.AVATAR, ProcessingOptions.DEFAULT);
 		img.rotation=rotation;
 		try{
 			ctx.getPhotosController().updateAvatar(self, group, img, cropRects, null);

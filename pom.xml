@@ -4,6 +4,8 @@
 		 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 	<properties>
+		<!-- Where the tests look for libvips; override with -Djna.library.path=... -->
+		<jna.library.path>/usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu:/usr/lib/aarch64-linux-gnu:/usr/local/lib:/opt/homebrew/lib</jna.library.path>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 		<maven.compiler.source>21</maven.compiler.source>
@@ -58,6 +60,7 @@
 				<configuration>
 					<argLine>
 						--add-opens smithereen.server/smithereen=org.junit.platform.commons
+						-Djna.library.path=${jna.library.path}
 					</argLine>
 				</configuration>
 			</plugin>

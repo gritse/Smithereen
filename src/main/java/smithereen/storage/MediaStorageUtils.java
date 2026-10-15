@@ -1,26 +1,16 @@
 package smithereen.storage;
 
-import com.google.gson.JsonObject;
-
-import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.net.URI;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.sql.SQLException;
-import java.time.Duration;
-import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
-import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import jakarta.servlet.MultipartConfigElement;
@@ -28,128 +18,39 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.Part;
 import smithereen.ApplicationContext;
 import smithereen.Utils;
-import smithereen.model.objects.StoredObject;
-import smithereen.model.media.MediaFileRef;
 import smithereen.exceptions.BadRequestException;
 import smithereen.exceptions.InternalServerErrorException;
 import smithereen.exceptions.UserActionNotAllowedException;
 import smithereen.lang.Lang;
-import smithereen.libvips.VipsImage;
+import smithereen.media.MediaUploadService;
+import smithereen.media.MediaValidationException;
+import smithereen.media.ProcessingOptions;
 import smithereen.model.Account;
-import smithereen.model.AttachmentHostContentObject;
-import smithereen.model.Group;
 import smithereen.model.ObfuscatedObjectIDType;
-import smithereen.model.SizedImage;
 import smithereen.model.User;
-import smithereen.model.attachments.GraffitiAttachment;
-import smithereen.model.media.ImageMetadata;
 import smithereen.model.media.MediaFileID;
-import smithereen.model.media.MediaFileMetadata;
 import smithereen.model.media.MediaFileRecord;
-import smithereen.model.media.MediaFileType;
+import smithereen.model.media.MediaFileRef;
 import smithereen.model.media.MediaFileUploadPurpose;
 import smithereen.model.media.MediaFileUploadTokens;
 import smithereen.model.photos.Photo;
 import smithereen.storage.media.MediaFileStorageDriver;
 import smithereen.storage.sql.DatabaseConnection;
 import smithereen.storage.sql.DatabaseConnectionManager;
-import smithereen.util.BlurHash;
-import smithereen.util.JsonObjectBuilder;
 import smithereen.util.XTEA;
 import spark.Request;
 import spark.Response;
 import spark.Spark;
-import spark.utils.StringUtils;
 
 import static smithereen.Utils.lang;
 
 public class MediaStorageUtils{
 	private static final Logger LOG=LoggerFactory.getLogger(MediaStorageUtils.class);
-	public static final int QUALITY_LOSSLESS=-1;
-	public static final long MAX_IMAGE_SIZE=10*1024*1024;
-	/**
-	 * Animated images are scaled down so that the total number of pixels in all frames stays within this budget,
-	 * because encoding an animation takes time proportional to it.
-	 */
-	public static final long MAX_ANIMATION_PIXELS=50_000_000L;
-	/**
-	 * libvips metadata fields that describe an animation. They must survive until the image is written, otherwise it becomes a still.
-	 */
-	private static final Set<String> ANIMATION_METADATA_FIELDS=Set.of("page-height", "n-pages", "delay", "loop");
 
 	/**
-	 * Writes an image to a WebP file, scaling it down to fit the given bounds if needed.
-	 * If {@code img} was loaded with all frames of an animation, the result is an animated WebP.
-	 * @param outSize receives the width and height of the result (of one frame, for animations)
+	 * Resolves the attachment IDs a client sent with a post, comment or message into media file references.
+	 * IDs are either "photo:&lt;photo ID&gt;" for album photos or "&lt;file ID&gt;:&lt;upload token&gt;" for uploads.
 	 */
-	public static long writeResizedWebpImage(VipsImage img, int widthOrSize, int height, int quality, File file, int[] outSize) throws IOException{
-		int frameHeight=img.getFrameHeight();
-		int frameCount=img.getLoadedFrames();
-		boolean animated=frameCount>1;
-		double factor;
-		if(height==0){
-			factor=(double) widthOrSize/(double) Math.max(img.getWidth(), frameHeight);
-		}else{
-			factor=Math.min((double)widthOrSize/(double)img.getWidth(), (double)height/(double)frameHeight);
-		}
-		if(animated){
-			factor=Math.min(factor, 1.0);
-			double totalPixels=(double)img.getWidth()*frameHeight*frameCount*factor*factor;
-			if(totalPixels>MAX_ANIMATION_PIXELS)
-				factor*=Math.sqrt(MAX_ANIMATION_PIXELS/totalPixels);
-		}
-
-		ArrayList<String> args=new ArrayList<>();
-		if(quality==QUALITY_LOSSLESS){
-			args.add("lossless=true");
-		}else{
-			args.add("Q="+quality);
-		}
-
-		boolean strip=!img.hasColorProfile();
-		if(!strip || animated){
-			for(String key:img.getFields()){
-				if("icc-profile-data".equals(key) || (animated && ANIMATION_METADATA_FIELDS.contains(key)))
-					continue;
-				img.removeField(key);
-			}
-		}else{
-			args.add("strip=true");
-		}
-
-		if(factor>=1.0){
-			img.writeToFile(file.getAbsolutePath()+"["+String.join(",", args)+"]");
-			outSize[0]=img.getWidth();
-			outSize[1]=frameHeight;
-		}else{
-			VipsImage resized;
-			int resizedFrameHeight;
-			if(animated){
-				// Resize the whole stack of frames at once, choosing the scales so that every frame ends up with the same integer height
-				resizedFrameHeight=Math.max(1, (int)Math.round(frameHeight*factor));
-				int resizedWidth=Math.max(1, (int)Math.round(img.getWidth()*factor));
-				resized=img.resize(resizedWidth/(double)img.getWidth(), resizedFrameHeight/(double)frameHeight);
-				if(resized.getHeight()!=resizedFrameHeight*frameCount){
-					int actualHeight=resized.getHeight();
-					resized.release();
-					throw new IOException("Resized animation height "+actualHeight+" is not "+frameCount+" frames of "+resizedFrameHeight+" pixels");
-				}
-				resized.setFrameHeight(resizedFrameHeight);
-			}else{
-				resized=img.resize(factor);
-				resizedFrameHeight=resized.getHeight();
-			}
-			try{
-				resized.writeToFile(file.getAbsolutePath()+"["+String.join(",", args)+"]");
-				outSize[0]=resized.getWidth();
-				outSize[1]=resizedFrameHeight;
-			}finally{
-				resized.release();
-			}
-		}
-		return file.length();
-	}
-
 	public static void fillAttachmentObjects(ApplicationContext context, User self, List<MediaFileRef> attachObjects, List<String> attachmentIDs, Map<String, String> altTexts, int attachmentCount, int maxAttachments, boolean allowGraffiti) throws SQLException{
 		for(String id:attachmentIDs){
 			String[] idParts=id.split(":");
@@ -235,104 +136,44 @@ public class MediaStorageUtils{
 	}
 
 	/**
-	 * @param allowAnimation whether an animated GIF or WebP is kept animated. If false, uploading one fails with a 415 response.
+	 * Reads a file from a multipart request and runs it through {@link MediaUploadService}.
+	 * Rejections become HTTP error responses with translated messages, through {@link Spark#halt}.
+	 * @param fieldName the name of the form field with the file
 	 */
-	public static MediaFileRef saveUploadedImage(Request req, Response resp, Account self, boolean isGraffiti, String fieldName, boolean allowAnimation){
-		return saveUploadedImage(req, resp, self, isGraffiti, fieldName, 2560, 0, allowAnimation, null);
-	}
-
-	public static MediaFileRef saveUploadedImage(Request req, Response resp, Account self, boolean isGraffiti, String fieldName, int maxWidthOrSize, int maxHeight, boolean allowAnimation, Consumer<VipsImage> extraValidator){
+	public static MediaFileRef saveUploadedMedia(Request req, Response resp, Account self, String fieldName, MediaFileUploadPurpose purpose, ProcessingOptions options){
 		Lang l=lang(req);
+		long maxSize=MediaUploadService.maxUploadSize(purpose);
 		try{
-			req.attribute("org.eclipse.jetty.multipartConfig", new MultipartConfigElement(null, MAX_IMAGE_SIZE, -1L, 0));
+			req.attribute("org.eclipse.jetty.multipartConfig", new MultipartConfigElement(null, maxSize, -1L, 0));
 			Part part;
 			try{
 				part=req.raw().getPart(fieldName);
 			}catch(IllegalStateException x){
 				// Payload Too Large
-				Spark.halt(413, l.get("err_file_upload_too_large", Map.of("maxSize", l.formatFileSize(MAX_IMAGE_SIZE))));
+				Spark.halt(413, l.get("err_file_upload_too_large", Map.of("maxSize", l.formatFileSize(maxSize))));
 				return null;
 			}
 			if(part==null)
 				throw new BadRequestException();
-			if(part.getSize()>MAX_IMAGE_SIZE){
+			if(part.getSize()>maxSize){
 				// Payload Too Large
-				Spark.halt(413, l.get("err_file_upload_too_large", Map.of("maxSize", l.formatFileSize(MAX_IMAGE_SIZE))));
-			}
-
-			String mime=part.getContentType();
-			if(!mime.startsWith("image/")){
-				// Unsupported Media Type
-				Spark.halt(415, l.get("err_file_upload_image_format"));
+				Spark.halt(413, l.get("err_file_upload_too_large", Map.of("maxSize", l.formatFileSize(maxSize))));
 			}
 
 			File temp=File.createTempFile("SmithereenUpload", null);
-			// The first frame. Used for validation and the blurhash, and written out as is for still images.
-			VipsImage img=null;
-			// All frames of an animation, or the same object as img for still images.
-			VipsImage toWrite=null;
 			try{
-				try{
-					try(FileOutputStream out=new FileOutputStream(temp)){
-						Utils.copyBytes(part.getInputStream(), out);
-					}
-					img=new VipsImage(temp.getAbsolutePath());
-				}catch(IOException x){
-					LOG.warn("VipsImage error", x);
-					Spark.halt(400, l.get("err_file_upload_image_format"));
-					throw new IllegalStateException();
+				try(FileOutputStream out=new FileOutputStream(temp)){
+					Utils.copyBytes(part.getInputStream(), out);
 				}
-				boolean animated=img.isAnimated();
-				if(animated && !allowAnimation){
-					// Unsupported Media Type
-					Spark.halt(415, l.get("err_file_upload_animated_not_allowed"));
-				}
-				if(img.hasAlpha()){
-					VipsImage flat=img.flatten(255, 255, 255);
-					img.release();
-					img=flat;
-				}
-
-				if(isGraffiti && (img.getWidth()!=GraffitiAttachment.WIDTH || img.getHeight()!=GraffitiAttachment.HEIGHT)){
-					LOG.warn("Unexpected graffiti size {}x{}", img.getWidth(), img.getHeight());
-					throw new BadRequestException();
-				}
-
-				if(extraValidator!=null)
-					extraValidator.accept(img);
-
-				if(animated){
-					try{
-						toWrite=new VipsImage(temp.getAbsolutePath(), true);
-					}catch(IOException x){
-						LOG.warn("VipsImage error", x);
-						Spark.halt(400, l.get("err_file_upload_image_format"));
-						throw new IllegalStateException();
-					}
-					if(toWrite.hasAlpha()){
-						VipsImage flat=toWrite.flatten(255, 255, 255);
-						toWrite.release();
-						toWrite=flat;
-					}
-				}else{
-					toWrite=img;
-				}
-
-				File resizedFile=File.createTempFile("SmithereenUploadResized", ".webp");
-				int[] outSize={0,0};
-				writeResizedWebpImage(toWrite, maxWidthOrSize, maxHeight, isGraffiti ? MediaStorageUtils.QUALITY_LOSSLESS : 93, resizedFile, outSize);
-				MediaFileMetadata meta=new ImageMetadata(outSize[0], outSize[1], BlurHash.encode(img, 4, 4), null, animated);
-				MediaFileRecord fileRecord=MediaStorage.createMediaFileRecord(isGraffiti ? MediaFileType.IMAGE_GRAFFITI : MediaFileType.IMAGE_PHOTO, resizedFile.length(), self.user.id, meta);
-				MediaFileRef photo=new MediaFileRef(fileRecord.id().id());
-				photo.fillIn(fileRecord);
-				MediaFileStorageDriver.getInstance().storeFile(resizedFile, fileRecord.id(), false);
-				return photo;
+				return MediaUploadService.store(temp, part.getContentType(), self, purpose, options);
+			}catch(MediaValidationException x){
+				Map<String, Object> args=new HashMap<>(x.langArgs);
+				if(args.get("maxSizeBytes") instanceof Long bytes)
+					args.put("maxSize", l.formatFileSize(bytes));
+				Spark.halt(x.httpStatus, l.get(x.langKey, args));
+				throw new IllegalStateException();
 			}finally{
 				temp.delete();
-				if(toWrite!=null && toWrite!=img)
-					toWrite.release();
-				if(img!=null)
-					img.release();
 			}
 		}catch(IOException | ServletException | SQLException x){
 			LOG.error("File upload failed", x);
@@ -340,17 +181,4 @@ public class MediaStorageUtils{
 			throw new IllegalStateException();
 		}
 	}
-
-	@NotNull
-	public static String calculateBlurHash(@NotNull File file) throws IOException{
-		VipsImage img=null;
-		try{
-			img=new VipsImage(file.getAbsolutePath());
-			return BlurHash.encode(img, 4, 4);
-		}finally{
-			if(img!=null)
-				img.release();
-		}
-	}
-
 }

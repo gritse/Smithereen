@@ -29,7 +29,7 @@
     <div class="photoEditRow" id="photoEditRow_{{ photo.idString }}" data-photo-id="{{ photo.idString }}" data-text-format="{{ descriptionSources[photo.id].format }}"{% if loop.first %} style="border-top: none"{% endif %}>
     	<div class="thumb">
     		<div id="photoEditThumb_{{ photo.idString }}">{{ photo.image | pictureForPhoto('m', false) }}</div>
-    		{% if not photo.image.animated %}
+    		{% if photo.image.kind.canRotate %}
     		<div class="rotateButtons" id="photoRotateButtons_{{ photo.idString }}">
     			<a href="{{ photo.url }}/rotate?cw&from=edit&csrf={{ csrf }}" data-ajax data-ajax-hide="photoRotateButtons_{{ photo.idString }}" data-ajax-show="photoRotateLoader_{{ photo.idString }}" class="rotateCW"></a>
     			<a href="{{ photo.url }}/rotate?ccw&from=edit&csrf={{ csrf }}" data-ajax data-ajax-hide="photoRotateButtons_{{ photo.idString }}" data-ajax-show="photoRotateLoader_{{ photo.idString }}" class="rotateCCW"></a>

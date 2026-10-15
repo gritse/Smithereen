@@ -139,7 +139,7 @@ class PhotoAlbumUploader{
 				var resp:any=JSON.parse(xhr.response);
 				var textarea, descriptionHeading, deleteLink, rotateLoader;
 				var thumbChildren:HTMLElement[]=[ce("div", {innerHTML: resp.html, id: "photoEditThumb_"+resp.id})];
-				if(!resp.animated){ // Animated photos can't be rotated
+				if(resp.canRotate){
 					thumbChildren.push(ce("div", {className: "rotateButtons", id: "photoRotateButtons_"+resp.id, innerHTML: `<a href="/photos/${resp.id}/rotate?cw&from=edit&csrf=${userConfig.csrf}" data-ajax data-ajax-hide="photoRotateButtons_${resp.id}" data-ajax-show="photoRotateLoader_${resp.id}" class="rotateCW"></a><a href="/photos/${resp.id}/rotate?ccw&from=edit&csrf=${userConfig.csrf}" data-ajax data-ajax-hide="photoRotateButtons_${resp.id}" data-ajax-show="photoRotateLoader_${resp.id}" class="rotateCCW"></a>`}));
 				}
 				thumbChildren.push(rotateLoader=ce("div", {id: "photoRotateLoader_"+resp.id, className: "loader white"}));

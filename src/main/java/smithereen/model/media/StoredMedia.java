@@ -57,7 +57,7 @@ public sealed interface StoredMedia permits SizedImage{
 	@NotNull
 	static StoredMedia create(@NotNull MediaFileRef ref, @NotNull MediaFileRecord record){
 		return switch(record.id().type().kind()){
-			case STILL_IMAGE -> record.metadata().animated() ? new AnimatedImage(ref, record) : new StillImage(ref, record);
+			case STILL_IMAGE -> new StillImage(ref, record);
 			case ANIMATED_IMAGE -> new AnimatedImage(ref, record);
 			case ARCHIVE -> throw new IllegalArgumentException("File "+record.id()+" is not media");
 		};

@@ -35,7 +35,7 @@ import smithereen.model.comments.Comment;
 import smithereen.model.photos.Photo;
 import smithereen.model.reports.ReportableContentObject;
 import smithereen.routes.ApiRoutes;
-import smithereen.storage.MediaStorageUtils;
+import smithereen.media.MediaUploadService;
 import smithereen.util.XTEA;
 
 public class ServerMethods{
@@ -54,7 +54,7 @@ public class ServerMethods{
 				Map.of(
 						"smithereen", ApiRoutes.MAX_VERSION
 				),
-				new ServerInfo.Uploads(MediaStorageUtils.MAX_IMAGE_SIZE, VipsImage.MAX_SIZE, List.of(
+				new ServerInfo.Uploads(MediaUploadService.MAX_IMAGE_SIZE, VipsImage.MAX_SIZE, List.of(
 						"image/jpeg",
 						"image/png",
 						"image/gif",

@@ -42,7 +42,7 @@ import smithereen.util.Passwords;
 import smithereen.util.XTEA;
 
 public class DatabaseSchemaUpdater{
-	public static final int SCHEMA_VERSION=92;
+	public static final int SCHEMA_VERSION=93;
 	private static final Logger LOG=LoggerFactory.getLogger(DatabaseSchemaUpdater.class);
 
 	/**
@@ -1318,6 +1318,10 @@ public class DatabaseSchemaUpdater{
 				conn.createStatement().execute("ALTER TABLE `reports` DROP `server_domain`");
 				conn.createStatement().execute("ALTER TABLE `deleted_user_bans` DROP `domain`");
 			}
+			case 93 -> {
+				// Animated images get their own file type instead of a flag in the metadata
+				conn.createStatement().execute("UPDATE `media_files` SET `type`="+MediaFileType.IMAGE_ANIMATED.ordinal()+" WHERE `type`="+MediaFileType.IMAGE_PHOTO.ordinal()+" AND JSON_EXTRACT(`metadata`, '$.animated')=true");
+			}
 		}
 	}
 
@@ -1607,7 +1611,7 @@ public class DatabaseSchemaUpdater{
 		float[] cropRegion=new float[4];
 		for(int i=0;i<4;i++)
 			cropRegion[i]=_cropRegion.get(i).getAsFloat();
-		ImageMetadata meta=new ImageMetadata(width, height, null, cropRegion, false);
+		ImageMetadata meta=new ImageMetadata(width, height, null, cropRegion);
 		byte[] randomID=Utils.randomBytes(18);
 		long newID=new SQLQueryBuilder(conn)
 				.insertInto("media_files")
@@ -1648,7 +1652,7 @@ public class DatabaseSchemaUpdater{
 			int width=obj.getAsJsonArray("_sz").get(0).getAsInt();
 			int height=obj.getAsJsonArray("_sz").get(1).getAsInt();
 			String blurhash=obj.has("blurhash") ? obj.get("blurhash").getAsString() : null;
-			ImageMetadata meta=new ImageMetadata(width, height, blurhash, null, false);
+			ImageMetadata meta=new ImageMetadata(width, height, blurhash, null);
 			byte[] randomID=Utils.randomBytes(18);
 			boolean isGraffiti=obj.has("graffiti") && obj.get("graffiti").getAsBoolean();
 			long newID=new SQLQueryBuilder(conn)

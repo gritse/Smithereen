@@ -45,6 +45,7 @@ import smithereen.LruCache;
 import smithereen.Utils;
 import smithereen.model.objects.StoredObject;
 import smithereen.model.objects.Actor;
+import smithereen.media.ProcessingOptions;
 import smithereen.model.media.MediaFileRef;
 import smithereen.api.methods.ApiUtils;
 import smithereen.controllers.ObjectLinkResolver;
@@ -147,7 +148,7 @@ public class SystemRoutes{
 	}
 
 	private static Object uploadPhotoAttachment(Request req, Response resp, Account self, boolean isGraffiti){
-		MediaFileRef uploaded=MediaStorageUtils.saveUploadedImage(req, resp, self, isGraffiti, "file", !isGraffiti);
+		MediaFileRef uploaded=MediaStorageUtils.saveUploadedMedia(req, resp, self, "file", MediaFileUploadPurpose.ATTACHMENT, isGraffiti ? ProcessingOptions.GRAFFITI : ProcessingOptions.DEFAULT);
 		if(isAjax(req)){
 			resp.type("application/json");
 			String localID=uploaded.getLocalID(MediaFileUploadPurpose.ATTACHMENT, self.user.id);

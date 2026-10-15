@@ -820,8 +820,8 @@ public class PhotosController{
 
 	public void setPhotoRotation(User self, Photo photo, SizedImage.Rotation rotation){
 		enforcePhotoManagementPermission(self, photo);
-		if(photo.image!=null && photo.image.isAnimated())
-			throw new BadRequestException("Animated photos can't be rotated");
+		if(photo.image!=null && !photo.image.kind().canRotate())
+			throw new BadRequestException("This kind of photo can't be rotated");
 		try{
 			if(photo.metadata==null)
 				photo.metadata=new PhotoMetadata();
