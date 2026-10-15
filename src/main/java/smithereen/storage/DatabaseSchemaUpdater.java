@@ -42,7 +42,7 @@ import smithereen.util.Passwords;
 import smithereen.util.XTEA;
 
 public class DatabaseSchemaUpdater{
-	public static final int SCHEMA_VERSION=93;
+	public static final int SCHEMA_VERSION=92;
 	private static final Logger LOG=LoggerFactory.getLogger(DatabaseSchemaUpdater.class);
 
 	/**
@@ -1317,14 +1317,6 @@ public class DatabaseSchemaUpdater{
 				conn.createStatement().execute("ALTER TABLE `polls` DROP `ap_id`");
 				conn.createStatement().execute("ALTER TABLE `reports` DROP `server_domain`");
 				conn.createStatement().execute("ALTER TABLE `deleted_user_bans` DROP `domain`");
-			}
-			case 93 -> {
-				// Posts made by others on a user's wall now appear in the friends feed of that user's friends and followers.
-				// Backfill the feed with the existing top-level wall-to-wall posts so that recent ones don't go missing.
-				conn.createStatement().execute("""
-						INSERT IGNORE INTO `newsfeed` (`type`, `author_id`, `object_id`, `time`)
-						SELECT 0, `owner_user_id`, `id`, `created_at` FROM `wall_posts`
-						WHERE `owner_user_id` IS NOT NULL AND `author_id` IS NOT NULL AND `owner_user_id`<>`author_id` AND `reply_key` IS NULL""");
 			}
 		}
 	}

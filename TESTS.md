@@ -159,4 +159,4 @@ request to `yulia` from her profile, then log in as `yulia` and accept it from `
 3. Yulia sets "Who can see others' posts on my wall" to "Only me" at `/settings/privacy`: Dmitry's post
    disappears from admin's feed, Yulia's own post stays. Set it back to "Everyone" and it returns.
 4. Yulia deletes Dmitry's post from her wall: it disappears from admin's feed.
-5. Posts on friends' walls that existed before the upgrade are backfilled into the feed by schema migration 93.
+5. Posts on friends' walls made before the upgrade are not in the feed: only posts created after it are recorded.
