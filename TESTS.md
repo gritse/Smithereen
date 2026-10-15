@@ -147,3 +147,16 @@ Environment variables: `BASE_URL` (default `http://127.0.0.1:4567`), `LOGIN`, `P
 4. "Show earlier messages" at the top of a long chat prepends the previous page and keeps the scroll position.
 5. `/my/mail/outbox` still lists individual sent messages with Delete.
 6. Send a message from `/my/mail/compose`: you land on the dialog list with a "Your message was sent" notice.
+
+## 5. Checklist for the friends feed ("My News")
+
+The seeder does not create friendships or posts, so set them up first: log in as `admin` and send a friend
+request to `yulia` from her profile, then log in as `yulia` and accept it from `/my/incomingFriendRequests`.
+
+1. Yulia posts on her own wall: the post appears at the top of admin's `/feed`.
+2. Dmitry (not a friend of admin) posts on Yulia's wall: the post appears in admin's feed with
+   "Дмитрий Орлов → Юлия Куминова" in the header and a "Wall-to-wall" link. It also appears in Yulia's own feed.
+3. Yulia sets "Who can see others' posts on my wall" to "Only me" at `/settings/privacy`: Dmitry's post
+   disappears from admin's feed, Yulia's own post stays. Set it back to "Everyone" and it returns.
+4. Yulia deletes Dmitry's post from her wall: it disappears from admin's feed.
+5. Posts on friends' walls that existed before the upgrade are backfilled into the feed by schema migration 93.

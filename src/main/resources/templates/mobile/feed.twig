@@ -20,7 +20,7 @@
 <div id="postList">
 {%for entry in feed%}
 <div class="card">
-	{% include "feed_row" with {'entry': entry} %}
+	{% include "feed_row" with {'entry': entry, 'showOwner': true} %}
 </div>
 {% else %}
 <div class="emptyState" id="wallEmptyState">{{ L('feed_empty') }}</div>

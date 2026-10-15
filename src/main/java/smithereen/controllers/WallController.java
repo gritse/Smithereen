@@ -274,6 +274,9 @@ public class WallController{
 			postID=PostStorage.createWallPost(userID, ownerUserID, ownerGroupID, text, textSource, sourceFormat, replyKey, mentionedUsers, attachments, contentWarning, poll==null ? 0 : poll.id, repost!=null ? repost.id : 0, action, flags, extra);
 			if(ownerUserID==userID && replyKey==null){
 				context.getNewsfeedController().putFriendsFeedEntry(author, postID, NewsfeedEntry.Type.POST);
+			}else if(wallOwner instanceof User u && replyKey==null){
+				// A post on someone else's wall is news about the wall owner: it goes to the feeds of their friends and followers
+				context.getNewsfeedController().putFriendsFeedEntry(u, postID, NewsfeedEntry.Type.POST);
 			}else if(wallOwner instanceof Group g && replyKey==null){
 				context.getNewsfeedController().putGroupsFeedEntry(g, postID, NewsfeedEntry.Type.POST);
 			}

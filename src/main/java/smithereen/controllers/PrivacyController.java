@@ -188,8 +188,9 @@ public class PrivacyController{
 			if(!Objects.equals(self.newsTypesToShow, feedTypes)){
 				self.newsTypesToShow=feedTypes;
 				UserStorage.updateExtendedFields(self, self.serializeProfileFields());
-				context.getNewsfeedController().clearFriendsFeedCache();
 			}
+			// Cached friends feeds filter posts by privacy settings (e.g. who can see others' posts on this user's wall), so they must be rebuilt
+			context.getNewsfeedController().clearFriendsFeedCache();
 		}catch(SQLException x){
 			throw new InternalServerErrorException(x);
 		}

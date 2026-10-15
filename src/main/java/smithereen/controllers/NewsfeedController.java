@@ -120,8 +120,12 @@ public class NewsfeedController{
 					Set<Integer> needPosts=newPage.stream().filter(e->e.type==NewsfeedEntry.Type.POST).map(e->(int) e.objectID).collect(Collectors.toSet());
 					if(!needPosts.isEmpty()){
 						Map<Integer, Post> posts=context.getWallController().getPosts(needPosts);
-						Set<Integer> inaccessiblePosts=posts.values().stream().filter(p->!context.getPrivacyController().checkPostPrivacy(self.user, p)).map(p->p.id).collect(Collectors.toSet());
-						newPage.removeIf(e->e.type==NewsfeedEntry.Type.POST && inaccessiblePosts.contains((int) e.objectID));
+						ArrayList<Post> accessiblePosts=new ArrayList<>(posts.values());
+						context.getPrivacyController().filterPostsForPerPostPrivacy(self.user, accessiblePosts);
+						// Posts made by others on a friend's wall are subject to that friend's "who can see others' posts on my wall" setting
+						context.getPrivacyController().filterPostsForOwnerPrivacy(self.user, accessiblePosts);
+						Set<Integer> accessiblePostIDs=accessiblePosts.stream().map(p->p.id).collect(Collectors.toSet());
+						newPage.removeIf(e->e.type==NewsfeedEntry.Type.POST && posts.containsKey((int) e.objectID) && !accessiblePostIDs.contains((int) e.objectID));
 					}
 
 					Set<Integer> needUsersForPrivacy=newPage.stream()

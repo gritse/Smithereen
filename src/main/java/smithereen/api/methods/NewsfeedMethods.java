@@ -214,7 +214,8 @@ public class NewsfeedMethods{
 									if(pvm.matchedFilter!=null){
 										filterInfo=new WordFilterInfo(pvm.matchedFilter.id, pvm.matchedFilter.name, pvm.matchedFilter.expiresAt==null ? null : pvm.matchedFilter.expiresAt.getEpochSecond());
 									}
-									yield new FeedItem("post", e.id, e.authorID>0 ? e.authorID : null, e.authorID<0 ? -e.authorID : null, feedPosts.get((int) e.objectID), null, null, null, null, null, filterInfo);
+									// For a post on someone else's wall the feed entry belongs to the wall owner, but the item is attributed to the post author
+									yield new FeedItem("post", e.id, e.authorID>0 ? pvm.post.authorID : null, e.authorID<0 ? -e.authorID : null, feedPosts.get((int) e.objectID), null, null, null, null, null, filterInfo);
 								}
 								case JOIN_GROUP, CREATE_GROUP, JOIN_EVENT, CREATE_EVENT -> new FeedItem(switch(type){
 									case JOIN_GROUP -> "group_join";

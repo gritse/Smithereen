@@ -69,7 +69,7 @@
 <div class="feedDateHeader{% if _currentDate is empty %} first{% endif %}">{{ LD(_entryDate) }}</div>
 {% set _currentDate=_entryDate %}
 {% endif %}
-{% include "feed_row" with {'entry': entry} %}
+{% include "feed_row" with {'entry': entry, 'showOwner': true} %}
 {% else %}
 <div class="emptyState" id="wallEmptyState">{{ L('feed_empty') }}</div>
 {%endfor%}

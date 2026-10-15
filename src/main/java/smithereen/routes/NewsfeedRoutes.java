@@ -81,6 +81,10 @@ public class NewsfeedRoutes{
 		}
 
 		List<PostViewModel> feedPosts=ctx.getWallController().getPosts(needPosts).values().stream().map(PostViewModel::new).toList();
+		for(PostViewModel pvm:feedPosts){
+			// The feed entry for a post on someone else's wall belongs to the wall owner, but the online status is shown next to the author
+			needUserOnlines.add(pvm.post.authorID);
+		}
 
 		ctx.getWallController().populateReposts(self.user, feedPosts, 2);
 		if(req.attribute("mobile")==null && !feedPosts.isEmpty()){
