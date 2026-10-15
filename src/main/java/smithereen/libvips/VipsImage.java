@@ -22,14 +22,39 @@ public class VipsImage{
 			"VipsForeignLoadHeifFile",
 			"VipsForeignLoadNsgifFile"
 	);
+	/**
+	 * Loaders that can contain more than one frame and accept the "n" option to load all of them.
+	 */
+	private static final List<String> ANIMATED_LOADERS=List.of(
+			"VipsForeignLoadGifFile",
+			"VipsForeignLoadNsgifFile",
+			"VipsForeignLoadWebpFile"
+	);
 	public static final int MAX_SIZE=10_000;
 
 	Pointer nativePtr;
 	private boolean released;
+	/**
+	 * Number of frames in the source file, only counted for formats in {@link #ANIMATED_LOADERS}.
+	 */
+	private int numFrames=1;
 
 	private static final Logger LOG=LoggerFactory.getLogger(VipsImage.class);
 
+	/**
+	 * Loads the first frame of an image. For animated images, {@link #isAnimated()} still reports
+	 * whether the file has more frames.
+	 */
 	public VipsImage(String filePath) throws IOException{
+		this(filePath, false);
+	}
+
+	/**
+	 * @param allFrames if true and the file is an animated GIF or WebP, load all of its frames. libvips then represents
+	 *                  the animation as one tall image with the frames stacked vertically, each {@link #getFrameHeight()} pixels high.
+	 *                  Such an image is read sequentially, so it can only be processed and written once.
+	 */
+	public VipsImage(String filePath, boolean allFrames) throws IOException{
 		String loader=vips_foreign_find_load(filePath);
 		if(loader==null)
 			throw new IOException("File format not supported");
@@ -37,24 +62,34 @@ public class VipsImage{
 			LOG.warn("libvips loader not allowed: {}", loader);
 			throw new IOException("File format not supported");
 		}
+		ArrayList<String> options=new ArrayList<>();
 		if(loader.equals("VipsForeignLoadJpegFile")){
-			filePath+="[autorotate=true]";
+			options.add("autorotate=true");
 		}
+		if(allFrames && ANIMATED_LOADERS.contains(loader)){
+			options.add("n=-1");
+			options.add("access=sequential");
+		}
+		if(!options.isEmpty())
+			filePath+="["+String.join(",", options)+"]";
 		nativePtr=vips_image_new_from_file(filePath);
 		if(nativePtr==Pointer.NULL){
 			throwError();
 		}
 
+		if(ANIMATED_LOADERS.contains(loader))
+			numFrames=Math.max(1, vips_image_get_n_pages(nativePtr));
 		int width=getWidth();
-		int height=getHeight();
+		int height=getFrameHeight();
 		if(width>MAX_SIZE || height>MAX_SIZE){
 			release();
 			throw new IOException("Image size "+width+"x"+height+" exceeds the limit of "+MAX_SIZE+" on largest side");
 		}
 	}
 
-	private VipsImage(Pointer ptr){
+	private VipsImage(Pointer ptr, int numFrames){
 		nativePtr=ptr;
+		this.numFrames=numFrames;
 	}
 
 	public int getWidth(){
@@ -65,6 +100,47 @@ public class VipsImage{
 	public int getHeight(){
 		ensureNotReleased();
 		return vips_image_get_height(nativePtr);
+	}
+
+	/**
+	 * @return the number of frames in the file this image was loaded from, regardless of how many of them were actually loaded.
+	 * Always 1 for formats other than GIF and WebP, even if the file has several pages, like a multi-image HEIF.
+	 */
+	public int getNumFrames(){
+		return numFrames;
+	}
+
+	/**
+	 * @return true if the file this image was loaded from has more than one frame
+	 */
+	public boolean isAnimated(){
+		return numFrames>1;
+	}
+
+	/**
+	 * @return the height of one frame. Equal to {@link #getHeight()} unless this image contains several frames stacked vertically.
+	 */
+	public int getFrameHeight(){
+		ensureNotReleased();
+		return vips_image_get_page_height(nativePtr);
+	}
+
+	/**
+	 * @return the number of frames stacked vertically in this image, 1 for a still image or when only the first frame was loaded
+	 */
+	public int getLoadedFrames(){
+		return getHeight()/getFrameHeight();
+	}
+
+	/**
+	 * Updates the frame height, needed after resizing an image that contains several frames so that writers
+	 * know where each frame begins. The image height must be a multiple of the new frame height.
+	 */
+	public void setFrameHeight(int frameHeight){
+		ensureNotReleased();
+		if(frameHeight<=0 || getHeight()%frameHeight!=0)
+			throw new IllegalArgumentException("Image height "+getHeight()+" is not a multiple of the frame height "+frameHeight);
+		vips_image_set_int(nativePtr, "page-height", frameHeight);
 	}
 
 	public void release(){
@@ -79,7 +155,7 @@ public class VipsImage{
 		if(vips_resize(nativePtr, out, scale)!=0){
 			throwError();
 		}
-		return new VipsImage(out.getValue());
+		return new VipsImage(out.getValue(), numFrames);
 	}
 
 	public VipsImage resize(double hscale, double vscale) throws IOException{
@@ -88,7 +164,7 @@ public class VipsImage{
 		if(vips_resize(nativePtr, out, hscale, vscale)!=0){
 			throwError();
 		}
-		return new VipsImage(out.getValue());
+		return new VipsImage(out.getValue(), numFrames);
 	}
 
 	public VipsImage crop(int left, int top, int width, int height) throws IOException{
@@ -97,7 +173,7 @@ public class VipsImage{
 		if(vips_crop(nativePtr, out, left, top, width, height)!=0){
 			throwError();
 		}
-		return new VipsImage(out.getValue());
+		return new VipsImage(out.getValue(), numFrames);
 	}
 
 	public void writeToFile(String fileName) throws IOException{
@@ -123,7 +199,7 @@ public class VipsImage{
 		}finally{
 			vips_area_unref(arr);
 		}
-		return new VipsImage(out.getValue());
+		return new VipsImage(out.getValue(), numFrames);
 	}
 
 	public int getBands(){
@@ -141,7 +217,7 @@ public class VipsImage{
 		PointerByReference out=new PointerByReference();
 		if(vips_cast_uchar(nativePtr, out)!=0)
 			throwError();
-		return new VipsImage(out.getValue());
+		return new VipsImage(out.getValue(), numFrames);
 	}
 
 	public List<String> getFields(){
@@ -171,7 +247,7 @@ public class VipsImage{
 		PointerByReference out=new PointerByReference();
 		if(vips_icc_transform(nativePtr, out, outputProfile)!=0)
 			throwError();
-		return new VipsImage(out.getValue());
+		return new VipsImage(out.getValue(), numFrames);
 	}
 
 	public boolean hasColorProfile(){

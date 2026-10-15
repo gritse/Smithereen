@@ -19,7 +19,7 @@ The Java packages, the jar file, the database name and the systemd service are s
 - JDK 21 or newer, for example from your distribution's package manager, [Adoptium](https://adoptium.net/temurin/releases/), [Azul](https://www.azul.com/downloads/) or [Amazon Corretto](https://aws.amazon.com/corretto/)
 - [MySQL 8](https://dev.mysql.com/doc/refman/8.4/en/linux-installation.html). MariaDB is **not** supported: the schema uses MySQL-only syntax. Note that on Debian `apt-get install mysql-server` installs MariaDB.
 - [imgproxy](https://docs.imgproxy.net/GETTING_STARTED) for serving resized images
-- [libvips](https://github.com/libvips/libvips) for processing uploads
+- [libvips](https://github.com/libvips/libvips) for processing uploads. Animated GIFs are converted to animated WebP, so the build needs GIF and WebP support, which the builds recommended below have
 - A web server such as nginx or Caddy in front of everything, terminating TLS
 
 ### Install from sources

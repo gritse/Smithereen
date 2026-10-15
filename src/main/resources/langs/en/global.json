@@ -157,6 +157,7 @@
   "err_file_upload": "The server was unable to store your file because of an internal error. Please try again later.",
   "err_file_upload_image_format": "Your image file is damaged or of an unsupported format. Try converting it to JPEG or PNG.",
   "err_file_upload_too_large": "Your file exceeds the maximum size of {maxSize}.",
+  "err_file_upload_animated_not_allowed": "Animated images can't be used here. Please choose a still image.",
   "file_size_bytes": "{amount} bytes",
   "file_size_kilobytes": "{amount} KB",
   "file_size_megabytes": "{amount} MB",

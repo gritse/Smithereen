@@ -38,6 +38,9 @@ class LibVips{
 	static native void vips_error_clear();
 	static native int vips_image_get_width(Pointer img);
 	static native int vips_image_get_height(Pointer img);
+	static native int vips_image_get_page_height(Pointer img);
+	static native int vips_image_get_n_pages(Pointer img);
+	static native void vips_image_set_int(Pointer img, String name, int value);
 	static int vips_resize(Pointer in, PointerByReference out, double scale){
 		return varArgsWrapper.vips_resize(in, out, scale, Pointer.NULL);
 	}

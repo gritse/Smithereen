@@ -32,6 +32,7 @@ import smithereen.activitypub.objects.ActivityPubObject;
 import smithereen.activitypub.objects.Actor;
 import smithereen.activitypub.objects.Image;
 import smithereen.activitypub.objects.LocalImage;
+import smithereen.exceptions.BadRequestException;
 import smithereen.exceptions.InternalServerErrorException;
 import smithereen.exceptions.ObjectNotFoundException;
 import smithereen.exceptions.UserActionNotAllowedException;
@@ -825,6 +826,8 @@ public class PhotosController{
 
 	public void setPhotoRotation(User self, Photo photo, SizedImage.Rotation rotation){
 		enforcePhotoManagementPermission(self, photo);
+		if(photo.image!=null && photo.image.isAnimated())
+			throw new BadRequestException("Animated photos can't be rotated");
 		try{
 			if(photo.metadata==null)
 				photo.metadata=new PhotoMetadata();
@@ -872,6 +875,9 @@ public class PhotosController{
 	public long updateAvatar(Account self, @Nullable Group group, LocalImage img, AvatarCropRects crop, ClientApp app){
 		if(group!=null)
 			context.getGroupsController().enforceUserAdminLevel(group, self.user, Group.AdminLevel.ADMIN);
+
+		if(img.isAnimated)
+			throw new UserErrorException("err_file_upload_animated_not_allowed");
 
 		Actor owner=group==null ? self.user : group;
 		int imgW, imgH;

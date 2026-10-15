@@ -153,6 +153,7 @@
   "err_file_upload": "Сервер не смог сохранить ваш файл из-за внутренней ошибки. Повторите попытку позже.",
   "err_file_upload_image_format": "Загруженное изображение повреждено или его формат не поддерживается. Попробуйте преобразовать его в JPEG или PNG.",
   "err_file_upload_too_large": "Ваш файл превышает максимальный размер в {maxSize}.",
+  "err_file_upload_animated_not_allowed": "Анимированные изображения здесь использовать нельзя. Пожалуйста, выберите обычную картинку.",
   "file_size_bytes": "{amount} байт",
   "file_size_kilobytes": "{amount} Кб",
   "file_size_megabytes": "{amount} Мб",

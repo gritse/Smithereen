@@ -286,6 +286,9 @@ class ProfilePictureLayer extends FileUploadLayer{
 				this.dismiss();
 				setGlobalLoading(false);
 				return false;
+			}, (err:string)=>{
+				setGlobalLoading(false);
+				new MessageBox(lang("error"), err || lang("network_error"), lang("close")).show();
 			});
 		}
 	}

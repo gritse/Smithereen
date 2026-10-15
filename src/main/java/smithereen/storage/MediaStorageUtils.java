@@ -67,13 +67,36 @@ public class MediaStorageUtils{
 	private static final Logger LOG=LoggerFactory.getLogger(MediaStorageUtils.class);
 	public static final int QUALITY_LOSSLESS=-1;
 	public static final long MAX_IMAGE_SIZE=10*1024*1024;
+	/**
+	 * Animated images are scaled down so that the total number of pixels in all frames stays within this budget,
+	 * because encoding an animation takes time proportional to it.
+	 */
+	public static final long MAX_ANIMATION_PIXELS=50_000_000L;
+	/**
+	 * libvips metadata fields that describe an animation. They must survive until the image is written, otherwise it becomes a still.
+	 */
+	private static final Set<String> ANIMATION_METADATA_FIELDS=Set.of("page-height", "n-pages", "delay", "loop");
 
+	/**
+	 * Writes an image to a WebP file, scaling it down to fit the given bounds if needed.
+	 * If {@code img} was loaded with all frames of an animation, the result is an animated WebP.
+	 * @param outSize receives the width and height of the result (of one frame, for animations)
+	 */
 	public static long writeResizedWebpImage(VipsImage img, int widthOrSize, int height, int quality, File file, int[] outSize) throws IOException{
+		int frameHeight=img.getFrameHeight();
+		int frameCount=img.getLoadedFrames();
+		boolean animated=frameCount>1;
 		double factor;
 		if(height==0){
-			factor=(double) widthOrSize/(double) Math.max(img.getWidth(), img.getHeight());
+			factor=(double) widthOrSize/(double) Math.max(img.getWidth(), frameHeight);
 		}else{
-			factor=Math.min((double)widthOrSize/(double)img.getWidth(), (double)height/(double)img.getHeight());
+			factor=Math.min((double)widthOrSize/(double)img.getWidth(), (double)height/(double)frameHeight);
+		}
+		if(animated){
+			factor=Math.min(factor, 1.0);
+			double totalPixels=(double)img.getWidth()*frameHeight*frameCount*factor*factor;
+			if(totalPixels>MAX_ANIMATION_PIXELS)
+				factor*=Math.sqrt(MAX_ANIMATION_PIXELS/totalPixels);
 		}
 
 		ArrayList<String> args=new ArrayList<>();
@@ -84,25 +107,42 @@ public class MediaStorageUtils{
 		}
 
 		boolean strip=!img.hasColorProfile();
-		if(!strip){
+		if(!strip || animated){
 			for(String key:img.getFields()){
-				if(!"icc-profile-data".equals(key))
-					img.removeField(key);
+				if("icc-profile-data".equals(key) || (animated && ANIMATION_METADATA_FIELDS.contains(key)))
+					continue;
+				img.removeField(key);
 			}
 		}else{
 			args.add("strip=true");
 		}
 
-		if(factor>1.0){
+		if(factor>=1.0){
 			img.writeToFile(file.getAbsolutePath()+"["+String.join(",", args)+"]");
 			outSize[0]=img.getWidth();
-			outSize[1]=img.getHeight();
+			outSize[1]=frameHeight;
 		}else{
-			VipsImage resized=img.resize(factor);
+			VipsImage resized;
+			int resizedFrameHeight;
+			if(animated){
+				// Resize the whole stack of frames at once, choosing the scales so that every frame ends up with the same integer height
+				resizedFrameHeight=Math.max(1, (int)Math.round(frameHeight*factor));
+				int resizedWidth=Math.max(1, (int)Math.round(img.getWidth()*factor));
+				resized=img.resize(resizedWidth/(double)img.getWidth(), resizedFrameHeight/(double)frameHeight);
+				if(resized.getHeight()!=resizedFrameHeight*frameCount){
+					int actualHeight=resized.getHeight();
+					resized.release();
+					throw new IOException("Resized animation height "+actualHeight+" is not "+frameCount+" frames of "+resizedFrameHeight+" pixels");
+				}
+				resized.setFrameHeight(resizedFrameHeight);
+			}else{
+				resized=img.resize(factor);
+				resizedFrameHeight=resized.getHeight();
+			}
 			try{
 				resized.writeToFile(file.getAbsolutePath()+"["+String.join(",", args)+"]");
 				outSize[0]=resized.getWidth();
-				outSize[1]=resized.getHeight();
+				outSize[1]=resizedFrameHeight;
 			}finally{
 				resized.release();
 			}
@@ -211,11 +251,14 @@ public class MediaStorageUtils{
 		}
 	}
 
-	public static LocalImage saveUploadedImage(Request req, Response resp, Account self, boolean isGraffiti, String fieldName){
-		return saveUploadedImage(req, resp, self, isGraffiti, fieldName, 2560, 0, null);
+	/**
+	 * @param allowAnimation whether an animated GIF or WebP is kept animated. If false, uploading one fails with a 415 response.
+	 */
+	public static LocalImage saveUploadedImage(Request req, Response resp, Account self, boolean isGraffiti, String fieldName, boolean allowAnimation){
+		return saveUploadedImage(req, resp, self, isGraffiti, fieldName, 2560, 0, allowAnimation, null);
 	}
 
-	public static LocalImage saveUploadedImage(Request req, Response resp, Account self, boolean isGraffiti, String fieldName, int maxWidthOrSize, int maxHeight, Consumer<VipsImage> extraValidator){
+	public static LocalImage saveUploadedImage(Request req, Response resp, Account self, boolean isGraffiti, String fieldName, int maxWidthOrSize, int maxHeight, boolean allowAnimation, Consumer<VipsImage> extraValidator){
 		Lang l=lang(req);
 		try{
 			req.attribute("org.eclipse.jetty.multipartConfig", new MultipartConfigElement(null, MAX_IMAGE_SIZE, -1L, 0));
@@ -241,46 +284,74 @@ public class MediaStorageUtils{
 			}
 
 			File temp=File.createTempFile("SmithereenUpload", null);
-			VipsImage img;
+			// The first frame. Used for validation and the blurhash, and written out as is for still images.
+			VipsImage img=null;
+			// All frames of an animation, or the same object as img for still images.
+			VipsImage toWrite=null;
 			try{
-				try(FileOutputStream out=new FileOutputStream(temp)){
-					Utils.copyBytes(part.getInputStream(), out);
+				try{
+					try(FileOutputStream out=new FileOutputStream(temp)){
+						Utils.copyBytes(part.getInputStream(), out);
+					}
+					img=new VipsImage(temp.getAbsolutePath());
+				}catch(IOException x){
+					LOG.warn("VipsImage error", x);
+					Spark.halt(400, l.get("err_file_upload_image_format"));
+					throw new IllegalStateException();
 				}
-				img=new VipsImage(temp.getAbsolutePath());
-			}catch(IOException x){
-				LOG.warn("VipsImage error", x);
-				Spark.halt(400, l.get("err_file_upload_image_format"));
-				throw new IllegalStateException();
-			}
-			if(img.hasAlpha()){
-				VipsImage flat=img.flatten(255, 255, 255);
-				img.release();
-				img=flat;
-			}
+				boolean animated=img.isAnimated();
+				if(animated && !allowAnimation){
+					// Unsupported Media Type
+					Spark.halt(415, l.get("err_file_upload_animated_not_allowed"));
+				}
+				if(img.hasAlpha()){
+					VipsImage flat=img.flatten(255, 255, 255);
+					img.release();
+					img=flat;
+				}
 
-			if(isGraffiti && (img.getWidth()!=GraffitiAttachment.WIDTH || img.getHeight()!=GraffitiAttachment.HEIGHT)){
-				LOG.warn("Unexpected graffiti size {}x{}", img.getWidth(), img.getHeight());
-				throw new BadRequestException();
-			}
+				if(isGraffiti && (img.getWidth()!=GraffitiAttachment.WIDTH || img.getHeight()!=GraffitiAttachment.HEIGHT)){
+					LOG.warn("Unexpected graffiti size {}x{}", img.getWidth(), img.getHeight());
+					throw new BadRequestException();
+				}
 
-			LocalImage photo=new LocalImage();
-			MediaFileRecord fileRecord;
-			try{
 				if(extraValidator!=null)
 					extraValidator.accept(img);
+
+				if(animated){
+					try{
+						toWrite=new VipsImage(temp.getAbsolutePath(), true);
+					}catch(IOException x){
+						LOG.warn("VipsImage error", x);
+						Spark.halt(400, l.get("err_file_upload_image_format"));
+						throw new IllegalStateException();
+					}
+					if(toWrite.hasAlpha()){
+						VipsImage flat=toWrite.flatten(255, 255, 255);
+						toWrite.release();
+						toWrite=flat;
+					}
+				}else{
+					toWrite=img;
+				}
+
+				LocalImage photo=new LocalImage();
 				File resizedFile=File.createTempFile("SmithereenUploadResized", ".webp");
 				int[] outSize={0,0};
-				writeResizedWebpImage(img, maxWidthOrSize, maxHeight, isGraffiti ? MediaStorageUtils.QUALITY_LOSSLESS : 93, resizedFile, outSize);
-				MediaFileMetadata meta=new ImageMetadata(outSize[0], outSize[1], BlurHash.encode(img, 4, 4), null);
-				fileRecord=MediaStorage.createMediaFileRecord(isGraffiti ? MediaFileType.IMAGE_GRAFFITI : MediaFileType.IMAGE_PHOTO, resizedFile.length(), self.user.id, meta);
+				writeResizedWebpImage(toWrite, maxWidthOrSize, maxHeight, isGraffiti ? MediaStorageUtils.QUALITY_LOSSLESS : 93, resizedFile, outSize);
+				MediaFileMetadata meta=new ImageMetadata(outSize[0], outSize[1], BlurHash.encode(img, 4, 4), null, animated);
+				MediaFileRecord fileRecord=MediaStorage.createMediaFileRecord(isGraffiti ? MediaFileType.IMAGE_GRAFFITI : MediaFileType.IMAGE_PHOTO, resizedFile.length(), self.user.id, meta);
 				photo.fileID=fileRecord.id().id();
 				photo.fillIn(fileRecord);
 				MediaFileStorageDriver.getInstance().storeFile(resizedFile, fileRecord.id(), false);
+				return photo;
 			}finally{
 				temp.delete();
-				img.release();
+				if(toWrite!=null && toWrite!=img)
+					toWrite.release();
+				if(img!=null)
+					img.release();
 			}
-			return photo;
 		}catch(IOException | ServletException | SQLException x){
 			LOG.error("File upload failed", x);
 			Spark.halt(500, l.get("err_file_upload"));
