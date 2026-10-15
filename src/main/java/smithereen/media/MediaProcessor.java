@@ -22,6 +22,7 @@ public interface MediaProcessor{
 		return switch(kind){
 			case STILL_IMAGE -> new StillImageProcessor();
 			case ANIMATED_IMAGE -> new AnimatedImageProcessor();
+			case VIDEO -> new VideoProcessor();
 			case ARCHIVE -> throw new IllegalArgumentException("Archives are not uploaded");
 		};
 	}

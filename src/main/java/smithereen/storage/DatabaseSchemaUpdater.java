@@ -42,7 +42,7 @@ import smithereen.util.Passwords;
 import smithereen.util.XTEA;
 
 public class DatabaseSchemaUpdater{
-	public static final int SCHEMA_VERSION=93;
+	public static final int SCHEMA_VERSION=94;
 	private static final Logger LOG=LoggerFactory.getLogger(DatabaseSchemaUpdater.class);
 
 	/**
@@ -1321,6 +1321,19 @@ public class DatabaseSchemaUpdater{
 			case 93 -> {
 				// Animated images get their own file type instead of a flag in the metadata
 				conn.createStatement().execute("UPDATE `media_files` SET `type`="+MediaFileType.IMAGE_ANIMATED.ordinal()+" WHERE `type`="+MediaFileType.IMAGE_PHOTO.ordinal()+" AND JSON_EXTRACT(`metadata`, '$.animated')=true");
+			}
+			case 94 -> {
+				// Videos: files can be waiting for transcoding, and the jobs survive a restart
+				conn.createStatement().execute("ALTER TABLE `media_files` ADD `status` tinyint unsigned NOT NULL DEFAULT 0");
+				conn.createStatement().execute("""
+						CREATE TABLE `media_processing_jobs` (
+						  `file_id` bigint unsigned NOT NULL,
+						  `source_path` text NOT NULL,
+						  `attempts` int unsigned NOT NULL DEFAULT '0',
+						  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+						  PRIMARY KEY (`file_id`),
+						  CONSTRAINT `media_processing_jobs_ibfk_1` FOREIGN KEY (`file_id`) REFERENCES `media_files` (`id`) ON DELETE CASCADE
+						) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""");
 			}
 		}
 	}

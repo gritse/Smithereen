@@ -11,7 +11,7 @@ public enum MediaFileUploadPurpose{
 	/**
 	 * Posts, comments and private messages
 	 */
-	ATTACHMENT(EnumSet.of(MediaKind.STILL_IMAGE, MediaKind.ANIMATED_IMAGE)),
+	ATTACHMENT(EnumSet.of(MediaKind.STILL_IMAGE, MediaKind.ANIMATED_IMAGE, MediaKind.VIDEO)),
 	ALBUM_PHOTO(EnumSet.of(MediaKind.STILL_IMAGE, MediaKind.ANIMATED_IMAGE)),
 	/**
 	 * User and group profile pictures: still images only

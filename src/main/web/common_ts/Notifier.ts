@@ -235,7 +235,42 @@ class Notifier{
 			Notifier.handleNotification(m.notification as RealtimeNotification);
 		}else if(m.type=="counters"){
 			Notifier.handleCounters(m.counters);
+		}else if(m.type=="mediaReady"){
+			Notifier.handleMediaReady(m);
 		}
+	}
+
+	// A video attachment finished (or failed) transcoding: swap every placeholder for it on this page for the new markup
+	private static handleMediaReady(m:any){
+		for(var el of document.querySelectorAll("[data-media-file-id=\""+m.fileID+"\"]").unfuck()){
+			(el as HTMLElement).outerHTML=m.html;
+		}
+	}
+
+	// The websocket only reaches the uploader's own pages and only once it is connected, so pages that show
+	// videos still being processed also ask the server about them every few seconds.
+	public static startMediaStatusPolling(){
+		var poll=()=>{
+			var ids:string[]=[];
+			for(var el of document.querySelectorAll(".videoAttachment.videoProcessing[data-media-file-id]").unfuck()){
+				var id=(el as HTMLElement).dataset.mediaFileId;
+				if(ids.indexOf(id)==-1)
+					ids.push(id);
+			}
+			if(ids.length==0){
+				setTimeout(poll, 5000);
+				return;
+			}
+			ajaxGet("/system/mediaStatus?ids="+encodeURIComponent(ids.join(",")), (resp:any)=>{
+				for(var id in resp){
+					Notifier.handleMediaReady({fileID: id, html: resp[id]});
+				}
+				setTimeout(poll, 5000);
+			}, ()=>{
+				setTimeout(poll, 15000);
+			}, "json");
+		};
+		setTimeout(poll, 5000);
 	}
 
 	private static handleNotification(n:RealtimeNotification){

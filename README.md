@@ -20,6 +20,7 @@ The Java packages, the jar file, the database name and the systemd service are s
 - [MySQL 8](https://dev.mysql.com/doc/refman/8.4/en/linux-installation.html). MariaDB is **not** supported: the schema uses MySQL-only syntax. Note that on Debian `apt-get install mysql-server` installs MariaDB.
 - [imgproxy](https://docs.imgproxy.net/GETTING_STARTED) for serving resized images
 - [libvips](https://github.com/libvips/libvips) for processing uploads. Animated GIFs are converted to animated WebP, so the build needs GIF and WebP support, which the builds recommended below have
+- [ffmpeg](https://ffmpeg.org/) for video attachments, optional. Uploaded videos are transcoded to 720p H.264 MP4 in the background; without ffmpeg the server refuses video uploads and everything else works
 - A web server such as nginx or Caddy in front of everything, terminating TLS
 
 ### Install from sources

@@ -1,6 +1,7 @@
 package smithereen;
 
 import smithereen.controllers.AppsController;
+import smithereen.media.MediaProcessingQueue;
 import smithereen.controllers.BoardController;
 import smithereen.controllers.BookmarksController;
 import smithereen.controllers.CommentsController;
@@ -40,6 +41,7 @@ public class ApplicationContext{
 	private final BoardController boardController;
 	private final UserDataExportWorker userDataExportWorker;
 	private final AppsController appsController;
+	private final MediaProcessingQueue mediaProcessingQueue;
 
 	public ApplicationContext(){
 		wallController=new WallController(this);
@@ -61,6 +63,7 @@ public class ApplicationContext{
 		boardController=new BoardController(this);
 		userDataExportWorker=new UserDataExportWorker(this);
 		appsController=new AppsController(this);
+		mediaProcessingQueue=new MediaProcessingQueue(this);
 	}
 
 	public WallController getWallController(){
@@ -133,6 +136,10 @@ public class ApplicationContext{
 
 	public UserDataExportWorker getUserDataExportWorker(){
 		return userDataExportWorker;
+	}
+
+	public MediaProcessingQueue getMediaProcessingQueue(){
+		return mediaProcessingQueue;
 	}
 
 	public AppsController getAppsController(){

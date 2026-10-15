@@ -40,6 +40,7 @@ import smithereen.Config;
 import smithereen.Utils;
 import smithereen.exceptions.InternalServerErrorException;
 import smithereen.lang.Lang;
+import smithereen.media.FFmpeg;
 import smithereen.model.Account;
 import smithereen.model.ServerAnnouncement;
 import smithereen.model.SessionInfo;
@@ -171,6 +172,11 @@ public class Templates{
 					.with("demoNextResetIn", String.format(lang.getLocale(), "%d:%02d", nextResetIn/60, nextResetIn%60));
 		}
 		jsConfig.addProperty("timeZone", tz!=null ? tz.getId() : null);
+		jsConfig.add("uploads", new JsonObjectBuilder()
+				.add("imageMaxSize", Config.imageMaxUploadSize)
+				.add("videoMaxSize", Config.videoMaxUploadSize)
+				.add("videoEnabled", FFmpeg.isAvailable())
+				.build());
 		ArrayList<String> jsLang=new ArrayList<>();
 		Set<String> k=req.attribute("jsLang");
 		jsConfig.addProperty("locale", lang.getLocale().toLanguageTag());

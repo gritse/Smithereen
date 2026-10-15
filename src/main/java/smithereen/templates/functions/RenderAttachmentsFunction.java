@@ -27,8 +27,10 @@ import smithereen.model.attachments.Attachment;
 import smithereen.model.attachments.GraffitiAttachment;
 import smithereen.model.attachments.PhotoAttachment;
 import smithereen.model.attachments.SizedAttachment;
+import smithereen.model.attachments.VideoAttachment;
 import smithereen.model.media.PhotoViewerInlineData;
 import smithereen.templates.MediaLayoutHelper;
+import smithereen.templates.VideoRenderer;
 import smithereen.text.TextProcessor;
 import smithereen.util.BlurHash;
 import spark.utils.StringUtils;
@@ -83,10 +85,13 @@ public class RenderAttachmentsFunction implements Function{
 
 			lines.add("<div class=\"aspectBoxW\"><div class=\"aspectBox\" style=\"aspect-ratio: "+totalW+"/"+totalH+";"+gridStyle+"\">");
 
+			Lang lang=Lang.get(evaluationContext.getLocale());
 			if(sized.size()==1){
 				SizedAttachment sa=sized.getFirst();
 				if(sa instanceof PhotoAttachment photo){
 					renderPhotoAttachment(photo, lines, 510, overrideLinks, 0, photoList, listURL);
+				}else if(sa instanceof VideoAttachment video){
+					lines.add(VideoRenderer.render(video.video, video.description, lang));
 				}
 			}else{
 				int i=0;
@@ -105,6 +110,8 @@ public class RenderAttachmentsFunction implements Function{
 					lines.add("<div style=\""+cellStyle+"\">");
 					if(att instanceof PhotoAttachment photo){
 						renderPhotoAttachment(photo, lines, Math.round(Math.max(tile.width*510, tile.height*510)), overrideLinks, i-graffitiCount, photoList, listURL);
+					}else if(att instanceof VideoAttachment video){
+						lines.add(VideoRenderer.render(video.video, video.description, lang));
 					}
 					if(att instanceof GraffitiAttachment){
 						graffitiCount++;

@@ -235,5 +235,6 @@ window.addEventListener("popstate", (ev)=>{
 
 if(!mobile && userConfig.notifier && userConfig.notifier.enabled){
 	Notifier.start();
+	Notifier.startMediaStatusPolling();
 }
 

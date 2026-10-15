@@ -15,6 +15,10 @@ public enum MediaKind{
 	 */
 	ANIMATED_IMAGE,
 	/**
+	 * Transcoded to MP4 on the processing queue after the upload; served as the stored file, with a poster frame that is a still image.
+	 */
+	VIDEO,
+	/**
 	 * A user data export: not media at all, but stored through the same mechanism.
 	 */
 	ARCHIVE;
@@ -37,7 +41,14 @@ public enum MediaKind{
 	 * @return whether this kind can be shown in the tiled attachment layout, i.e. has a width and a height
 	 */
 	public boolean isSized(){
-		return this==STILL_IMAGE || this==ANIMATED_IMAGE;
+		return this==STILL_IMAGE || this==ANIMATED_IMAGE || this==VIDEO;
+	}
+
+	/**
+	 * @return whether files of this kind are stored with status PROCESSING and finished on the {@link smithereen.media.MediaProcessingQueue}
+	 */
+	public boolean needsAsyncProcessing(){
+		return this==VIDEO;
 	}
 
 	public boolean isImage(){

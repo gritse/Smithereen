@@ -47,6 +47,11 @@ import smithereen.model.objects.StoredObject;
 import smithereen.model.objects.Actor;
 import smithereen.media.ProcessingOptions;
 import smithereen.model.media.MediaFileRef;
+import smithereen.exceptions.InternalServerErrorException;
+import smithereen.templates.VideoRenderer;
+import smithereen.storage.MediaFileResolver;
+import smithereen.model.media.Video;
+import smithereen.model.media.MediaFileStatus;
 import smithereen.api.methods.ApiUtils;
 import smithereen.controllers.ObjectLinkResolver;
 import smithereen.exceptions.BadRequestException;
@@ -152,20 +157,61 @@ public class SystemRoutes{
 		if(isAjax(req)){
 			resp.type("application/json");
 			String localID=uploaded.getLocalID(MediaFileUploadPurpose.ATTACHMENT, self.user.id);
-			SizedImage photo=uploaded.image();
-			PhotoViewerInlineData pvData=new PhotoViewerInlineData(0, "rawFile/"+localID, photo.getURLsForPhotoViewer());
-			return new JsonObjectBuilder()
+			SizedImage preview=uploaded.previewImage();
+			JsonObjectBuilder result=new JsonObjectBuilder()
 					.add("id", localID)
+					.add("kind", uploaded.kind().toString().toLowerCase())
 					.add("width", uploaded.getWidth())
-					.add("height", uploaded.getHeight())
-					.add("thumbs", new JsonObjectBuilder()
-							.add("jpeg", photo.getUriForSizeAndFormat(SizedImage.Type.PHOTO_THUMB_SMALL, SizedImage.Format.JPEG).toString())
-							.add("webp", photo.getUriForSizeAndFormat(SizedImage.Type.PHOTO_THUMB_SMALL, SizedImage.Format.WEBP).toString())
-					)
-					.add("pv", gson.toJsonTree(pvData)).build();
+					.add("height", uploaded.getHeight());
+			if(preview!=null){
+				result.add("thumbs", new JsonObjectBuilder()
+						.add("jpeg", preview.getUriForSizeAndFormat(SizedImage.Type.PHOTO_THUMB_SMALL, SizedImage.Format.JPEG).toString())
+						.add("webp", preview.getUriForSizeAndFormat(SizedImage.Type.PHOTO_THUMB_SMALL, SizedImage.Format.WEBP).toString())
+				);
+			}
+			SizedImage photo=uploaded.image();
+			if(photo!=null){
+				PhotoViewerInlineData pvData=new PhotoViewerInlineData(0, "rawFile/"+localID, photo.getURLsForPhotoViewer());
+				result.add("pv", gson.toJsonTree(pvData));
+			}
+			return result.build();
 		}
 		resp.redirect(back(req));
 		return "";
+	}
+
+	/**
+	 * Tells a page whether the video attachments it shows as "processing" are done, with their new markup.
+	 * The fallback for the websocket message, for pages that were loaded before the websocket connected
+	 * or by viewers other than the uploader.
+	 */
+	public static Object mediaStatus(Request req, Response resp){
+		String ids=req.queryParams("ids");
+		if(StringUtils.isEmpty(ids))
+			throw new BadRequestException();
+		Lang l=lang(req);
+		JsonObjectBuilder result=new JsonObjectBuilder();
+		int count=0;
+		for(String encodedID:ids.split(",")){
+			if(++count>20)
+				break;
+			long fileID;
+			try{
+				fileID=XTEA.decodeObjectID(encodedID, ObfuscatedObjectIDType.MEDIA_FILE);
+			}catch(Exception x){
+				continue;
+			}
+			MediaFileRef ref=new MediaFileRef(fileID);
+			try{
+				MediaFileResolver.resolve(ref);
+			}catch(SQLException x){
+				throw new InternalServerErrorException(x);
+			}
+			if(ref.media() instanceof Video video && video.getStatus()!=MediaFileStatus.PROCESSING)
+				result.add(encodedID, VideoRenderer.render(video, null, l));
+		}
+		resp.type("application/json");
+		return result.build();
 	}
 
 	public static Object aboutServer(Request req, Response resp){

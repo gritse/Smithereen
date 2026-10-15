@@ -187,6 +187,17 @@ public final class MediaFileRef{
 		return media() instanceof SizedImage img ? img : null;
 	}
 
+	/**
+	 * @return the image that stands for this file in thumbnails: the image itself, or a video's poster
+	 */
+	@Nullable
+	public SizedImage previewImage(){
+		return switch(media()){
+			case SizedImage img -> img;
+			case Video video -> video.getPoster();
+		};
+	}
+
 	public MediaKind kind(){
 		return fileRecord!=null ? fileRecord.id().type().kind() : MediaKind.STILL_IMAGE;
 	}

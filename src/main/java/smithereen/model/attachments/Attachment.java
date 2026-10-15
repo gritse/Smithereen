@@ -5,12 +5,13 @@ import org.jetbrains.annotations.Nullable;
 
 import smithereen.model.SizedImage;
 import smithereen.model.media.MediaFileRef;
+import smithereen.model.media.Video;
 import smithereen.util.TranslatableEnum;
 
 /**
  * View model of one attachment of a post, comment or message. One subclass per media kind.
  */
-public abstract sealed class Attachment permits PhotoAttachment{
+public abstract sealed class Attachment permits PhotoAttachment, VideoAttachment{
 
 	@Nullable
 	public String mediaType;
@@ -37,16 +38,26 @@ public abstract sealed class Attachment permits PhotoAttachment{
 					att.mediaType=ref.fileRecord.id().type().getMimeType();
 				yield att;
 			}
+			case Video video -> {
+				VideoAttachment att=new VideoAttachment();
+				att.video=video;
+				att.description=ref.name;
+				att.setBlurHash(video.getBlurHash());
+				att.mediaType=ref.fileRecord!=null ? ref.fileRecord.id().type().getMimeType() : null;
+				yield att;
+			}
 		};
 	}
 
 	public enum Type implements TranslatableEnum<Type>{
-		PHOTO;
+		PHOTO,
+		VIDEO;
 
 		@Override
 		public String getLangKey(){
 			return switch(this){
 				case PHOTO -> "content_type_photo";
+				case VIDEO -> "content_type_video";
 			};
 		}
 	}

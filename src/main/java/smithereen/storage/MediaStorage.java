@@ -15,6 +15,7 @@ import smithereen.model.media.MediaFileID;
 import smithereen.model.media.MediaFileMetadata;
 import smithereen.model.media.MediaFileRecord;
 import smithereen.model.media.MediaFileReferenceType;
+import smithereen.model.media.MediaFileStatus;
 import smithereen.model.media.MediaFileType;
 import smithereen.storage.sql.SQLQueryBuilder;
 
@@ -37,7 +38,7 @@ public class MediaStorage{
 			return res;
 		new SQLQueryBuilder()
 				.selectFrom("media_files")
-				.columns("id", "random_id", "size", "type", "created_at", "metadata", "original_owner_id")
+				.columns("id", "random_id", "size", "type", "created_at", "metadata", "original_owner_id", "status")
 				.whereIn("id", needIDs)
 				.executeAsStream(MediaFileRecord::fromResultSet)
 				.forEach(r->{
@@ -53,7 +54,7 @@ public class MediaStorage{
 			return r;
 		r=new SQLQueryBuilder()
 				.selectFrom("media_files")
-				.columns("id", "random_id", "size", "type", "created_at", "metadata", "original_owner_id")
+				.columns("id", "random_id", "size", "type", "created_at", "metadata", "original_owner_id", "status")
 				.where("id=?", id)
 				.executeAndGetSingleObject(MediaFileRecord::fromResultSet);
 		if(r!=null)
@@ -62,6 +63,10 @@ public class MediaStorage{
 	}
 
 	public static MediaFileRecord createMediaFileRecord(MediaFileType type, long fileSize, int ownerID, MediaFileMetadata metadata) throws SQLException{
+		return createMediaFileRecord(type, fileSize, ownerID, metadata, MediaFileStatus.READY);
+	}
+
+	public static MediaFileRecord createMediaFileRecord(MediaFileType type, long fileSize, int ownerID, MediaFileMetadata metadata, MediaFileStatus status) throws SQLException{
 		byte[] randomID=Utils.randomBytes(18);
 		long id=new SQLQueryBuilder()
 				.insertInto("media_files")
@@ -70,13 +75,66 @@ public class MediaStorage{
 				.value("type", type)
 				.value("metadata", Utils.gson.toJson(metadata))
 				.value("original_owner_id", ownerID)
+				.value("status", status)
 				.executeAndGetIDLong();
 		MediaFileRecord mfr=new MediaFileRecord(
 				new MediaFileID(id, randomID, ownerID, type),
-				fileSize, Instant.now(), metadata
+				fileSize, Instant.now(), metadata, status
 		);
 		recordCache.put(id, mfr);
 		return mfr;
+	}
+
+	/**
+	 * Reads a record from the database even if it is cached, for the processing queue which needs the current status.
+	 */
+	public static MediaFileRecord getMediaFileRecordUncached(long id) throws SQLException{
+		recordCache.remove(id);
+		return getMediaFileRecord(id);
+	}
+
+	public static void updateMediaFileStatus(long id, MediaFileStatus status, long size) throws SQLException{
+		SQLQueryBuilder q=new SQLQueryBuilder()
+				.update("media_files")
+				.where("id=?", id)
+				.value("status", status);
+		if(size>0)
+			q.value("size", size);
+		q.executeNoResult();
+		recordCache.remove(id);
+	}
+
+	public record ProcessingJob(long fileID, String sourcePath, int attempts){}
+
+	public static void createProcessingJob(long fileID, String sourcePath) throws SQLException{
+		new SQLQueryBuilder()
+				.insertInto("media_processing_jobs")
+				.value("file_id", fileID)
+				.value("source_path", sourcePath)
+				.executeNoResult();
+	}
+
+	public static List<ProcessingJob> getProcessingJobs() throws SQLException{
+		return new SQLQueryBuilder()
+				.selectFrom("media_processing_jobs")
+				.orderBy("created_at ASC")
+				.executeAsStream(res->new ProcessingJob(res.getLong("file_id"), res.getString("source_path"), res.getInt("attempts")))
+				.toList();
+	}
+
+	public static void incrementProcessingJobAttempts(long fileID) throws SQLException{
+		new SQLQueryBuilder()
+				.update("media_processing_jobs")
+				.where("file_id=?", fileID)
+				.valueExpr("attempts", "attempts+1")
+				.executeNoResult();
+	}
+
+	public static void deleteProcessingJob(long fileID) throws SQLException{
+		new SQLQueryBuilder()
+				.deleteFrom("media_processing_jobs")
+				.where("file_id=?", fileID)
+				.executeNoResult();
 	}
 
 	public static void createMediaFileReference(long fileID, long objectID, MediaFileReferenceType type, int ownerID) throws SQLException{
@@ -116,7 +174,7 @@ public class MediaStorage{
 	public static List<MediaFileRecord> getUnreferencedMediaFileRecords() throws SQLException{
 		return new SQLQueryBuilder()
 				.selectFrom("media_files")
-				.where("ref_count=0 AND created_at<(CURRENT_TIMESTAMP()-INTERVAL 1 DAY)")
+				.where("ref_count=0 AND status<>? AND created_at<(CURRENT_TIMESTAMP()-INTERVAL 1 DAY)", MediaFileStatus.PROCESSING)
 				.executeAsStream(MediaFileRecord::fromResultSet)
 				.toList();
 	}
@@ -128,5 +186,13 @@ public class MediaStorage{
 				.deleteFrom("media_files")
 				.whereIn("id", ids)
 				.executeNoResult();
+		// A deleted video no longer needs its poster, which becomes unreferenced and is deleted on a later pass
+		new SQLQueryBuilder()
+				.deleteFrom("media_file_refs")
+				.whereIn("object_id", ids)
+				.andWhere("object_type=?", MediaFileReferenceType.VIDEO_POSTER)
+				.executeNoResult();
+		for(long id:ids)
+			recordCache.remove(id);
 	}
 }

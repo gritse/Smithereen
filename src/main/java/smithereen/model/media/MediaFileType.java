@@ -9,11 +9,16 @@ public enum MediaFileType{
 	/**
 	 * Animated GIF or WebP, stored as animated WebP
 	 */
-	IMAGE_ANIMATED;
+	IMAGE_ANIMATED,
+	/**
+	 * Transcoded to H.264 and AAC in MP4
+	 */
+	VIDEO;
 
 	public String getFileExtension(){
 		return switch(this){
 			case USER_EXPORT_ARCHIVE -> "zip";
+			case VIDEO -> "mp4";
 			default -> "webp";
 		};
 	}
@@ -22,6 +27,7 @@ public enum MediaFileType{
 		return switch(this){
 			case USER_EXPORT_ARCHIVE -> MediaKind.ARCHIVE;
 			case IMAGE_ANIMATED -> MediaKind.ANIMATED_IMAGE;
+			case VIDEO -> MediaKind.VIDEO;
 			default -> MediaKind.STILL_IMAGE;
 		};
 	}
@@ -29,6 +35,7 @@ public enum MediaFileType{
 	public String getMimeType(){
 		return switch(this){
 			case USER_EXPORT_ARCHIVE -> "application/zip";
+			case VIDEO -> "video/mp4";
 			default -> "image/webp";
 		};
 	}

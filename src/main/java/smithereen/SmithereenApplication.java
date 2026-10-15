@@ -507,6 +507,7 @@ public class SmithereenApplication{
 			getLoggedIn("/simpleUserCompletions", SystemRoutes::simpleUserCompletions);
 			get("/privacyPolicy", SystemRoutes::privacyPolicy);
 			get("/languageChooser", SystemRoutes::languageChooser);
+			get("/mediaStatus", SystemRoutes::mediaStatus);
 			get("/custom_desktop.css", (req, resp)->{
 				resp.type("text/css");
 				resp.header("cache-control", "private, max-age=604800");
@@ -1102,6 +1103,7 @@ public class SmithereenApplication{
 		MaintenanceScheduler.runPeriodically(DatabaseConnectionManager::closeUnusedConnections, 10, TimeUnit.MINUTES);
 		MaintenanceScheduler.runPeriodically(MailController::deleteRestorableMessages, 1, TimeUnit.HOURS);
 		MaintenanceScheduler.runPeriodically(MediaStorageUtils::deleteAbandonedFiles, 1, TimeUnit.HOURS);
+		context.getMediaProcessingQueue().start();
 		MaintenanceScheduler.runPeriodically(()->context.getAppsController().deleteExpiredCodesAndTokens(), 1, TimeUnit.HOURS);
 		MaintenanceScheduler.runPeriodically(()->context.getWallController().removeExpiredGuids(), 1, TimeUnit.HOURS);
 		MaintenanceScheduler.runPeriodically(()->context.getCommentsController().removeExpiredGuids(), 1, TimeUnit.HOURS);
@@ -1122,6 +1124,7 @@ public class SmithereenApplication{
 			}catch(NoClassDefFoundError ignore){}
 			try{
 				BackgroundTaskRunner.shutDown();
+				context.getMediaProcessingQueue().shutDown();
 			}catch(NoClassDefFoundError ignore){}
 			// Set the exit code to 0 so systemd doesn't say "Failed with result 'exit-code'".
 			Runtime.getRuntime().halt(0);

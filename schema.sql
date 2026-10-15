@@ -635,8 +635,22 @@ CREATE TABLE `media_files` (
   `metadata` json NOT NULL,
   `ref_count` int unsigned NOT NULL DEFAULT '0',
   `original_owner_id` int NOT NULL,
+  `status` tinyint unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   KEY `ref_count` (`ref_count`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+--
+-- Table structure for table `media_processing_jobs`
+--
+
+CREATE TABLE `media_processing_jobs` (
+  `file_id` bigint unsigned NOT NULL,
+  `source_path` text NOT NULL,
+  `attempts` int unsigned NOT NULL DEFAULT '0',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`file_id`),
+  CONSTRAINT `media_processing_jobs_ibfk_1` FOREIGN KEY (`file_id`) REFERENCES `media_files` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 --

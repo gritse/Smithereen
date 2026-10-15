@@ -11,6 +11,7 @@ public interface MediaFileMetadata{
 		return switch(type){
 			case IMAGE_PHOTO, IMAGE_AVATAR, IMAGE_GRAFFITI, IMAGE_GROUP_LINK_THUMB, IMAGE_ANIMATED -> ImageMetadata.class;
 			case USER_EXPORT_ARCHIVE -> UserDataArchiveMetadata.class;
+			case VIDEO -> VideoMetadata.class;
 		};
 	}
 }

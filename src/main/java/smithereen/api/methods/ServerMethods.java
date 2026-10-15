@@ -54,7 +54,7 @@ public class ServerMethods{
 				Map.of(
 						"smithereen", ApiRoutes.MAX_VERSION
 				),
-				new ServerInfo.Uploads(MediaUploadService.MAX_IMAGE_SIZE, VipsImage.MAX_SIZE, List.of(
+				new ServerInfo.Uploads(Config.imageMaxUploadSize, VipsImage.MAX_SIZE, List.of(
 						"image/jpeg",
 						"image/png",
 						"image/gif",

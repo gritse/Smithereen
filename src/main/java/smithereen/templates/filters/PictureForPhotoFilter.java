@@ -19,7 +19,7 @@ public class PictureForPhotoFilter implements Filter{
 	@Override
 	public Object apply(Object input, Map<String, Object> args, PebbleTemplate self, EvaluationContext context, int lineNumber) throws PebbleException{
 		if(input instanceof MediaFileRef ref)
-			input=ref.image();
+			input=ref.previewImage();
 		if(input instanceof SizedImage img){
 			SizedImage.Type type=SizedImage.Type.fromSuffix(args.get("size").toString());
 			SizedImage.Dimensions size=img.getDimensionsForSize(type);

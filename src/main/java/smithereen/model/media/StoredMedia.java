@@ -12,7 +12,7 @@ import smithereen.storage.media.MediaFileStorageDriver;
  * A resolved media file: the reference to it plus its record from the database, and the logic to render that kind of file.
  * Created by {@link #create} from the file's type.
  */
-public sealed interface StoredMedia permits SizedImage{
+public sealed interface StoredMedia permits SizedImage, Video{
 	/**
 	 * @return the reference this media was resolved from, which carries alt text, rotation and the avatar crop
 	 */
@@ -59,6 +59,7 @@ public sealed interface StoredMedia permits SizedImage{
 		return switch(record.id().type().kind()){
 			case STILL_IMAGE -> new StillImage(ref, record);
 			case ANIMATED_IMAGE -> new AnimatedImage(ref, record);
+			case VIDEO -> new Video(ref, record);
 			case ARCHIVE -> throw new IllegalArgumentException("File "+record.id()+" is not media");
 		};
 	}

@@ -79,7 +79,7 @@ class PostForm{
 		this.attachContainer=ge("postFormAttachments_"+this.id);
 		this.attachContainer2=ge("postFormAttachments2_"+this.id);
 		this.fileField=ce("input", {type: "file"});
-		this.fileField.accept="image/*";
+		this.fileField.accept=PostForm.videoUploadsEnabled() ? "image/*,video/*" : "image/*";
 		this.fileField.multiple=true;
 		this.attachField=el.querySelector("input[name=attachments]") as HTMLInputElement;
 		this.replyToField=ge("postFormReplyTo_"+this.id);
@@ -256,25 +256,37 @@ class PostForm{
 			this.setCollapsed(false);
 	}
 
+	private static videoUploadsEnabled():boolean{
+		return !!(userConfig.uploads && userConfig.uploads.videoEnabled);
+	}
+
+	private static maxUploadSize(f:Blob):number{
+		if(!userConfig.uploads)
+			return 10*1024*1024;
+		return f.type.indexOf("video/")==0 ? userConfig.uploads.videoMaxSize : userConfig.uploads.imageMaxSize;
+	}
+
 	private handleFiles(files:FileList):void{
 		LayerManager.getInstance().dismissByID("photoAttach");
 		for(var i=0;i<files.length;i++){
 			var f=files[i];
-			if(f.type.indexOf("image/")==0){
+			if(f.type.indexOf("image/")==0 || (PostForm.videoUploadsEnabled() && f.type.indexOf("video/")==0)){
 				this.uploadFile(f, f.name);
 			}
 		}
 	}
 
 	public uploadFile(f:Blob, name:string, extraParams:any={}, onDone:{():void}=null, onError:{():void}=null):void{
-		if(f.size>10*1024*1024){
-			new MessageBox(lang("error"), lang("err_file_upload_too_large", {maxSize: langFileSize(10*1024*1024)}), lang("ok")).show();
+		var maxSize=PostForm.maxUploadSize(f);
+		if(f.size>maxSize){
+			new MessageBox(lang("error"), lang("err_file_upload_too_large", {maxSize: langFileSize(maxSize)}), lang("ok")).show();
 			return;
 		}
 		if(!this.checkAttachmentCount()){
 			return;
 		}
-		var objURL=URL.createObjectURL(f);
+		// A video has no preview until the server extracts the poster frame
+		var objURL=f.type.indexOf("video/")==0 ? "" : URL.createObjectURL(f);
 
 		var img:HTMLElement;
 		var pbarEl:HTMLElement;
@@ -326,19 +338,22 @@ class PostForm{
 			f.el.classList.remove("uploading");
 			var resp=JSON.parse(xhr.response);
 			f.cancelBtn.href="/system/deleteDraftAttachment?id="+resp.id+"&csrf="+userConfig.csrf;
-			f.image.outerHTML='<picture><source srcset="'+resp.thumbs.webp+'" type="image/webp"/><source srcset="'+resp.thumbs.jpeg+'" type="image/jpeg"/><img src="'+resp.thumbs.jpeg+'" width="'+resp.width+'" height="'+resp.height+'"/></picture>';
+			if(resp.thumbs)
+				f.image.outerHTML='<picture><source srcset="'+resp.thumbs.webp+'" type="image/webp"/><source srcset="'+resp.thumbs.jpeg+'" type="image/jpeg"/><img src="'+resp.thumbs.jpeg+'" width="'+resp.width+'" height="'+resp.height+'"/></picture>';
+			if(resp.kind=="video")
+				f.el.classList.add("videoAttachment");
 			f.cancelBtn.onclick=(ev:Event)=>{
 				ev.preventDefault();
 				ev.stopPropagation();
 				this.deleteAttachment(resp.id);
 			};
-			if(!mobile){
+			if(!mobile && resp.pv){
 				f.el.addEventListener("click", (ev)=>{
 					var info=resp.pv as PhotoViewerInlineData;
 					this.openDesktopPhotoViewerForAltText(resp.id, info);
 				});
+				f.el.style.cursor="pointer";
 			}
-			f.el.style.cursor="pointer";
 			f.el.id="attachment_"+resp.id;
 			this.attachmentIDs.push(resp.id);
 			this.attachField.value=this.attachmentIDs.join(",");

@@ -165,7 +165,7 @@ public class MediaStorageUtils{
 				try(FileOutputStream out=new FileOutputStream(temp)){
 					Utils.copyBytes(part.getInputStream(), out);
 				}
-				return MediaUploadService.store(temp, part.getContentType(), self, purpose, options);
+				return MediaUploadService.store(temp, part.getContentType(), self, purpose, options, Utils.context(req).getMediaProcessingQueue());
 			}catch(MediaValidationException x){
 				Map<String, Object> args=new HashMap<>(x.langArgs);
 				if(args.get("maxSizeBytes") instanceof Long bytes)

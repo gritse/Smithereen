@@ -626,6 +626,24 @@ public class NotificationsController{
 		}
 	}
 
+	/**
+	 * Sends a raw websocket message to every open page of a user. Used for events that are not notifications,
+	 * such as a video attachment finishing processing.
+	 */
+	public void sendRawToUser(int userID, String message){
+		List<WebSocketConnection> connections=null;
+		synchronized(wsMapsLock){
+			List<WebSocketConnection> actualConnections=wsConnectionsByUserID.get(userID);
+			if(actualConnections!=null)
+				connections=new ArrayList<>(actualConnections);
+		}
+		if(connections==null)
+			return;
+		for(WebSocketConnection conn:connections){
+			Thread.ofVirtual().start(()->conn.sendRaw(message));
+		}
+	}
+
 	public void recountCounters(User user){
 		NotificationsStorage.removeCountersFromCache(user.id);
 		sendRealtimeCountersUpdates(user);

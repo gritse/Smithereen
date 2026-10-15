@@ -9,6 +9,8 @@ RUN --mount=type=cache,target=/root/.m2 mvn package -Dmaven.test.skip=true -Dnod
 FROM eclipse-temurin:21-jdk
 
 SHELL ["bash", "-c"]
+# ffmpeg transcodes uploaded videos; without it the server runs but refuses video uploads
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /opt/smithereen
 WORKDIR /opt/smithereen
 COPY --from=builder /usr/src/app/target/smithereen.jar /opt/smithereen/smithereen.jar

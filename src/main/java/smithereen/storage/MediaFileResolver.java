@@ -3,6 +3,7 @@ package smithereen.storage;
 import org.jetbrains.annotations.Nullable;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -13,6 +14,7 @@ import java.util.Set;
 import smithereen.model.AttachmentHostContentObject;
 import smithereen.model.media.MediaFileRecord;
 import smithereen.model.media.MediaFileRef;
+import smithereen.model.media.Video;
 import smithereen.model.objects.Actor;
 
 /**
@@ -27,8 +29,11 @@ public final class MediaFileResolver{
 		if(ref==null || ref.isResolved() || ref.fileID==0)
 			return;
 		MediaFileRecord record=MediaStorage.getMediaFileRecord(ref.fileID);
-		if(record!=null)
+		if(record!=null){
 			ref.fillIn(record);
+			if(ref.media() instanceof Video video && video.posterRef!=null)
+				resolve(video.posterRef);
+		}
 	}
 
 	public static void resolve(Collection<MediaFileRef> refs) throws SQLException{
@@ -40,13 +45,19 @@ public final class MediaFileResolver{
 		if(needIDs.isEmpty())
 			return;
 		Map<Long, MediaFileRecord> records=MediaStorage.getMediaFileRecords(needIDs);
+		ArrayList<MediaFileRef> posters=new ArrayList<>();
 		for(MediaFileRef ref:refs){
 			if(ref==null || ref.isResolved())
 				continue;
 			MediaFileRecord record=records.get(ref.fileID);
-			if(record!=null)
+			if(record!=null){
 				ref.fillIn(record);
+				if(ref.media() instanceof Video video && video.posterRef!=null)
+					posters.add(video.posterRef);
+			}
 		}
+		if(!posters.isEmpty())
+			resolve(posters);
 	}
 
 	/**

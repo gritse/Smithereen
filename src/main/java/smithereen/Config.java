@@ -32,6 +32,7 @@ import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 import java.util.function.Function;
@@ -107,6 +108,28 @@ public class Config{
 
 	public static int userExportCooldownDays, userExportRetentionDays;
 
+	public static long imageMaxUploadSize=10*1024*1024;
+	public static String ffmpegPath="ffmpeg";
+	public static String ffprobePath="ffprobe";
+	/**
+	 * Videos are refused above this size and duration; the duration is in seconds.
+	 */
+	public static long videoMaxUploadSize=300L*1024*1024;
+	public static int videoMaxDuration=30*60;
+	/**
+	 * Videos are scaled down so that their shorter side is at most this. 720 means 720p.
+	 */
+	public static int videoMaxHeight=720;
+	/**
+	 * Threads one ffmpeg run may use, and the number of transcodes that run at once. Both 1 keeps a transcode to one core.
+	 */
+	public static int ffmpegThreads=1;
+	public static int mediaProcessingThreads=1;
+	/**
+	 * A transcode that takes longer than this many seconds is killed and the video marked as failed.
+	 */
+	public static int videoTranscodeTimeout=30*60;
+
 	public static Map<Integer, UserRole> userRoles=new HashMap<>();
 
 	private static final Logger LOG=LoggerFactory.getLogger(Config.class);
@@ -176,6 +199,16 @@ public class Config{
 			);
 		}
 
+		imageMaxUploadSize=parseSize(props.getProperty("upload.max_image_size"), imageMaxUploadSize);
+		ffmpegPath=props.getProperty("media.ffmpeg_path", ffmpegPath);
+		ffprobePath=props.getProperty("media.ffprobe_path", ffprobePath);
+		videoMaxUploadSize=parseSize(props.getProperty("media.video.max_size"), videoMaxUploadSize);
+		videoMaxDuration=Utils.parseIntOrDefault(props.getProperty("media.video.max_duration"), videoMaxDuration);
+		videoMaxHeight=Utils.parseIntOrDefault(props.getProperty("media.video.max_height"), videoMaxHeight);
+		ffmpegThreads=Utils.parseIntOrDefault(props.getProperty("media.ffmpeg_threads"), ffmpegThreads);
+		mediaProcessingThreads=Utils.parseIntOrDefault(props.getProperty("media.processing_threads"), mediaProcessingThreads);
+		videoTranscodeTimeout=Utils.parseIntOrDefault(props.getProperty("media.video.transcode_timeout"), videoTranscodeTimeout);
+
 		privateServer=Boolean.parseBoolean(props.getProperty("private_server", "false"));
 		demoMode=Boolean.parseBoolean(props.getProperty("demo_mode", "false"));
 		if(demoMode){
@@ -185,6 +218,31 @@ public class Config{
 			}else{
 				demoAddFriends=List.of();
 			}
+		}
+	}
+
+	/**
+	 * Parses a size with an optional K, M or G suffix, as in "300M".
+	 */
+	static long parseSize(String value, long defaultValue){
+		if(value==null || value.isBlank())
+			return defaultValue;
+		value=value.trim().toUpperCase(Locale.ROOT);
+		long multiplier=1;
+		if(value.endsWith("K")){
+			multiplier=1024;
+		}else if(value.endsWith("M")){
+			multiplier=1024*1024;
+		}else if(value.endsWith("G")){
+			multiplier=1024*1024*1024;
+		}
+		if(multiplier!=1)
+			value=value.substring(0, value.length()-1);
+		try{
+			return Long.parseLong(value.trim())*multiplier;
+		}catch(NumberFormatException x){
+			LOG.warn("Can't parse size '{}', using the default {}", value, defaultValue);
+			return defaultValue;
 		}
 	}
 

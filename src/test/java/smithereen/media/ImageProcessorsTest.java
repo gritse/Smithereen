@@ -189,5 +189,8 @@ public class ImageProcessorsTest{
 		assertFalse(MediaFileUploadPurpose.AVATAR.accepts(MediaKind.ANIMATED_IMAGE));
 		assertFalse(MediaFileUploadPurpose.APP_LOGO.accepts(MediaKind.ANIMATED_IMAGE));
 		assertTrue(MediaFileUploadPurpose.AVATAR.accepts(MediaKind.STILL_IMAGE));
+		assertTrue(MediaFileUploadPurpose.ATTACHMENT.accepts(MediaKind.VIDEO));
+		assertFalse(MediaFileUploadPurpose.ALBUM_PHOTO.accepts(MediaKind.VIDEO));
+		assertFalse(MediaFileUploadPurpose.AVATAR.accepts(MediaKind.VIDEO));
 	}
 }
