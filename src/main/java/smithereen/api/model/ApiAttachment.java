@@ -12,6 +12,7 @@ import smithereen.model.PostLikeObject;
 import smithereen.model.SizedImage;
 import smithereen.model.attachments.Attachment;
 import smithereen.model.attachments.GraffitiAttachment;
+import smithereen.model.attachments.AudioAttachment;
 import smithereen.model.attachments.PhotoAttachment;
 import smithereen.model.attachments.VideoAttachment;
 import smithereen.model.photos.Photo;
@@ -22,6 +23,7 @@ public class ApiAttachment{
 	public ApiPhoto photo;
 	public Graffiti graffiti;
 	public Video video;
+	public Audio audio;
 	public ApiPoll poll;
 
 	public ApiAttachment(Attachment att, ApiCallContext actx, AttachmentHostContentObject parent, Map<Long, Photo> photos){
@@ -38,6 +40,11 @@ public class ApiAttachment{
 				video=new Video(va.video.isReady() ? Objects.toString(va.video.getFileURL(), null) : null, va.getWidth(), va.getHeight(), va.video.getDuration(),
 						poster!=null ? poster.getApiUriForSizeAndFormat(SizedImage.Type.PHOTO_MEDIUM, actx.imageFormat).toString() : null,
 						va.video.getStatus().toString().toLowerCase(), va.description);
+			}
+			case AudioAttachment aa -> {
+				type="audio";
+				audio=new Audio(aa.audio.isReady() ? Objects.toString(aa.audio.getFileURL(), null) : null, aa.audio.getDuration(), aa.audio.getTitle(), aa.audio.getArtist(),
+						aa.audio.getStatus().toString().toLowerCase(), aa.description);
 			}
 			case PhotoAttachment pa -> {
 				type="photo";
@@ -64,4 +71,9 @@ public class ApiAttachment{
 	 * @param status "ready", "processing" or "failed"
 	 */
 	public record Video(String url, int width, int height, int duration, String posterUrl, String status, String description){}
+
+	/**
+	 * @param url the M4A, null until the file is ready
+	 */
+	public record Audio(String url, int duration, String title, String artist, String status, String description){}
 }

@@ -4,6 +4,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import smithereen.model.SizedImage;
+import smithereen.model.media.Audio;
 import smithereen.model.media.MediaFileRef;
 import smithereen.model.media.Video;
 import smithereen.util.TranslatableEnum;
@@ -11,7 +12,7 @@ import smithereen.util.TranslatableEnum;
 /**
  * View model of one attachment of a post, comment or message. One subclass per media kind.
  */
-public abstract sealed class Attachment permits PhotoAttachment, VideoAttachment{
+public abstract sealed class Attachment permits PhotoAttachment, VideoAttachment, AudioAttachment{
 
 	@Nullable
 	public String mediaType;
@@ -46,18 +47,27 @@ public abstract sealed class Attachment permits PhotoAttachment, VideoAttachment
 				att.mediaType=ref.fileRecord!=null ? ref.fileRecord.id().type().getMimeType() : null;
 				yield att;
 			}
+			case Audio audio -> {
+				AudioAttachment att=new AudioAttachment();
+				att.audio=audio;
+				att.description=ref.name;
+				att.mediaType=ref.fileRecord!=null ? ref.fileRecord.id().type().getMimeType() : null;
+				yield att;
+			}
 		};
 	}
 
 	public enum Type implements TranslatableEnum<Type>{
 		PHOTO,
-		VIDEO;
+		VIDEO,
+		AUDIO;
 
 		@Override
 		public String getLangKey(){
 			return switch(this){
 				case PHOTO -> "content_type_photo";
 				case VIDEO -> "content_type_video";
+				case AUDIO -> "content_type_audio";
 			};
 		}
 	}

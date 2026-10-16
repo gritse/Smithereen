@@ -116,6 +116,8 @@ public class Config{
 	 */
 	public static long videoMaxUploadSize=300L*1024*1024;
 	public static int videoMaxDuration=30*60;
+	public static long audioMaxUploadSize=100L*1024*1024;
+	public static int audioMaxDuration=2*60*60;
 	/**
 	 * Videos are scaled down so that their shorter side is at most this. 720 means 720p.
 	 */
@@ -204,6 +206,8 @@ public class Config{
 		ffprobePath=props.getProperty("media.ffprobe_path", ffprobePath);
 		videoMaxUploadSize=parseSize(props.getProperty("media.video.max_size"), videoMaxUploadSize);
 		videoMaxDuration=Utils.parseIntOrDefault(props.getProperty("media.video.max_duration"), videoMaxDuration);
+		audioMaxUploadSize=parseSize(props.getProperty("media.audio.max_size"), audioMaxUploadSize);
+		audioMaxDuration=Utils.parseIntOrDefault(props.getProperty("media.audio.max_duration"), audioMaxDuration);
 		videoMaxHeight=Utils.parseIntOrDefault(props.getProperty("media.video.max_height"), videoMaxHeight);
 		ffmpegThreads=Utils.parseIntOrDefault(props.getProperty("media.ffmpeg_threads"), ffmpegThreads);
 		mediaProcessingThreads=Utils.parseIntOrDefault(props.getProperty("media.processing_threads"), mediaProcessingThreads);

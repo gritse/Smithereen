@@ -23,9 +23,10 @@ public final class MediaSniffer{
 	 */
 	public static MediaKind sniff(File file, String declaredMimeType) throws MediaValidationException{
 		boolean declaredVideo=declaredMimeType!=null && declaredMimeType.startsWith("video/");
+		boolean declaredAudio=declaredMimeType!=null && declaredMimeType.startsWith("audio/");
 		boolean declaredImage=declaredMimeType!=null && declaredMimeType.startsWith("image/");
 		// The declared type only decides which decoder goes first; a video named .jpg is still a video
-		if(!declaredVideo){
+		if(!declaredVideo && !declaredAudio){
 			MediaKind kind=sniffImage(file);
 			if(kind!=null)
 				return kind;
@@ -33,16 +34,16 @@ public final class MediaSniffer{
 		if(FFmpeg.isAvailable()){
 			try{
 				FFmpeg.ProbeResult probe=FFmpeg.probe(file);
-				if(declaredVideo && probe.isImageFormat()){
+				if((declaredVideo || declaredAudio) && probe.isImageFormat()){
 					// A GIF or a still declared as video: an image if libvips reads it, else a one-frame video is not worth having
 					MediaKind kind=sniffImage(file);
 					if(kind!=null)
 						return kind;
 					throw MediaValidationException.unreadable();
 				}
-				return MediaKind.VIDEO;
+				return probe.hasVideo() ? MediaKind.VIDEO : MediaKind.AUDIO;
 			}catch(MediaValidationException x){
-				if(declaredVideo){
+				if(declaredVideo || declaredAudio){
 					MediaKind kind=sniffImage(file);
 					if(kind!=null)
 						return kind;
@@ -54,8 +55,10 @@ public final class MediaSniffer{
 			}
 		}else if(declaredVideo){
 			throw new MediaValidationException(415, "err_file_upload_video_unavailable");
+		}else if(declaredAudio){
+			throw new MediaValidationException(415, "err_file_upload_audio_unavailable");
 		}
-		throw declaredImage || declaredVideo ? MediaValidationException.unreadable() : MediaValidationException.unsupportedFormat();
+		throw declaredImage || declaredVideo || declaredAudio ? MediaValidationException.unreadable() : MediaValidationException.unsupportedFormat();
 	}
 
 	/**

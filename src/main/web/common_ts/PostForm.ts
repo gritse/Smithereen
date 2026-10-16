@@ -79,7 +79,7 @@ class PostForm{
 		this.attachContainer=ge("postFormAttachments_"+this.id);
 		this.attachContainer2=ge("postFormAttachments2_"+this.id);
 		this.fileField=ce("input", {type: "file"});
-		this.fileField.accept=PostForm.videoUploadsEnabled() ? "image/*,video/*" : "image/*";
+		this.fileField.accept="image/*"+(PostForm.videoUploadsEnabled() ? ",video/*" : "")+(PostForm.audioUploadsEnabled() ? ",audio/*" : "");
 		this.fileField.multiple=true;
 		this.attachField=el.querySelector("input[name=attachments]") as HTMLInputElement;
 		this.replyToField=ge("postFormReplyTo_"+this.id);
@@ -260,17 +260,25 @@ class PostForm{
 		return !!(userConfig.uploads && userConfig.uploads.videoEnabled);
 	}
 
+	private static audioUploadsEnabled():boolean{
+		return !!(userConfig.uploads && userConfig.uploads.audioEnabled);
+	}
+
 	private static maxUploadSize(f:Blob):number{
 		if(!userConfig.uploads)
 			return 10*1024*1024;
-		return f.type.indexOf("video/")==0 ? userConfig.uploads.videoMaxSize : userConfig.uploads.imageMaxSize;
+		if(f.type.indexOf("video/")==0)
+			return userConfig.uploads.videoMaxSize;
+		if(f.type.indexOf("audio/")==0)
+			return userConfig.uploads.audioMaxSize;
+		return userConfig.uploads.imageMaxSize;
 	}
 
 	private handleFiles(files:FileList):void{
 		LayerManager.getInstance().dismissByID("photoAttach");
 		for(var i=0;i<files.length;i++){
 			var f=files[i];
-			if(f.type.indexOf("image/")==0 || (PostForm.videoUploadsEnabled() && f.type.indexOf("video/")==0)){
+			if(f.type.indexOf("image/")==0 || (PostForm.videoUploadsEnabled() && f.type.indexOf("video/")==0) || (PostForm.audioUploadsEnabled() && f.type.indexOf("audio/")==0)){
 				this.uploadFile(f, f.name);
 			}
 		}
@@ -285,8 +293,8 @@ class PostForm{
 		if(!this.checkAttachmentCount()){
 			return;
 		}
-		// A video has no preview until the server extracts the poster frame
-		var objURL=f.type.indexOf("video/")==0 ? "" : URL.createObjectURL(f);
+		// A video has no preview until the server extracts the poster frame, and audio never has one
+		var objURL=f.type.indexOf("image/")==0 ? URL.createObjectURL(f) : "";
 
 		var img:HTMLElement;
 		var pbarEl:HTMLElement;
@@ -342,6 +350,12 @@ class PostForm{
 				f.image.outerHTML='<picture><source srcset="'+resp.thumbs.webp+'" type="image/webp"/><source srcset="'+resp.thumbs.jpeg+'" type="image/jpeg"/><img src="'+resp.thumbs.jpeg+'" width="'+resp.width+'" height="'+resp.height+'"/></picture>';
 			if(resp.kind=="video")
 				f.el.classList.add("videoAttachment");
+			if(resp.kind=="audio"){
+				// no picture: the tile shows the title instead
+				f.image.outerHTML='<span class="attachmentFileName"></span>';
+				(f.el.querySelector(".attachmentFileName") as HTMLElement).innerText=resp.title || name;
+				f.el.classList.add("audioAttachment");
+			}
 			f.cancelBtn.onclick=(ev:Event)=>{
 				ev.preventDefault();
 				ev.stopPropagation();

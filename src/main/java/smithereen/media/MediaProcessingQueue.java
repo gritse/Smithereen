@@ -20,6 +20,8 @@ import smithereen.Config;
 import smithereen.lang.Lang;
 import smithereen.model.Account;
 import smithereen.model.User;
+import smithereen.model.media.Audio;
+import smithereen.model.media.AudioMetadata;
 import smithereen.model.media.MediaFileRecord;
 import smithereen.model.media.MediaFileRef;
 import smithereen.model.media.MediaFileStatus;
@@ -28,6 +30,7 @@ import smithereen.model.media.VideoMetadata;
 import smithereen.storage.MediaFileResolver;
 import smithereen.storage.MediaStorage;
 import smithereen.storage.media.MediaFileStorageDriver;
+import smithereen.templates.AudioRenderer;
 import smithereen.templates.VideoRenderer;
 import smithereen.util.JsonObjectBuilder;
 
@@ -137,16 +140,18 @@ public final class MediaProcessingQueue{
 				fail(fileID, "source file "+source+" is missing");
 				return;
 			}
-			if(!(record.metadata() instanceof VideoMetadata meta))
-				throw new IllegalStateException("Only videos are processed on the queue, got "+record.id().type());
-			LOG.info("Transcoding video file {} ({} bytes)", fileID, source.length());
-			output=new VideoProcessor().transcode(source, meta.width(), meta.height(), meta.frameRate());
+			LOG.info("Transcoding {} file {} ({} bytes)", record.id().type(), fileID, source.length());
+			output=switch(record.metadata()){
+				case VideoMetadata meta -> new VideoProcessor().transcode(source, meta.width(), meta.height(), meta.frameRate());
+				case AudioMetadata meta -> new AudioProcessor().transcode(source, 0);
+				default -> throw new IllegalStateException("Files of type "+record.id().type()+" are not processed on the queue");
+			};
 			long size=output.length();
 			MediaFileStorageDriver.getInstance().storeFile(output, record.id(), false);
 			MediaStorage.updateMediaFileStatus(fileID, MediaFileStatus.READY, size);
 			MediaStorage.deleteProcessingJob(fileID);
 			source.delete();
-			LOG.info("Video file {} is ready ({} bytes)", fileID, size);
+			LOG.info("File {} is ready ({} bytes)", fileID, size);
 			notifyOwner(fileID, record.id().originalOwnerID());
 		}catch(Throwable x){
 			LOG.error("Processing media file {} failed", fileID, x);
@@ -182,13 +187,17 @@ public final class MediaProcessingQueue{
 			Lang lang=Lang.get(account!=null && account.prefs.locale!=null ? account.prefs.locale : Locale.US);
 			MediaFileRef ref=new MediaFileRef(fileID);
 			MediaFileResolver.resolve(ref);
-			if(!(ref.media() instanceof Video video))
+			String html=switch(ref.media()){
+				case Video video -> VideoRenderer.render(video, null, lang);
+				case Audio audio -> AudioRenderer.render(audio, null, lang);
+				default -> null;
+			};
+			if(html==null || ref.fileRecord==null)
 				return;
-			String html=VideoRenderer.render(video, null, lang);
 			String message=new JsonObjectBuilder()
 					.add("type", "mediaReady")
-					.add("fileID", video.record().id().getEncodedID())
-					.add("status", video.getStatus().toString())
+					.add("fileID", ref.fileRecord.id().getEncodedID())
+					.add("status", ref.fileRecord.status().toString())
 					.add("html", html)
 					.build()
 					.toString();

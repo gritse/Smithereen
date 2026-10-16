@@ -59,6 +59,8 @@ public final class VideoProcessor implements MediaProcessor{
 		if(!FFmpeg.isAvailable())
 			throw new MediaValidationException(415, "err_file_upload_video_unavailable");
 		FFmpeg.ProbeResult probe=FFmpeg.probe(input);
+		if(!probe.hasVideo())
+			throw MediaValidationException.unreadable();
 		if(probe.duration()>Config.videoMaxDuration)
 			throw new MediaValidationException(422, "err_file_upload_video_too_long", Map.of("maxDuration", Config.videoMaxDuration/60));
 		if(probe.width()>VipsImage.MAX_SIZE || probe.height()>VipsImage.MAX_SIZE)

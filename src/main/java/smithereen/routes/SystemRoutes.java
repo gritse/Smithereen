@@ -46,7 +46,9 @@ import smithereen.Utils;
 import smithereen.model.objects.StoredObject;
 import smithereen.model.objects.Actor;
 import smithereen.media.ProcessingOptions;
+import smithereen.model.media.Audio;
 import smithereen.model.media.MediaFileRef;
+import smithereen.templates.AudioRenderer;
 import smithereen.exceptions.InternalServerErrorException;
 import smithereen.templates.VideoRenderer;
 import smithereen.storage.MediaFileResolver;
@@ -162,7 +164,8 @@ public class SystemRoutes{
 					.add("id", localID)
 					.add("kind", uploaded.kind().toString().toLowerCase())
 					.add("width", uploaded.getWidth())
-					.add("height", uploaded.getHeight());
+					.add("height", uploaded.getHeight())
+					.add("title", uploaded.getDisplayTitle());
 			if(preview!=null){
 				result.add("thumbs", new JsonObjectBuilder()
 						.add("jpeg", preview.getUriForSizeAndFormat(SizedImage.Type.PHOTO_THUMB_SMALL, SizedImage.Format.JPEG).toString())
@@ -207,8 +210,13 @@ public class SystemRoutes{
 			}catch(SQLException x){
 				throw new InternalServerErrorException(x);
 			}
-			if(ref.media() instanceof Video video && video.getStatus()!=MediaFileStatus.PROCESSING)
-				result.add(encodedID, VideoRenderer.render(video, null, l));
+			if(ref.fileRecord==null || ref.fileRecord.status()==MediaFileStatus.PROCESSING)
+				continue;
+			switch(ref.media()){
+				case Video video -> result.add(encodedID, VideoRenderer.render(video, null, l));
+				case Audio audio -> result.add(encodedID, AudioRenderer.render(audio, null, l));
+				default -> {}
+			}
 		}
 		resp.type("application/json");
 		return result.build();

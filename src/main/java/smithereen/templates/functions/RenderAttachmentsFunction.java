@@ -24,11 +24,13 @@ import smithereen.model.Group;
 import smithereen.model.SizedImage;
 import smithereen.model.User;
 import smithereen.model.attachments.Attachment;
+import smithereen.model.attachments.AudioAttachment;
 import smithereen.model.attachments.GraffitiAttachment;
 import smithereen.model.attachments.PhotoAttachment;
 import smithereen.model.attachments.SizedAttachment;
 import smithereen.model.attachments.VideoAttachment;
 import smithereen.model.media.PhotoViewerInlineData;
+import smithereen.templates.AudioRenderer;
 import smithereen.templates.MediaLayoutHelper;
 import smithereen.templates.VideoRenderer;
 import smithereen.text.TextProcessor;
@@ -122,6 +124,16 @@ public class RenderAttachmentsFunction implements Function{
 				}
 			}
 			lines.add("</div></div>");
+		}
+
+		List<AudioAttachment> audios=attachments.stream().filter(a->a instanceof AudioAttachment).map(a->(AudioAttachment) a).limit(10).toList();
+		if(!audios.isEmpty()){
+			Lang lang=Lang.get(evaluationContext.getLocale());
+			lines.add("<div class=\"audioAttachments\">");
+			for(AudioAttachment audio:audios){
+				lines.add(AudioRenderer.render(audio.audio, audio.description, lang));
+			}
+			lines.add("</div>");
 		}
 
 		if(!lines.isEmpty()){

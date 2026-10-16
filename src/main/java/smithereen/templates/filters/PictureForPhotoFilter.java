@@ -12,14 +12,21 @@ import java.util.Map;
 
 import smithereen.model.SizedImage;
 import smithereen.model.media.MediaFileRef;
+import smithereen.text.TextProcessor;
 import smithereen.util.BlurHash;
 import spark.utils.StringUtils;
 
 public class PictureForPhotoFilter implements Filter{
 	@Override
 	public Object apply(Object input, Map<String, Object> args, PebbleTemplate self, EvaluationContext context, int lineNumber) throws PebbleException{
-		if(input instanceof MediaFileRef ref)
+		if(input instanceof MediaFileRef ref){
 			input=ref.previewImage();
+			if(input==null){
+				// Audio has no picture: its title stands in for one in the composer
+				String title=ref.getDisplayTitle();
+				return new SafeString("<span class=\"attachmentFileName\">"+TextProcessor.escapeHTML(title!=null ? title : "")+"</span>");
+			}
+		}
 		if(input instanceof SizedImage img){
 			SizedImage.Type type=SizedImage.Type.fromSuffix(args.get("size").toString());
 			SizedImage.Dimensions size=img.getDimensionsForSize(type);

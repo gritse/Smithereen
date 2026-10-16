@@ -19,6 +19,10 @@ public enum MediaKind{
 	 */
 	VIDEO,
 	/**
+	 * Transcoded to M4A on the processing queue; served as the stored file; has no size, so it is listed under the tiled grid.
+	 */
+	AUDIO,
+	/**
 	 * A user data export: not media at all, but stored through the same mechanism.
 	 */
 	ARCHIVE;
@@ -48,7 +52,7 @@ public enum MediaKind{
 	 * @return whether files of this kind are stored with status PROCESSING and finished on the {@link smithereen.media.MediaProcessingQueue}
 	 */
 	public boolean needsAsyncProcessing(){
-		return this==VIDEO;
+		return this==VIDEO || this==AUDIO;
 	}
 
 	public boolean isImage(){

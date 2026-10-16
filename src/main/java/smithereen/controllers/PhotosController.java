@@ -871,7 +871,11 @@ public class PhotosController{
 			context.getGroupsController().enforceUserAdminLevel(group, self.user, Group.AdminLevel.ADMIN);
 
 		if(img.kind()!=MediaKind.STILL_IMAGE)
-			throw new UserErrorException(img.kind()==MediaKind.VIDEO ? "err_file_upload_video_not_allowed" : "err_file_upload_animated_not_allowed");
+			throw new UserErrorException(switch(img.kind()){
+				case VIDEO -> "err_file_upload_video_not_allowed";
+				case AUDIO -> "err_file_upload_audio_not_allowed";
+				default -> "err_file_upload_animated_not_allowed";
+			});
 
 		Actor owner=group==null ? self.user : group;
 		int imgW, imgH;

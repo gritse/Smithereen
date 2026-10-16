@@ -13,12 +13,17 @@ public enum MediaFileType{
 	/**
 	 * Transcoded to H.264 and AAC in MP4
 	 */
-	VIDEO;
+	VIDEO,
+	/**
+	 * Transcoded to AAC in M4A
+	 */
+	AUDIO;
 
 	public String getFileExtension(){
 		return switch(this){
 			case USER_EXPORT_ARCHIVE -> "zip";
 			case VIDEO -> "mp4";
+			case AUDIO -> "m4a";
 			default -> "webp";
 		};
 	}
@@ -28,6 +33,7 @@ public enum MediaFileType{
 			case USER_EXPORT_ARCHIVE -> MediaKind.ARCHIVE;
 			case IMAGE_ANIMATED -> MediaKind.ANIMATED_IMAGE;
 			case VIDEO -> MediaKind.VIDEO;
+			case AUDIO -> MediaKind.AUDIO;
 			default -> MediaKind.STILL_IMAGE;
 		};
 	}
@@ -36,6 +42,7 @@ public enum MediaFileType{
 		return switch(this){
 			case USER_EXPORT_ARCHIVE -> "application/zip";
 			case VIDEO -> "video/mp4";
+			case AUDIO -> "audio/mp4";
 			default -> "image/webp";
 		};
 	}

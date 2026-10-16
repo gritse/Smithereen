@@ -39,7 +39,7 @@ public final class FFmpeg{
 	 * @param duration in seconds
 	 * @param frameRate frames per second, 0 if unknown
 	 */
-	public record ProbeResult(int width, int height, double duration, double frameRate, boolean hasAudio, String videoCodec, String formatName){
+	public record ProbeResult(boolean hasVideo, int width, int height, double duration, double frameRate, boolean hasAudio, int audioChannels, String videoCodec, String formatName, String title, String artist){
 		/**
 		 * @return whether ffprobe read this as an image file (GIF, or any still through the image2 demuxers) rather than a video
 		 */
@@ -97,40 +97,44 @@ public final class FFmpeg{
 		}catch(RuntimeException x){
 			throw MediaValidationException.unreadable();
 		}
-		JsonObject video=null;
-		boolean hasAudio=false;
+		JsonObject video=null, audio=null;
 		JsonArray streams=root.has("streams") ? root.getAsJsonArray("streams") : new JsonArray();
 		for(JsonElement el:streams){
 			JsonObject stream=el.getAsJsonObject();
 			String type=optString(stream, "codec_type");
 			if("video".equals(type) && video==null && !isAttachedPicture(stream))
 				video=stream;
-			else if("audio".equals(type))
-				hasAudio=true;
+			else if("audio".equals(type) && audio==null)
+				audio=stream;
 		}
-		if(video==null)
+		if(video==null && audio==null)
 			throw MediaValidationException.unreadable();
-		int width=optInt(video, "width"), height=optInt(video, "height");
-		if(width<=0 || height<=0)
-			throw MediaValidationException.unreadable();
-		int rotation=rotation(video);
-		if(rotation==90 || rotation==270){
-			int t=width;
-			width=height;
-			height=t;
+		int width=0, height=0;
+		double frameRate=0;
+		if(video!=null){
+			width=optInt(video, "width");
+			height=optInt(video, "height");
+			if(width<=0 || height<=0)
+				throw MediaValidationException.unreadable();
+			int rotation=rotation(video);
+			if(rotation==90 || rotation==270){
+				int t=width;
+				width=height;
+				height=t;
+			}
+			frameRate=parseFraction(optString(video, "avg_frame_rate"));
+			if(frameRate<=0)
+				frameRate=parseFraction(optString(video, "r_frame_rate"));
 		}
-		double duration=0;
-		if(root.has("format") && root.getAsJsonObject("format").has("duration"))
-			duration=parseDouble(optString(root.getAsJsonObject("format"), "duration"));
+		JsonObject format=root.has("format") && root.get("format").isJsonObject() ? root.getAsJsonObject("format") : new JsonObject();
+		double duration=parseDouble(optString(format, "duration"));
 		if(duration<=0)
-			duration=parseDouble(optString(video, "duration"));
+			duration=parseDouble(optString(video!=null ? video : audio, "duration"));
 		if(duration<=0)
 			throw MediaValidationException.unreadable();
-		double frameRate=parseFraction(optString(video, "avg_frame_rate"));
-		if(frameRate<=0)
-			frameRate=parseFraction(optString(video, "r_frame_rate"));
-		String formatName=root.has("format") ? optString(root.getAsJsonObject("format"), "format_name") : null;
-		return new ProbeResult(width, height, duration, frameRate, hasAudio, optString(video, "codec_name"), formatName);
+		JsonObject tags=format.has("tags") && format.get("tags").isJsonObject() ? format.getAsJsonObject("tags") : new JsonObject();
+		return new ProbeResult(video!=null, width, height, duration, frameRate, audio!=null, audio!=null ? optInt(audio, "channels") : 0,
+				video!=null ? optString(video, "codec_name") : null, optString(format, "format_name"), tag(tags, "title"), tag(tags, "artist"));
 	}
 
 	/**
@@ -163,6 +167,38 @@ public final class FFmpeg{
 				"-t", String.valueOf(Config.videoMaxDuration),
 				output.getAbsolutePath()));
 		run(cmd, Config.videoTranscodeTimeout);
+	}
+
+	/**
+	 * Transcodes the first audio stream to AAC at 128 kbit/s in an M4A with the index up front. Mono and stereo are kept,
+	 * anything with more channels is downmixed to stereo.
+	 */
+	public static void transcodeAudio(File input, File output, int sourceChannels) throws IOException{
+		int threads=Math.max(1, Config.ffmpegThreads);
+		ArrayList<String> cmd=baseCommand();
+		cmd.addAll(List.of("-threads", String.valueOf(threads), "-i", input.getAbsolutePath(),
+				"-map", "0:a:0", "-vn", "-sn", "-dn", "-map_metadata", "-1", "-map_chapters", "-1",
+				"-c:a", "aac", "-b:a", "128k"));
+		if(sourceChannels>2)
+			cmd.addAll(List.of("-ac", "2"));
+		cmd.addAll(List.of("-movflags", "+faststart", "-t", String.valueOf(Config.audioMaxDuration), output.getAbsolutePath()));
+		run(cmd, Config.videoTranscodeTimeout);
+	}
+
+	/**
+	 * Reads a tag whatever its case, trimmed and cut to a sane length.
+	 */
+	private static String tag(JsonObject tags, String name){
+		for(String key:tags.keySet()){
+			if(key.equalsIgnoreCase(name)){
+				String value=optString(tags, key);
+				if(value==null || value.isBlank())
+					return null;
+				value=value.strip();
+				return value.length()>200 ? value.substring(0, 200) : value;
+			}
+		}
+		return null;
 	}
 
 	private static ArrayList<String> baseCommand(){

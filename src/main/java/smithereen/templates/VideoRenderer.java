@@ -24,7 +24,7 @@ public final class VideoRenderer{
 		SizedImage poster=video.getPoster();
 		StringBuilder sb=new StringBuilder("<div class=\"videoAttachment");
 		switch(video.getStatus()){
-			case PROCESSING -> sb.append(" videoProcessing");
+			case PROCESSING -> sb.append(" mediaProcessing videoProcessing");
 			case FAILED -> sb.append(" videoFailed");
 			case READY -> {}
 		}

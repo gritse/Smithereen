@@ -175,7 +175,9 @@ public class Templates{
 		jsConfig.add("uploads", new JsonObjectBuilder()
 				.add("imageMaxSize", Config.imageMaxUploadSize)
 				.add("videoMaxSize", Config.videoMaxUploadSize)
+				.add("audioMaxSize", Config.audioMaxUploadSize)
 				.add("videoEnabled", FFmpeg.isAvailable())
+				.add("audioEnabled", FFmpeg.isAvailable())
 				.build());
 		ArrayList<String> jsLang=new ArrayList<>();
 		Set<String> k=req.attribute("jsLang");

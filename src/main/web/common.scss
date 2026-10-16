@@ -1063,3 +1063,53 @@ h2+.textByItself{
 	filter: drop-shadow(0 0 2px rgba(0,0,0,0.7));
 	pointer-events: none;
 }
+
+/* Audio attachments: a list under the tiled grid, each with its title and a player (or a notice while processing) */
+.postAttachments .audioAttachments{
+	margin: 8px 0 4px;
+	max-width: 510px;
+}
+.postAttachments .audioAttachment{
+	margin: 6px 0;
+	.audioInfo{
+		display: flex;
+		gap: 8px;
+		align-items: baseline;
+		margin-bottom: 3px;
+		.audioTitle{
+			font-weight: bold;
+		}
+		.audioArtist{
+			opacity: 0.7;
+		}
+		.audioDuration{
+			margin-left: auto;
+			opacity: 0.7;
+			font-size: 0.9em;
+		}
+	}
+	audio{
+		display: block;
+		width: 100%;
+	}
+	.audioNotice{
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		opacity: 0.7;
+	}
+}
+
+/* An audio file in the composer: no picture, so the title stands in for one */
+.wallPostForm .attachment.audioAttachment{
+	.attachmentFileName{
+		display: inline-block;
+		max-width: 150px;
+		padding: 20px 8px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		border-radius: 3px;
+		background: rgba(128,128,128,0.15);
+	}
+}

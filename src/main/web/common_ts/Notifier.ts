@@ -262,7 +262,7 @@ class Notifier{
 	public static startMediaStatusPolling(){
 		var poll=()=>{
 			var ids:string[]=[];
-			for(var el of document.querySelectorAll(".videoAttachment.videoProcessing[data-media-file-id]").unfuck()){
+			for(var el of document.querySelectorAll(".mediaProcessing[data-media-file-id]").unfuck()){
 				var id=(el as HTMLElement).dataset.mediaFileId;
 				if(ids.indexOf(id)==-1)
 					ids.push(id);

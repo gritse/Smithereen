@@ -195,7 +195,20 @@ public final class MediaFileRef{
 		return switch(media()){
 			case SizedImage img -> img;
 			case Video video -> video.getPoster();
+			case Audio audio -> null;
 		};
+	}
+
+	/**
+	 * @return what to call this file where there is no picture of it: the alt text, an audio file's title, or null
+	 */
+	@Nullable
+	public String getDisplayTitle(){
+		if(StringUtils.isNotEmpty(name))
+			return name;
+		if(media() instanceof Audio audio && StringUtils.isNotEmpty(audio.getTitle()))
+			return audio.getTitle();
+		return null;
 	}
 
 	public MediaKind kind(){

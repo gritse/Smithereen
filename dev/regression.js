@@ -37,6 +37,7 @@ function makeFixtures(){
 	// 100 frames of 800x800 are 64 megapixels, over the 50 megapixel budget, so this one gets scaled down
 	ffmpeg(['-f', 'lavfi', '-i', 'testsrc=duration=5:size=800x800:rate=20', '-frames:v', '100', f('huge.gif')]);
 	ffmpeg(['-f', 'lavfi', '-i', 'testsrc=duration=4:size=1280x960:rate=25', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=4', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', f('clip.mp4')]);
+	ffmpeg(['-f', 'lavfi', '-i', 'sine=frequency=440:duration=3', '-metadata', 'title=Regression Tone', '-metadata', 'artist=Tester', '-c:a', 'pcm_s16le', f('tone.wav')]);
 	fs.writeFileSync(f('garbage.mp4'), 'this is not a video');
 	return {dir, f};
 }
@@ -157,6 +158,29 @@ function storedFile(url){
 	r=await upload(page, '/system/upload/postPhoto', 'file', f('garbage.mp4'), 'garbage.mp4', 'video/mp4');
 	check(r.status==400, 'garbage declared as video is refused: '+r.status);
 
+	// --- audio attachment
+	check(cfg && cfg.audioEnabled, 'server advertises audio uploads');
+	r=await upload(page, '/system/upload/postPhoto', 'file', f('tone.wav'), 'tone.wav', 'audio/wav');
+	check(r.status==200, 'audio upload: '+r.status+' '+r.body.slice(0, 120));
+	const audio=JSON.parse(r.body);
+	check(audio.kind=='audio' && audio.title=='Regression Tone' && !audio.thumbs && !audio.pv, 'audio has a title and no picture: '+JSON.stringify(audio).slice(0, 120));
+	await postWithAttachment(page, profileHref, 'Audio post', audio.id);
+	const audioTile=await page.$eval('.postAttachments .audioAttachment', el=>({id: el.dataset.mediaFileId, title: el.querySelector('.audioTitle').textContent, player: !!el.querySelector('audio')}));
+	check(audioTile.id && audioTile.title=='Regression Tone', 'audio post renders a tile with the title: '+JSON.stringify(audioTile));
+	let audioReady=audioTile.player;
+	for(let i=0;i<60 && !audioReady;i++){
+		await page.waitForTimeout(1000);
+		audioReady=await page.$eval('.postAttachments .audioAttachment', el=>!!el.querySelector('audio')).catch(()=>false);
+	}
+	check(audioReady, 'audio placeholder became a player without reloading');
+	await page.reload();
+	const audioSrc=await page.$eval('.postAttachments .audioAttachment audio', el=>el.getAttribute('src'));
+	check(/\.m4a$/.test(audioSrc), 'audio player points at the stored M4A: '+audioSrc);
+	const m4a=storedFile(audioSrc);
+	if(uploadPath) check(m4a && fs.statSync(m4a).size>1000 && fs.statSync(m4a).size<fs.statSync(f('tone.wav')).size/3, 'transcoded M4A stored on disk and much smaller than the WAV');
+	r=await upload(page, '/system/upload/messagePhoto', 'file', f('tone.wav'), 'tone.wav', 'audio/wav');
+	check(r.status==200 && JSON.parse(r.body).kind=='audio', 'audio as a message attachment');
+
 	// --- albums
 	await page.goto(base+'/my/albums/create');
 	await page.fill('input[name=title]', 'Regression album');
@@ -177,6 +201,8 @@ function storedFile(url){
 	check(rotateIDs.length==1 && rotateIDs[0]=='photoRotateButtons_'+albumStill.id, 'album editor shows rotate buttons only for the still photo');
 	r=await upload(page, '/albums/'+albumID+'/upload', 'file', f('clip.mp4'), 'clip.mp4', 'video/mp4');
 	check(r.status==415, 'album refuses a video: '+r.status);
+	r=await upload(page, '/albums/'+albumID+'/upload', 'file', f('tone.wav'), 'tone.wav', 'audio/wav');
+	check(r.status==415, 'album refuses audio: '+r.status);
 
 	// --- avatars and logos
 	const avatarURL='/settings/updateProfilePicture?rotation=0&crop=0,0,1,1,0,0,1,1';
@@ -184,6 +210,8 @@ function storedFile(url){
 	check(r.status==415, 'animated avatar is refused: '+r.status);
 	r=await upload(page, avatarURL, 'file', f('clip.mp4'), 'clip.mp4', 'video/mp4');
 	check(r.status==415, 'video avatar is refused: '+r.status);
+	r=await upload(page, avatarURL, 'file', f('tone.wav'), 'tone.wav', 'audio/wav');
+	check(r.status==415, 'audio avatar is refused: '+r.status);
 	r=await upload(page, avatarURL, 'file', f('still.gif'), 'still.gif', 'image/gif');
 	check(r.status==200, 'still GIF avatar is accepted: '+r.status);
 	await page.goto(base+profileHref);

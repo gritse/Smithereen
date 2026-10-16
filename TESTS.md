@@ -176,7 +176,7 @@ Any animated GIF works, or make one with Python: `pip install pillow`, then
 
 ## 7. Media regression script
 
-`dev/regression.js` runs the media checks from sections 6 and 8 in a browser: photos, animated GIFs and videos
+`dev/regression.js` runs the media checks from sections 6 and 8 in a browser: photos, animated GIFs, videos and audio
 as post and message attachments, albums, avatars, group logos and app logos. It generates its own test files
 with ffmpeg, so ffmpeg must be on the PATH, and logs in as `admin` by default.
 
@@ -189,7 +189,7 @@ directory is empty. Each run creates posts, an album, a group and an app, so run
 The unit tests in `src/test/java/smithereen/media` cover the processors themselves and are skipped when
 libvips or ffmpeg can't be found; `mvn test` prints them as run, not skipped, when both are installed.
 
-## 8. Checklist for video attachments
+## 8. Checklist for video and audio attachments
 
 Needs ffmpeg installed where the server runs (`ffmpeg -version`). The server logs "ffmpeg found" on the first
 page load; without it, `userConfig.uploads.videoEnabled` is false and the composer accepts images only.
@@ -203,3 +203,6 @@ page load; without it, `userConfig.uploads.videoEnabled` is false and the compos
 4. Restart the server while a video is processing: the job resumes and finishes after the restart.
 5. Upload a file that is not a video with a `.mp4` name: it is refused with the "damaged or unsupported" message.
 6. Delete the post: an hour later the abandoned-files job removes the MP4, and the poster on the following pass.
+7. Attach an MP3 or WAV: the composer shows its title (from the tags, or the file name), the post lists it under the
+   photos with title, artist and duration and "Processing audio…", which becomes a player the same way. Albums and
+   profile pictures refuse audio.

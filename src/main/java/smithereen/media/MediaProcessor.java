@@ -23,6 +23,7 @@ public interface MediaProcessor{
 			case STILL_IMAGE -> new StillImageProcessor();
 			case ANIMATED_IMAGE -> new AnimatedImageProcessor();
 			case VIDEO -> new VideoProcessor();
+			case AUDIO -> new AudioProcessor();
 			case ARCHIVE -> throw new IllegalArgumentException("Archives are not uploaded");
 		};
 	}
