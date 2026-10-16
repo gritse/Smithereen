@@ -34,15 +34,9 @@ public final class MediaSniffer{
 		if(FFmpeg.isAvailable()){
 			try{
 				FFmpeg.ProbeResult probe=FFmpeg.probe(file);
-				if((declaredVideo || declaredAudio) && probe.isImageFormat()){
-					// A GIF or a still declared as video: an image if libvips reads it, else a one-frame video is not worth having
-					MediaKind kind=sniffImage(file);
-					if(kind!=null)
-						return kind;
-					throw MediaValidationException.unreadable();
-				}
 				return probe.hasVideo() ? MediaKind.VIDEO : MediaKind.AUDIO;
 			}catch(MediaValidationException x){
+				// ffprobe refuses image formats, so a GIF or a still declared as video ends up here
 				if(declaredVideo || declaredAudio){
 					MediaKind kind=sniffImage(file);
 					if(kind!=null)
