@@ -7,7 +7,6 @@ import com.google.gson.JsonParser;
 import java.net.URI;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -16,7 +15,6 @@ import smithereen.Config;
 import smithereen.model.objects.StoredObject;
 import smithereen.model.media.MediaFileRef;
 import smithereen.model.SizedImage;
-import smithereen.storage.DatabaseUtils;
 import smithereen.util.JsonArrayBuilder;
 import smithereen.util.JsonObjectBuilder;
 import spark.utils.StringUtils;
@@ -29,7 +27,6 @@ public class ClientApp{
 	public String description;
 	public MediaFileRef logo;
 	public int developerID;
-	public Instant lastUpdated;
 	public Set<String> allowedRedirectURIs=Set.of();
 
 	public static ClientApp fromResultSet(ResultSet res) throws SQLException{
@@ -50,8 +47,6 @@ public class ClientApp{
 		}
 
 		a.developerID=res.getInt("developer_id");
-
-		a.lastUpdated=DatabaseUtils.getInstant(res, "last_updated");
 
 		String extra=res.getString("extra");
 		if(extra!=null){
