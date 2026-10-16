@@ -80,7 +80,7 @@ public final class FFmpeg {
 	 * Reads the properties of a video file.
 	 * @throws MediaValidationException if the file has no video stream or can't be read
 	 */
-	public static ProbeResult probe(File file) throws IOException, MediaValidationException {
+	public static ProbeResult probe(File file) throws MediaValidationException {
 		String json;
 		try {
 			json = run(List.of(Config.ffprobePath, "-v", "error", "-protocol_whitelist", "file", "-format_whitelist", DEMUXERS, "-probesize", "50M", "-analyzeduration", "20M", "-print_format", "json", "-show_format", "-show_streams", file.getAbsolutePath()), PROBE_TIMEOUT_SECONDS);
