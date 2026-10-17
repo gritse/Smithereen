@@ -1,0 +1,47 @@
+{
+	"$schema": "https://docs.renovatebot.com/renovate-schema.json",
+	"description": "Keeps the native media libraries, the Docker base images and the GitHub Actions current. Maven and npm dependencies are left alone so that merges from upstream Smithereen stay simple.",
+	"extends": ["config:recommended"],
+	"enabledManagers": ["custom.regex", "dockerfile", "github-actions"],
+	"schedule": ["before 6am on monday"],
+	"customManagers": [
+		{
+			"customType": "regex",
+			"description": "Versions in docker/native/*/versions.env, each with a '# renovate:' comment on the line above",
+			"managerFilePatterns": ["/^docker/native/[^/]+/versions\\.env$/"],
+			"matchStrings": [
+				"# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)( packageName=(?<packageName>\\S+))?( registryUrl=(?<registryUrl>\\S+))?( extractVersion=(?<extractVersion>\\S+))?( versioning=(?<versioning>\\S+))?\\n[A-Z0-9_]+=(?<currentValue>\\S+)",
+				"# renovate: datasource=(?<datasource>git-refs) depName=(?<depName>\\S+) packageName=(?<packageName>\\S+) branch=(?<currentValue>\\S+)\\n[A-Z0-9_]+=(?<currentDigest>[0-9a-f]{40})"
+			]
+		}
+	],
+	"packageRules": [
+		{
+			"description": "One PR for libvips and everything linked into it, built and tested together",
+			"matchFileNames": ["docker/native/libvips/**"],
+			"groupName": "libvips and its libraries"
+		},
+		{
+			"description": "One PR for ffmpeg and its codecs",
+			"matchFileNames": ["docker/native/ffmpeg/**"],
+			"groupName": "ffmpeg and its codecs"
+		},
+		{
+			"description": "Odd GLib minor versions are development releases",
+			"matchPackageNames": ["GNOME/glib"],
+			"allowedVersions": "/^\\d+\\.\\d*[02468]\\.\\d+$/"
+		},
+		{
+			"description": "Pin base images by digest, so that their security updates arrive as PRs too",
+			"matchManagers": ["dockerfile"],
+			"pinDigests": true,
+			"groupName": "Docker base images"
+		},
+		{
+			"description": "A new Ubuntu LTS, Java or Maven major version is a deliberate change, not a routine update",
+			"matchManagers": ["dockerfile"],
+			"matchUpdateTypes": ["major"],
+			"enabled": false
+		}
+	]
+}
