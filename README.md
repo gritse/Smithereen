@@ -33,7 +33,7 @@ The Java packages, the jar file, the database name and the systemd service are s
       ├╴ activation-1.1.jar
       └╴ ...other dependencies
    ```
-2. Make libvips available: download a prebuilt one from [sharp-libvips](https://github.com/lovell/sharp-libvips), or build it with [the build script](ci/libvips/build.sh). A distribution package may work, but not all libvips builds include every feature the server needs.
+2. Make libvips available: download a prebuilt one from [sharp-libvips](https://github.com/lovell/sharp-libvips), or build it with [the build script](docker/native/libvips/build.sh) (linux-x64). A distribution package may work, but not all libvips builds include every feature the server needs.
 3. Install and configure imgproxy.
 4. Create a config file from [the commented example](examples/config.properties). Uploaded files can be stored on the local file system (default) or in an S3-compatible object storage, see below.
 5. Create an empty MySQL database with the `utf8mb4` character set and give the configured user full rights on it. The server creates all tables itself on first start from [the schema](schema.sql) bundled in the jar.

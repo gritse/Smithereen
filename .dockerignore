@@ -1,4 +1,3 @@
 target/
 .idea/
-ci/libvips/deps/
-ci/libvips/target/
+**/.DS_Store
